@@ -64,6 +64,26 @@ export const RECOVERY_STORIES = [
     photo: '/recoveries/tv-moshupa-2026-03.jpg',
   },
   {
+    id: 'solar-boatle-2025-02',
+    assetType: 'solar',
+    assetLabel: 'Solar panels',
+    location: 'Boatle / Kanye',
+    date: '2025-02',
+    recoveredWithPolice: true,
+    policeUnits: 'Ramotswa Police Station',
+    headline: 'Same-day solar panel recovery — stolen overnight, back by afternoon',
+    summary:
+      'A bracket installation held ten solar panels, with two fitted with iTreq trackers on 14 February. Overnight at around 01:16, three panels were taken — one tracked panel and two without trackers. The other tracked panel on the bracket was not stolen. The stolen tracked panel’s live position that morning directed a same-day recovery in Kanye through Ramotswa Police Station, and all three stolen panels were recovered.',
+    highlights: [
+      'Trackers fitted on 14 February; movement on the stolen panel detected around 01:16 overnight',
+      'Ten panels on the bracket — two tracked; three stolen (one tracked, two untracked)',
+      'Stolen in Boatle and recovered the same day in Kanye',
+      'The remaining tracked panel on the bracket was not part of the theft',
+      'Recovery coordinated through Ramotswa Police Station',
+    ],
+    photo: '/recoveries/solar-boatle-2025-02.jpg',
+  },
+  {
     id: 'tv-broadhurst-2019-03',
     assetType: 'appliance',
     assetLabel: 'Television',
