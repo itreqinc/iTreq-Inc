@@ -4,8 +4,12 @@
  * When adding a recovery from a client narrative:
  * - Use general area only (city/region), never exact addresses
  * - No client names, plate numbers, or case numbers
- * - Set photo path only after faces, plates & identifying signs are blurred
+ * - Set photos in `public/recoveries/<story-id>/` with numbered descriptive filenames
  */
+
+function storyPhotos(storyId, files) {
+  return files.map((file) => `/recoveries/${storyId}/${file}`)
+}
 
 export const RECOVERY_PROCESS = [
   {
@@ -61,7 +65,13 @@ const RECOVERY_STORIES_UNSORTED = [
       'Moshupa CID worked in collaboration with Mogoditshane CID',
       'Backup battery had drained because the TV was rarely switched on — a reminder to power tracked assets periodically',
     ],
-    photo: '/recoveries/tv-moshupa-2026-03.jpg',
+    photos: storyPhotos('tv-moshupa-2026-03', [
+      '01-tv-mounted-recovered.jpg',
+      '02-recovery-team-indoor.jpg',
+      '03-recovery-coordination-indoor.jpg',
+      '04-tv-loaded-into-vehicle.jpg',
+      '05-tv-carried-outdoors.jpg',
+    ]),
   },
   {
     id: 'solar-boatle-2025-02',
@@ -83,7 +93,12 @@ const RECOVERY_STORIES_UNSORTED = [
       'The remaining tracked panel on the bracket was not part of the theft',
       'Recovery coordinated through Ramotswa Police Station',
     ],
-    photo: '/recoveries/solar-boatle-2025-02.jpg',
+    photos: storyPhotos('solar-boatle-2025-02', [
+      '01-panels-recovered-outdoor.jpg',
+      '02-panels-stacked-close-up.jpg',
+      '03-panel-surface-detail.jpg',
+      '04-tracking-route-map.jpg',
+    ]),
   },
   {
     id: 'tv-gaborone-north-2024-07',
@@ -102,7 +117,12 @@ const RECOVERY_STORIES_UNSORTED = [
       'Although the TV had already been sold on, the tracking lead helped recover other stolen goods',
       'More than 11 laptops from separate robbery cases were recovered from the same location',
     ],
-    photo: null,
+    photos: storyPhotos('tv-gaborone-north-2024-07', [
+      '01-mogoditshane-police-station.jpg',
+      '02-recovery-site-team.jpg',
+      '03-recovery-location-vehicle.jpg',
+      '04-law-enforcement-on-site.jpg',
+    ]),
   },
   {
     id: 'laptop-gaborone-west-2021-04',
@@ -120,7 +140,7 @@ const RECOVERY_STORIES_UNSORTED = [
       'Items recovered from Oodi with Gaborone West and Oodi Police working together',
       'Recovery covered property taken in what appeared to be a full household theft',
     ],
-    photo: null,
+    photos: [],
   },
   {
     id: 'tv-broadhurst-2019-03',
@@ -139,7 +159,7 @@ const RECOVERY_STORIES_UNSORTED = [
       'Television and all stolen household items recovered a short distance from the station in Tsholofelo',
       'Firearms recovered with the stolen goods, indicating the break-in may have been an armed robbery',
     ],
-    photo: null,
+    photos: [],
   },
 ]
 

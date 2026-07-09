@@ -14,8 +14,8 @@ export function RecoveryCard({ story }) {
       }`}
     >
       <RecoveryPhoto
-        src={story.photo}
-        alt={story.photo ? `${story.headline} recovery` : 'Recovery photo placeholder'}
+        photos={story.photos}
+        alt={story.photos?.length ? `${story.headline} recovery` : 'Recovery photo placeholder'}
         className="rounded-none border-0 border-b border-white/10"
       />
 
