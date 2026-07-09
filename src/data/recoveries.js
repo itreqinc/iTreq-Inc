@@ -110,12 +110,12 @@ const RECOVERY_STORIES_UNSORTED = [
     policeUnits: 'Sejelo Police',
     headline: 'Tracked laptop catches thief in motion — before they got home',
     summary:
-      'After two earlier break-ins where thieves stripped copper from electrical cables, iTreq Inc advised the client — who lives in Maun while his wife stays in Jwaneng — to leave a tracked laptop in the house. On Sunday 6 November 2022, while in Maun, the owner opened the tracking app and saw the laptop was in motion. He contacted our team, who advised him to report to Sejelo Police. His wife filed the report from Jwaneng. The thief was located through the laptop’s live position and caught in Kanye before reaching home.',
+      'After two earlier break-ins where thieves stripped copper from electrical cables, iTreq Inc advised the client — who lives in Maun while his wife stays in Jwaneng — to leave a tracked laptop in the house. On Sunday 6 November 2022, while in Maun, the owner opened the tracking app and saw the laptop was in motion. He contacted our team, who advised him to report to Sejelo Police. His wife travelled from Jwaneng to Sejelo to file the report. The thief was located through the laptop’s live position and caught in Kanye before reaching home.',
     highlights: [
       'Client had suffered two prior robberies targeting copper wiring in the house',
       'iTreq Inc recommended leaving a tracked laptop as a security measure',
       'Owner in Maun spotted movement on the app on Sunday 6 November 2022',
-      'Wife reported to Sejelo Police from Jwaneng on iTreq’s advice',
+      'Wife travelled from Jwaneng to Sejelo Police to file the report on iTreq’s advice',
       'Thief located through live laptop tracking and apprehended before reaching home',
       'Recovery coordinated through Sejelo Police in Kanye',
     ],
