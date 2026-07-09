@@ -45,6 +45,25 @@ export const ASSET_FILTERS = [
 
 export const RECOVERY_STORIES = [
   {
+    id: 'tv-moshupa-2026-03',
+    assetType: 'appliance',
+    assetLabel: 'Television',
+    location: 'Moshupa — Mmaseetsele Ward / Metsimotlhabe',
+    date: '2026-03',
+    recoveredWithPolice: true,
+    policeUnits: 'Moshupa CID & Mogoditshane CID',
+    headline: 'Tracked TV recovered after backup battery challenge',
+    summary:
+      'A television was stolen on a Monday night from Moshupa (Mmaseetsele Ward) and reported to iTreq Inc the following Tuesday morning. Because the TV was not used on a daily basis, the tracker’s backup battery had drained — which extended the time needed to re-establish a live position. Recovery was carried out on the Thursday in Metsimotlhabe.',
+    highlights: [
+      'Reported Tuesday morning after a Monday-night theft in Moshupa',
+      'Recovery completed on the Thursday in Metsimotlhabe',
+      'Moshupa CID worked in collaboration with Mogoditshane CID',
+      'Backup battery had drained because the TV was rarely switched on — a reminder to power tracked assets periodically',
+    ],
+    photo: '/recoveries/tv-moshupa-2026-03.jpg',
+  },
+  {
     id: 'tv-broadhurst-2019-03',
     assetType: 'appliance',
     assetLabel: 'Television',
