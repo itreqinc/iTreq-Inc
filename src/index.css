@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+
+  /* Lime green from logo "Inc" / pin tip */
+  --color-brand-50: #f3fbea;
+  --color-brand-100: #e3f6d0;
+  --color-brand-200: #c7ec9f;
+  --color-brand-300: #a0dc66;
+  --color-brand-400: #7bc940;
+  --color-brand-500: #6dc03f;
+  --color-brand-600: #52992e;
+  --color-brand-700: #407526;
+  --color-brand-800: #365d23;
+  --color-brand-900: #2f4f21;
+
+  /* Sky blue from logo "iTreq" / pin top */
+  --color-azure-50: #eff7fc;
+  --color-azure-100: #d6ebf8;
+  --color-azure-200: #b0d8f1;
+  --color-azure-300: #7abde6;
+  --color-azure-400: #3d9ad4;
+  --color-azure-500: #2080d0;
+  --color-azure-600: #1766b0;
+  --color-azure-700: #14538e;
+  --color-azure-800: #154676;
+  --color-azure-900: #173b62;
+
+  --color-ink-950: #050608;
+  --color-ink-900: #0a0e12;
+  --color-ink-800: #121821;
+  --color-ink-700: #1a2330;
+  --color-ink-600: #253041;
+  --color-ink-500: #3d4d63;
+  --color-ink-400: #6b7d93;
+  --color-ink-300: #9aabbe;
+  --color-ink-200: #c5d0dc;
+  --color-ink-100: #e8edf3;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-ink-950 text-ink-100 font-sans antialiased;
+  }
+
+  ::selection {
+    @apply bg-azure-500/30 text-white;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-azure-400 via-azure-300 to-brand-400 bg-clip-text text-transparent;
+  }
+
+  .section-pad {
+    @apply px-5 py-16 sm:px-8 md:py-24 lg:px-12;
+  }
+
+  .container-site {
+    @apply mx-auto w-full max-w-6xl;
+  }
+}
