@@ -43,7 +43,7 @@ export const ASSET_FILTERS = [
   { id: 'equipment', label: 'Equipment' },
 ]
 
-export const RECOVERY_STORIES = [
+const RECOVERY_STORIES_UNSORTED = [
   {
     id: 'tv-moshupa-2026-03',
     assetType: 'appliance',
@@ -73,9 +73,11 @@ export const RECOVERY_STORIES = [
     policeUnits: 'Ramotswa Police Station',
     headline: 'Same-day solar panel recovery — stolen overnight, back by afternoon',
     summary:
-      'A bracket installation held ten solar panels, with two fitted with iTreq trackers on 14 February. Overnight at around 01:16, three panels were taken — one tracked panel and two without trackers. The other tracked panel on the bracket was not stolen. The stolen tracked panel’s live position that morning directed a same-day recovery in Kanye through Ramotswa Police Station, and all three stolen panels were recovered.',
+      'A bracket installation held ten solar panels, with two fitted with iTreq trackers on 14 February. Overnight at around 01:16, three panels were taken — one tracked panel and two without trackers. The other tracked panel on the bracket was not stolen. iTreq Inc’s monitoring team picked up the movement and alerted the owner that solar panels had been stolen — our team stays online around the clock to check tracker health and unusual activity. The stolen tracked panel’s live position that morning directed a same-day recovery in Kanye through Ramotswa Police Station, and all three stolen panels were recovered.',
     highlights: [
       'Trackers fitted on 14 February; movement on the stolen panel detected around 01:16 overnight',
+      'Owner was alerted by iTreq Inc that panels had been stolen — not the other way around',
+      'Our monitoring team stays online to check tracker health and flag theft in real time',
       'Ten panels on the bracket — two tracked; three stolen (one tracked, two untracked)',
       'Stolen in Boatle and recovered the same day in Kanye',
       'The remaining tracked panel on the bracket was not part of the theft',
@@ -84,21 +86,21 @@ export const RECOVERY_STORIES = [
     photo: '/recoveries/solar-boatle-2025-02.jpg',
   },
   {
-    id: 'tv-broadhurst-2019-03',
+    id: 'tv-gaborone-north-2024-07',
     assetType: 'appliance',
     assetLabel: 'Television',
-    location: 'Gaborone — Block 3 / Tsholofelo',
-    date: '2019-03',
+    location: 'Gaborone North — Gabane / Tsolamosese',
+    date: '2024-07',
     recoveredWithPolice: true,
-    policeUnits: 'Broadhurst Police',
-    headline: 'Our very first recovery — tracked TV after a daytime break-in',
+    policeUnits: 'SSKIA Police & Mogoditshane CID',
+    headline: 'Overnight TV theft recovered by morning — and linked to wider haul',
     summary:
-      'In March 2019, a homeowner returned from work around mid-morning to find their house broken into. A tracked television was among items taken, along with shoes, clothes and other valuables. The owner reported the theft to Broadhurst Police and confirmed the TV was actively tracked.',
+      'On the night of 22 July 2024, a television was stolen from a home in Gaborone North despite a dog and electric fence on the property. The owner called the next morning and iTreq tracking showed the TV in Tsolamosese. It was later recovered in Gabane through Sir Seretse Khama International Airport Police working with Mogoditshane CID.',
     highlights: [
-      'iTreq Inc’s first documented recovery operation',
-      'Tracked TV located and recovery instituted through Broadhurst Police',
-      'Television and all stolen household items recovered a short distance from the station in Tsholofelo',
-      'Firearms recovered with the stolen goods, indicating the break-in may have been an armed robbery',
+      'Theft occurred overnight; owner reported and tracking was activated the following morning',
+      'Morning location data in Tsolamosese supported a recovery operation in Gabane',
+      'Although the TV had already been sold on, the tracking lead helped recover other stolen goods',
+      'More than 11 laptops from separate robbery cases were recovered from the same location',
     ],
     photo: null,
   },
@@ -121,25 +123,29 @@ export const RECOVERY_STORIES = [
     photo: null,
   },
   {
-    id: 'tv-gaborone-north-2024-07',
+    id: 'tv-broadhurst-2019-03',
     assetType: 'appliance',
     assetLabel: 'Television',
-    location: 'Gaborone North — Gabane / Tsolamosese',
-    date: '2024-07',
+    location: 'Gaborone — Block 3 / Tsholofelo',
+    date: '2019-03',
     recoveredWithPolice: true,
-    policeUnits: 'SSKIA Police & Mogoditshane CID',
-    headline: 'Overnight TV theft recovered by morning — and linked to wider haul',
+    policeUnits: 'Broadhurst Police',
+    headline: 'Our very first recovery — tracked TV after a daytime break-in',
     summary:
-      'On the night of 22 July 2024, a television was stolen from a home in Gaborone North despite a dog and electric fence on the property. The owner called the next morning and iTreq tracking showed the TV in Tsolamosese. It was later recovered in Gabane through Sir Seretse Khama International Airport Police working with Mogoditshane CID.',
+      'In March 2019, a homeowner returned from work around mid-morning to find their house broken into. A tracked television was among items taken, along with shoes, clothes and other valuables. The owner reported the theft to Broadhurst Police and confirmed the TV was actively tracked.',
     highlights: [
-      'Theft occurred overnight; owner reported and tracking was activated the following morning',
-      'Morning location data in Tsolamosese supported a recovery operation in Gabane',
-      'Although the TV had already been sold on, the tracking lead helped recover other stolen goods',
-      'More than 11 laptops from separate robbery cases were recovered from the same location',
+      'iTreq Inc’s first documented recovery operation',
+      'Tracked TV located and recovery instituted through Broadhurst Police',
+      'Television and all stolen household items recovered a short distance from the station in Tsholofelo',
+      'Firearms recovered with the stolen goods, indicating the break-in may have been an armed robbery',
     ],
     photo: null,
   },
 ]
+
+export const RECOVERY_STORIES = [...RECOVERY_STORIES_UNSORTED].sort((a, b) =>
+  b.date.localeCompare(a.date),
+)
 
 export function formatRecoveryDate(dateStr) {
   const [year, month] = dateStr.split('-')
