@@ -7,8 +7,8 @@ export const COMPANY = {
   whatsapp: '+267 71 573 094',
   whatsappDisplay: '+267 71 573 094',
   location: 'Block 7, Masateng Road, Gaborone, Botswana',
-  hours: 'Mon – Fri, 8:00 – 17:00',
-  facebook: 'https://facebook.com/itreqinc',
+  hours: 'Mon – Fri, 08:00 hrs – 17:00 hrs',
+  facebook: 'https://facebook.com/itreqincorp',
 }
 
 export const NAV_LINKS = [
