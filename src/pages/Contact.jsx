@@ -3,6 +3,7 @@ import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { PageHero } from '../components/PageHero'
 import { COMPANY } from '../data/site'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const contactCards = [
   {
@@ -39,6 +40,8 @@ const contactCards = [
 
 export default function Contact() {
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -52,8 +55,32 @@ export default function Contact() {
     setForm((prev) => ({ ...prev, [name]: value }))
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
+    setError('')
+
+    if (!isSupabaseConfigured || !supabase) {
+      setError(
+        'Supabase is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.',
+      )
+      return
+    }
+
+    setSubmitting(true)
+    const { error: insertError } = await supabase.from('contact_submissions').insert({
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      interest: form.interest,
+      message: form.message.trim(),
+    })
+    setSubmitting(false)
+
+    if (insertError) {
+      setError('Something went wrong sending your message. Please try again or WhatsApp us.')
+      return
+    }
+
     setSubmitted(true)
   }
 
@@ -117,8 +144,8 @@ export default function Contact() {
                 </div>
                 <h2 className="font-display text-2xl font-bold text-white">Message received</h2>
                 <p className="mt-3 max-w-sm text-ink-300">
-                  Thanks for reaching out. This form is ready for backend connection — for now,
-                  please also email or WhatsApp us so we can respond quickly.
+                  Thanks for reaching out. We’ve saved your request and will follow up as soon as
+                  we can.
                 </p>
                 <div className="mt-6 flex flex-wrap justify-center gap-3">
                   <Button href={`mailto:${COMPANY.email}`}>Email us</Button>
@@ -214,8 +241,14 @@ export default function Contact() {
                   />
                 </label>
 
-                <Button type="submit" className="w-full sm:w-auto">
-                  Send message
+                {error ? (
+                  <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {error}
+                  </p>
+                ) : null}
+
+                <Button type="submit" className="w-full sm:w-auto" disabled={submitting}>
+                  {submitting ? 'Sending…' : 'Send message'}
                 </Button>
               </form>
             )}

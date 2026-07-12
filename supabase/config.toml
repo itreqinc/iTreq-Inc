@@ -1,0 +1,12 @@
+# A string used to distinguish different Supabase projects on the same host.
+project_id = "gtsjiqbohbgzwqfqkgyr"
+
+[api]
+enabled = true
+
+[db]
+port = 54322
+major_version = 15
+
+[db.migrations]
+enabled = true
