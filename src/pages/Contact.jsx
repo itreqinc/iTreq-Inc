@@ -61,7 +61,7 @@ export default function Contact() {
 
     if (!isSupabaseConfigured || !supabase) {
       setError(
-        'Supabase is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local.',
+        'A database is not configured yet. Please contact the administrator.',
       )
       return
     }
