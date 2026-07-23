@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
 import {
   clientCanEditPortalQuote,
@@ -7,7 +7,13 @@ import {
   quotationDisplayStatus,
 } from '../lib/portalQuote'
 import { useOpsAlert } from '../admin/OpsAlertContext'
-import { adminBtnPrimary, formatPula } from '../admin/ui'
+import {
+  adminBtnPrimary,
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+} from '../admin/ui'
 
 function statusClass(status, awaiting) {
   if (awaiting) return 'bg-amber-500/20 text-amber-200'
@@ -27,6 +33,7 @@ function statusClass(status, awaiting) {
 }
 
 export default function PortalQuotes() {
+  const navigate = useNavigate()
   const { clientId } = useOutletContext()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [rows, setRows] = useState([])
@@ -115,12 +122,22 @@ export default function PortalQuotes() {
               rows.map((q) => {
                 const canEdit = clientCanEditPortalQuote(q)
                 const awaiting = portalQuoteAwaitingApproval(q)
+                const open = () => navigate(`/portal/quotes/${q.id}`)
                 return (
-                  <tr key={q.id} className="bg-ink-900/20">
+                  <tr
+                    key={q.id}
+                    role="link"
+                    tabIndex={0}
+                    className={`group bg-ink-900/20 ${clickableRowClass}`}
+                    onClick={open}
+                    onKeyDown={(e) => activateRowKey(e, open)}
+                  >
                     <td className="px-4 py-3 whitespace-nowrap text-ink-300">
                       {q.issue_date || '—'}
                     </td>
-                    <td className="px-4 py-3 font-medium text-white">{q.number || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={clickableDocClass}>{q.number || '—'}</span>
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${statusClass(q.status, awaiting)}`}
@@ -131,7 +148,11 @@ export default function PortalQuotes() {
                     <td className="px-4 py-3 text-right tabular-nums text-ink-200">
                       {formatPula(q.total)}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td
+                      className="px-4 py-3 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
                       <div className="flex flex-wrap items-center justify-end gap-3">
                         {canEdit ? (
                           <>
@@ -151,12 +172,9 @@ export default function PortalQuotes() {
                             </button>
                           </>
                         ) : null}
-                        <Link
-                          to={`/portal/quotes/${q.id}`}
-                          className="text-xs font-semibold text-brand-400 hover:text-brand-300"
-                        >
+                        <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
                           View
-                        </Link>
+                        </span>
                       </div>
                     </td>
                   </tr>

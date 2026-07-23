@@ -4,6 +4,7 @@ import { AUTH_BYPASS } from './authConfig'
 import { buildClientDisplayName, formToClientRow } from './clientRegistration'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
+import { preparePaymentDocumentBundle } from './paymentDocument'
 import { BALANCE_INVOICE_STATUSES, invoiceAffectsClientBalance } from './payments'
 
 /**
@@ -1054,6 +1055,61 @@ export const opsApi = {
       .eq('payment_id', id)
     if (allocErr) return mapError(allocErr)
     return { data: { ...payment, allocations: allocations || [] }, error: null }
+  },
+
+  /** Portal-safe payment fetch: must belong to the given client. */
+  async getPaymentForClient(id, clientId) {
+    if (!clientId) {
+      return { data: null, error: { message: 'No client selected.' } }
+    }
+    const res = await this.getPayment(id)
+    if (res.error) return res
+    if (res.data.client_id !== clientId) {
+      return { data: null, error: { message: 'Payment not found.' } }
+    }
+    return res
+  },
+
+  async getPaymentDocumentBundle(id) {
+    const payRes = await this.getPayment(id)
+    if (payRes.error) return payRes
+    const settingsRes = await this.getSettings()
+    if (settingsRes.error) return settingsRes
+    const clientRes = await this.getClient(payRes.data.client_id)
+    if (clientRes.error) return clientRes
+
+    return {
+      data: preparePaymentDocumentBundle({
+        payment: payRes.data,
+        client: clientRes.data,
+        settings: settingsRes.data,
+      }),
+      error: null,
+    }
+  },
+
+  async getPaymentDocumentBundleForClient(id, clientId) {
+    const guarded = await this.getPaymentForClient(id, clientId)
+    if (guarded.error) return guarded
+    return this.getPaymentDocumentBundle(id)
+  },
+
+  async sendPaymentDocumentEmail(id) {
+    const bundleRes = await this.getPaymentDocumentBundle(id)
+    if (bundleRes.error) return bundleRes
+
+    const { model, emailHtml, plainText } = bundleRes.data
+    const to = model.client.email?.trim()
+    if (!to) {
+      return { data: null, error: { message: 'This client has no email address on file.' } }
+    }
+
+    return this.invoke('send-billing-document', {
+      to,
+      subject: `${model.title} ${model.docNumber} — ${model.company.name}`,
+      html: emailHtml,
+      text: plainText,
+    })
   },
 
   async recordPayment({

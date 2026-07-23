@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import { YearMonthDaySelect } from '../components/YearMonthDaySelect'
 import { opsApi } from '../lib/opsApi'
 import { paymentMethodLabel } from '../lib/payments'
@@ -10,7 +10,14 @@ import {
   prepareStatementDocument,
 } from '../lib/statementDocument'
 import { useOpsAlert } from '../admin/OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, formatPula } from '../admin/ui'
+import {
+  adminBtnPrimary,
+  adminBtnSecondary,
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+} from '../admin/ui'
 
 function monthStartIso() {
   const d = new Date()
@@ -29,6 +36,7 @@ function balanceClass(balance) {
 }
 
 export default function PortalStatement() {
+  const navigate = useNavigate()
   const { clientId, client } = useOutletContext()
   const { showError } = useOpsAlert()
   const [from, setFrom] = useState(monthStartIso())
@@ -166,13 +174,35 @@ export default function PortalStatement() {
                     </td>
                   </tr>
                 ) : (
-                  statement.lines.map((line) => (
-                    <tr key={`${line.type}-${line.id}`}>
+                  statement.lines.map((line) => {
+                    const openable =
+                      Boolean(line.id) && (line.type === 'invoice' || line.type === 'payment')
+                    const open = () =>
+                      navigate(
+                        line.type === 'payment'
+                          ? `/portal/payments/${line.id}`
+                          : `/portal/invoices/${line.id}`,
+                      )
+                    const label =
+                      line.type === 'invoice'
+                        ? `Invoice ${line.label}`
+                        : `Payment ${line.label}`
+                    return (
+                    <tr
+                      key={`${line.type}-${line.id}`}
+                      role={openable ? 'link' : undefined}
+                      tabIndex={openable ? 0 : undefined}
+                      className={`group ${openable ? clickableRowClass : ''}`}
+                      onClick={openable ? open : undefined}
+                      onKeyDown={openable ? (e) => activateRowKey(e, open) : undefined}
+                    >
                       <td className="px-4 py-2 whitespace-nowrap text-ink-300">{line.sortDate}</td>
                       <td className="px-4 py-2 text-ink-200">
-                        {line.type === 'invoice'
-                          ? `Invoice ${line.label}`
-                          : `Payment ${line.label}`}
+                        {openable ? (
+                          <span className={clickableDocClass}>{label}</span>
+                        ) : (
+                          label
+                        )}
                         {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums text-ink-300">
@@ -187,7 +217,8 @@ export default function PortalStatement() {
                         {formatPula(line.balance)}
                       </td>
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>

@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
 import { paymentMethodLabel } from '../lib/payments'
 import { useOpsAlert } from '../admin/OpsAlertContext'
-import { formatPula } from '../admin/ui'
+import {
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+} from '../admin/ui'
 
 function balanceClass(balance) {
   const n = Number(balance) || 0
@@ -13,6 +18,7 @@ function balanceClass(balance) {
 }
 
 export default function PortalHome() {
+  const navigate = useNavigate()
   const { clientId, client } = useOutletContext()
   const { showError } = useOpsAlert()
   const [statement, setStatement] = useState(null)
@@ -99,38 +105,48 @@ export default function PortalHome() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {recent.map((line) => (
-                <tr key={`${line.type}-${line.id}`}>
-                  <td className="px-4 py-2 whitespace-nowrap text-ink-300">{line.sortDate}</td>
-                  <td className="px-4 py-2 text-ink-200">
-                    {line.type === 'invoice' ? (
-                      <Link
-                        to={`/portal/invoices/${line.id}`}
-                        className="font-medium text-brand-400 hover:text-brand-300"
-                      >
-                        Invoice {line.label}
-                      </Link>
-                    ) : (
-                      <>
-                        Payment {line.label}
-                        {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
-                      </>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-ink-300">
-                    {line.debit
-                      ? formatPula(line.debit)
-                      : line.credit
-                        ? `−${formatPula(line.credit)}`
-                        : '—'}
-                  </td>
-                  <td
-                    className={`px-4 py-2 text-right tabular-nums font-medium ${balanceClass(line.balance)}`}
+              {recent.map((line) => {
+                const openable = Boolean(line.id) && (line.type === 'invoice' || line.type === 'payment')
+                const open = () =>
+                  navigate(
+                    line.type === 'payment'
+                      ? `/portal/payments/${line.id}`
+                      : `/portal/invoices/${line.id}`,
+                  )
+                const label =
+                  line.type === 'invoice'
+                    ? `Invoice ${line.label}`
+                    : `Payment ${line.label}${
+                        line.method ? ` (${paymentMethodLabel(line.method)})` : ''
+                      }`
+                return (
+                  <tr
+                    key={`${line.type}-${line.id}`}
+                    role={openable ? 'link' : undefined}
+                    tabIndex={openable ? 0 : undefined}
+                    className={`group ${openable ? clickableRowClass : ''}`}
+                    onClick={openable ? open : undefined}
+                    onKeyDown={openable ? (e) => activateRowKey(e, open) : undefined}
                   >
-                    {formatPula(line.balance)}
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-4 py-2 whitespace-nowrap text-ink-300">{line.sortDate}</td>
+                    <td className="px-4 py-2 text-ink-200">
+                      {openable ? <span className={clickableDocClass}>{label}</span> : label}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-ink-300">
+                      {line.debit
+                        ? formatPula(line.debit)
+                        : line.credit
+                          ? `−${formatPula(line.credit)}`
+                          : '—'}
+                    </td>
+                    <td
+                      className={`px-4 py-2 text-right tabular-nums font-medium ${balanceClass(line.balance)}`}
+                    >
+                      {formatPula(line.balance)}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

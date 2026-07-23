@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { paymentMethodLabel } from '../../lib/payments'
 import {
@@ -9,7 +10,15 @@ import {
 } from '../../lib/statementDocument'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
-import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, formatPula } from '../ui'
+import {
+  adminBtnPrimary,
+  adminBtnSecondary,
+  adminFieldClass,
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+} from '../ui'
 
 function monthStartIso() {
   const d = new Date()
@@ -21,6 +30,7 @@ function todayIso() {
 }
 
 export default function ReportsPage() {
+  const navigate = useNavigate()
   const { showError } = useOpsAlert()
   const [clients, setClients] = useState([])
 
@@ -251,11 +261,20 @@ export default function ReportsPage() {
                       </td>
                     </tr>
                   ) : (
-                    compare.invoices.map((inv) => (
-                      <tr key={inv.id} className="bg-ink-900/20">
+                    compare.invoices.map((inv) => {
+                      const open = () => navigate(`/admin/invoices?open=${inv.id}`)
+                      return (
+                      <tr
+                        key={inv.id}
+                        role="link"
+                        tabIndex={0}
+                        className={`group bg-ink-900/20 ${clickableRowClass}`}
+                        onClick={open}
+                        onKeyDown={(e) => activateRowKey(e, open)}
+                      >
                         <td className="px-4 py-3 text-ink-300">{inv.issue_date || '—'}</td>
-                        <td className="px-4 py-3 font-medium text-white">
-                          {inv.number || '—'}
+                        <td className="px-4 py-3">
+                          <span className={clickableDocClass}>{inv.number || '—'}</span>
                         </td>
                         <td className="px-4 py-3 text-ink-300">{inv.client_name}</td>
                         <td className="px-4 py-3 capitalize text-ink-300">{inv.status}</td>
@@ -269,7 +288,8 @@ export default function ReportsPage() {
                           {formatPula(inv.balance)}
                         </td>
                       </tr>
-                    ))
+                      )
+                    })
                   )}
                 </tbody>
               </table>

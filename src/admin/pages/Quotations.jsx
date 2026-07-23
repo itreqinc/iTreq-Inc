@@ -8,7 +8,7 @@ import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import { ClientSelect } from '../ClientSelect'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
-import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminFieldClass, formatPula } from '../ui'
+import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminFieldClass, activateRowKey, clickableDocClass, clickableRowClass, formatPula } from '../ui'
 
 function snapshotQuotationForm(form) {
   return JSON.stringify({
@@ -486,9 +486,19 @@ export default function QuotationsPage() {
             ) : (
               rows.map((row) => {
                 const awaiting = portalQuoteAwaitingApproval(row)
+                const open = () => openRow(row.id)
                 return (
-                <tr key={row.id} className="bg-ink-900/20">
-                  <td className="px-4 py-3 font-medium text-white">{row.number || '—'}</td>
+                <tr
+                  key={row.id}
+                  role="link"
+                  tabIndex={0}
+                  className={`group bg-ink-900/20 ${clickableRowClass}`}
+                  onClick={open}
+                  onKeyDown={(e) => activateRowKey(e, open)}
+                >
+                  <td className="px-4 py-3">
+                    <span className={clickableDocClass}>{row.number || '—'}</span>
+                  </td>
                   <td className="px-4 py-3 text-ink-300">{row.clients?.name || '—'}</td>
                   <td className="px-4 py-3 text-ink-300">{row.issue_date}</td>
                   <td className="px-4 py-3 text-ink-300">
@@ -507,13 +517,9 @@ export default function QuotationsPage() {
                   </td>
                   <td className="px-4 py-3 text-ink-200">{formatPula(row.total)}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openRow(row.id)}
-                      className="text-xs font-semibold text-brand-400 hover:text-brand-300"
-                    >
+                    <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
                       Open
-                    </button>
+                    </span>
                   </td>
                 </tr>
                 )

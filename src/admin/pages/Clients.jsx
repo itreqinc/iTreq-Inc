@@ -14,7 +14,7 @@ import {
 import { CountryPhoneInput } from '../../components/CountryPhoneInput'
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, formatPula } from '../ui'
+import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, activateRowKey, clickableDocClass, clickableRowClass, formatPula } from '../ui'
 
 function balanceClass(balance) {
   const n = Number(balance) || 0
@@ -165,12 +165,19 @@ export default function ClientsPage() {
     ]
   }
 
+  function openTransaction(line) {
+    if (!line?.id) return
+    if (line.type === 'invoice') navigate(`/admin/invoices?open=${line.id}`)
+    else if (line.type === 'payment') navigate(`/admin/payments?open=${line.id}`)
+    else if (line.type === 'quotation') navigate(`/admin/quotations?open=${line.id}`)
+  }
+
   function transactionMenuItems(line) {
     if (line.type === 'invoice' && line.id) {
       return [
         {
           label: 'Open invoice',
-          onClick: () => navigate(`/admin/invoices?open=${line.id}`),
+          onClick: () => openTransaction(line),
         },
       ]
     }
@@ -178,7 +185,7 @@ export default function ClientsPage() {
       return [
         {
           label: 'Open payment',
-          onClick: () => navigate(`/admin/payments?open=${line.id}`),
+          onClick: () => openTransaction(line),
         },
       ]
     }
@@ -186,7 +193,7 @@ export default function ClientsPage() {
       return [
         {
           label: 'Open quotation',
-          onClick: () => navigate(`/admin/quotations?open=${line.id}`),
+          onClick: () => openTransaction(line),
         },
       ]
     }
@@ -611,20 +618,37 @@ export default function ClientsPage() {
                           </td>
                         </tr>
                       ) : (
-                        visibleLines.map((line, i) => (
+                        visibleLines.map((line, i) => {
+                          const openable = Boolean(line.id)
+                          const open = () => openTransaction(line)
+                          const label =
+                            line.type === 'invoice'
+                              ? `Invoice ${line.label}`
+                              : line.type === 'quotation'
+                                ? `Quotation ${line.label}`
+                                : `Payment ${line.label}`
+                          return (
                           <tr
                             key={`${line.type}-${line.id || i}`}
-                            className={line.inactive ? 'opacity-50' : undefined}
+                            role={openable ? 'link' : undefined}
+                            tabIndex={openable ? 0 : undefined}
+                            className={`group ${line.inactive ? 'opacity-50' : ''} ${
+                              openable ? clickableRowClass : ''
+                            }`}
+                            onClick={openable ? open : undefined}
+                            onKeyDown={
+                              openable ? (e) => activateRowKey(e, open) : undefined
+                            }
                           >
                             <td className="px-3 py-2 whitespace-nowrap text-ink-300">
                               {line.sortDate}
                             </td>
                             <td className="px-3 py-2 text-ink-200">
-                              {line.type === 'invoice'
-                                ? `Invoice ${line.label}`
-                                : line.type === 'quotation'
-                                  ? `Quotation ${line.label}`
-                                  : `Payment ${line.label}`}
+                              {openable ? (
+                                <span className={clickableDocClass}>{label}</span>
+                              ) : (
+                                label
+                              )}
                               {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
                               {line.inactive ? (
                                 <span className="ml-1 text-xs text-red-300">
@@ -651,7 +675,11 @@ export default function ClientsPage() {
                             >
                               {line.inactive ? '—' : formatPula(line.balance)}
                             </td>
-                            <td className="px-1 py-1 text-right">
+                            <td
+                              className="px-1 py-1 text-right"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            >
                               <ActionsMenu
                                 items={transactionMenuItems(line)}
                                 align="right"
@@ -659,7 +687,8 @@ export default function ClientsPage() {
                               />
                             </td>
                           </tr>
-                        ))
+                          )
+                        })
                       )}
                     </tbody>
                   </table>

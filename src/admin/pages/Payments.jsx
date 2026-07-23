@@ -8,8 +8,14 @@ import {
   paymentMethodLabel,
 } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
+import { PaymentDocumentButtons } from '../PaymentDocumentButtons'
+import {
+  openPaymentDocumentPrintWindow,
+  fillPaymentDocumentPrintWindow,
+  closePaymentDocumentPrintWindow,
+} from '../../lib/paymentDocument'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
-import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminFieldClass, formatPula } from '../ui'
+import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminFieldClass, activateRowKey, clickableDocClass, clickableRowClass, formatPula } from '../ui'
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -27,6 +33,18 @@ function emptyPaymentForm() {
   }
 }
 
+function snapshotPaymentForm(form) {
+  return JSON.stringify({
+    client_id: form.client_id || '',
+    payment_date: form.payment_date || '',
+    method: form.method || '',
+    reference: String(form.reference || '').trim(),
+    notes: String(form.notes || '').trim(),
+    amount: String(form.amount ?? ''),
+    selectedIds: [...(form.selectedIds || [])].sort(),
+  })
+}
+
 export default function PaymentsPage() {
   const [params, setParams] = useSearchParams()
   const { showError, showSuccess, confirm } = useOpsAlert()
@@ -36,6 +54,7 @@ export default function PaymentsPage() {
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
+  const [baseline, setBaseline] = useState('')
   const [openInvoices, setOpenInvoices] = useState([])
   const [accountCredit, setAccountCredit] = useState(0)
   const [form, setForm] = useState(emptyPaymentForm)
@@ -57,7 +76,7 @@ export default function PaymentsPage() {
       if (!clientId) {
         setOpenInvoices([])
         setAccountCredit(0)
-        return
+        return []
       }
       const [invRes, creditRes] = await Promise.all([
         opsApi.listOpenInvoicesForClient(clientId, { editingPaymentId: paymentId }),
@@ -66,17 +85,20 @@ export default function PaymentsPage() {
       if (invRes.error) {
         showError(invRes.error.message)
         setOpenInvoices([])
-      } else {
-        const invoices = invRes.data || []
-        setOpenInvoices(invoices)
-        setForm((f) => ({
-          ...f,
-          selectedIds: seedSelectedIds
-            ? seedSelectedIds.filter((id) => invoices.some((inv) => inv.id === id))
-            : [],
-        }))
+        setAccountCredit(creditRes.data?.balance ?? 0)
+        return []
       }
+      const invoices = invRes.data || []
+      const selectedIds = seedSelectedIds
+        ? seedSelectedIds.filter((id) => invoices.some((inv) => inv.id === id))
+        : []
+      setOpenInvoices(invoices)
+      setForm((f) => ({
+        ...f,
+        selectedIds,
+      }))
       setAccountCredit(creditRes.data?.balance ?? 0)
+      return selectedIds
     },
     [showError],
   )
@@ -93,7 +115,7 @@ export default function PaymentsPage() {
         .filter((a) => Number(a.amount) > 0)
         .map((a) => a.invoice_id)
       setEditingId(data.id)
-      setForm({
+      const nextForm = {
         client_id: data.client_id,
         payment_date: data.payment_date || todayIso(),
         method: data.method || 'cash',
@@ -101,9 +123,16 @@ export default function PaymentsPage() {
         notes: data.notes || '',
         amount: String(data.amount ?? ''),
         selectedIds: [],
-      })
+      }
+      setForm(nextForm)
       setShowForm(true)
-      await loadOpenInvoices(data.client_id, data.id, selectedIds)
+      const appliedIds = await loadOpenInvoices(data.client_id, data.id, selectedIds)
+      setBaseline(
+        snapshotPaymentForm({
+          ...nextForm,
+          selectedIds: appliedIds,
+        }),
+      )
     },
     [showError, loadOpenInvoices],
   )
@@ -135,6 +164,7 @@ export default function PaymentsPage() {
   function closeForm() {
     setShowForm(false)
     setEditingId(null)
+    setBaseline('')
     setOpenInvoices([])
     setAccountCredit(0)
     setForm(emptyPaymentForm())
@@ -142,13 +172,38 @@ export default function PaymentsPage() {
 
   function startNew() {
     setEditingId(null)
+    setBaseline('')
     setForm(emptyPaymentForm())
     setOpenInvoices([])
     setAccountCredit(0)
     setShowForm(true)
   }
 
+  const isDirty = useMemo(
+    () => Boolean(editingId) && snapshotPaymentForm(form) !== baseline,
+    [editingId, form, baseline],
+  )
+
   const paymentAmount = Number(form.amount) || 0
+
+  async function printSavedPayment(id) {
+    const opened = openPaymentDocumentPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+    setSaving(true)
+    const { data, error } = await opsApi.getPaymentDocumentBundle(id)
+    setSaving(false)
+    if (error) {
+      closePaymentDocumentPrintWindow(win)
+      showError(error.message)
+      return
+    }
+    const result = fillPaymentDocumentPrintWindow(win, data.model)
+    if (!result.ok) showError(result.message)
+  }
 
   const { allocations, remaining } = useMemo(
     () => autoAllocatePayment(paymentAmount, openInvoices, form.selectedIds),
@@ -457,6 +512,13 @@ export default function PaymentsPage() {
                   ? 'Save changes'
                   : 'Record payment'}
             </button>
+            <PaymentDocumentButtons
+              paymentId={editingId}
+              isDirty={isDirty}
+              disabled={saving}
+              alwaysShow
+              variant="secondary"
+            />
             {editingId ? (
               <button
                 type="button"
@@ -505,19 +567,42 @@ export default function PaymentsPage() {
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.id} className="bg-ink-900/20">
+              rows.map((row) => {
+                const open = () => startEdit(row)
+                return (
+                <tr
+                  key={row.id}
+                  role="link"
+                  tabIndex={0}
+                  className={`group bg-ink-900/20 ${clickableRowClass}`}
+                  onClick={open}
+                  onKeyDown={(e) => activateRowKey(e, open)}
+                >
                   <td className="px-4 py-3 text-ink-300">{row.payment_date}</td>
-                  <td className="px-4 py-3 text-ink-300">{row.clients?.name || '—'}</td>
+                  <td className="px-4 py-3">
+                    <span className={clickableDocClass}>{row.clients?.name || '—'}</span>
+                  </td>
                   <td className="px-4 py-3 text-ink-300">{paymentMethodLabel(row.method)}</td>
                   <td className="px-4 py-3 text-ink-300">{row.reference || '—'}</td>
                   <td className="px-4 py-3 font-medium text-ink-100">{formatPula(row.amount)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td
+                    className="px-4 py-3 text-right"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
                     <div className="flex flex-wrap justify-end gap-3">
                       <button
                         type="button"
                         disabled={saving}
-                        onClick={() => startEdit(row)}
+                        onClick={() => printSavedPayment(row.id)}
+                        className="text-xs font-semibold text-brand-400 hover:text-brand-300"
+                      >
+                        Print
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={open}
                         className="text-xs font-semibold text-brand-400 hover:text-brand-300"
                       >
                         Edit
@@ -533,7 +618,8 @@ export default function PaymentsPage() {
                     </div>
                   </td>
                 </tr>
-              ))
+                )
+              })
             )}
           </tbody>
         </table>

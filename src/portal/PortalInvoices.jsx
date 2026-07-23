@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
 import { invoiceBalanceDue, invoiceDisplayStatus } from '../lib/payments'
 import { clientInvoiceBillingDisplay } from '../lib/invoiceDates'
 import { useOpsAlert } from '../admin/OpsAlertContext'
-import { formatPula } from '../admin/ui'
+import {
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+} from '../admin/ui'
 
 function statusClass(status) {
   switch (status) {
@@ -21,6 +26,7 @@ function statusClass(status) {
 }
 
 export default function PortalInvoices() {
+  const navigate = useNavigate()
   const { clientId } = useOutletContext()
   const { showError } = useOpsAlert()
   const [rows, setRows] = useState([])
@@ -81,15 +87,25 @@ export default function PortalInvoices() {
               rows.map((inv) => {
                 const billing = clientInvoiceBillingDisplay(inv)
                 const displayStatus = invoiceDisplayStatus(inv)
+                const open = () => navigate(`/portal/invoices/${inv.id}`)
                 return (
-                  <tr key={inv.id} className="bg-ink-900/20">
+                  <tr
+                    key={inv.id}
+                    role="link"
+                    tabIndex={0}
+                    className={`group bg-ink-900/20 ${clickableRowClass}`}
+                    onClick={open}
+                    onKeyDown={(e) => activateRowKey(e, open)}
+                  >
                     <td className="px-4 py-3 whitespace-nowrap text-ink-300">
                       {inv.billing_period ? billing.value : '—'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-ink-300">
                       {inv.due_date || '—'}
                     </td>
-                    <td className="px-4 py-3 font-medium text-white">{inv.number || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={clickableDocClass}>{inv.number || '—'}</span>
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${statusClass(displayStatus)}`}
@@ -104,12 +120,9 @@ export default function PortalInvoices() {
                       {formatPula(invoiceBalanceDue(inv))}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        to={`/portal/invoices/${inv.id}`}
-                        className="text-xs font-semibold text-brand-400 hover:text-brand-300"
-                      >
+                      <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
                         View
-                      </Link>
+                      </span>
                     </td>
                   </tr>
                 )
