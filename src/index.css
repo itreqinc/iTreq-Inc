@@ -66,4 +66,47 @@
   .container-site {
     @apply mx-auto w-full max-w-6xl;
   }
+
+  /* Accounts view: selected client row merges into detail pane */
+  .accounts-surface {
+    background-color: color-mix(in srgb, var(--color-brand-500) 18%, var(--color-ink-900));
+  }
+
+  .accounts-tab-active {
+    position: relative;
+    z-index: 1;
+    background-color: color-mix(in srgb, var(--color-brand-500) 18%, var(--color-ink-900));
+  }
+
+  @media (min-width: 1024px) {
+    .accounts-tab-active::before,
+    .accounts-tab-active::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      width: 0.75rem;
+      height: 0.75rem;
+      pointer-events: none;
+      background-color: color-mix(in srgb, var(--color-brand-500) 18%, var(--color-ink-900));
+    }
+
+    /* Concave fillets where the tab meets the list column (matches rounded-xl) */
+    .accounts-tab-active::before {
+      top: -0.75rem;
+      background: radial-gradient(
+        circle at 0 0,
+        transparent 0.75rem,
+        color-mix(in srgb, var(--color-brand-500) 18%, var(--color-ink-900)) calc(0.75rem + 0.5px)
+      );
+    }
+
+    .accounts-tab-active::after {
+      bottom: -0.75rem;
+      background: radial-gradient(
+        circle at 0 100%,
+        transparent 0.75rem,
+        color-mix(in srgb, var(--color-brand-500) 18%, var(--color-ink-900)) calc(0.75rem + 0.5px)
+      );
+    }
+  }
 }

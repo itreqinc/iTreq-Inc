@@ -1,0 +1,171 @@
+import { useEffect, useState } from 'react'
+import { Link, useOutletContext } from 'react-router-dom'
+import { opsApi } from '../lib/opsApi'
+import {
+  clientCanEditPortalQuote,
+  portalQuoteAwaitingApproval,
+  quotationDisplayStatus,
+} from '../lib/portalQuote'
+import { useOpsAlert } from '../admin/OpsAlertContext'
+import { adminBtnPrimary, formatPula } from '../admin/ui'
+
+function statusClass(status, awaiting) {
+  if (awaiting) return 'bg-amber-500/20 text-amber-200'
+  switch (status) {
+    case 'sent':
+      return 'bg-sky-500/20 text-sky-200'
+    case 'accepted':
+      return 'bg-emerald-500/20 text-emerald-200'
+    case 'converted':
+      return 'bg-brand-500/20 text-brand-200'
+    case 'cancelled':
+      return 'bg-red-500/20 text-red-300'
+    case 'draft':
+    default:
+      return 'bg-white/10 text-ink-300'
+  }
+}
+
+export default function PortalQuotes() {
+  const { clientId } = useOutletContext()
+  const { showError, showSuccess, confirm } = useOpsAlert()
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    opsApi.listQuotations({ client_id: clientId }).then(({ data, error }) => {
+      if (cancelled) return
+      setLoading(false)
+      if (error) {
+        showError(error.message)
+        return
+      }
+      setRows(data || [])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [clientId, showError])
+
+  async function handleDelete(q) {
+    if (!clientCanEditPortalQuote(q)) return
+    const ok = await confirm({
+      title: 'Delete quotation?',
+      message: `Delete quotation ${q.number || ''}? This cannot be undone.`,
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
+    setDeletingId(q.id)
+    const { error } = await opsApi.deleteQuotationForClient(q.id, clientId)
+    setDeletingId(null)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    setRows((list) => list.filter((row) => row.id !== q.id))
+    showSuccess('Quotation deleted.', 'Deleted')
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">Quotations</p>
+          <h1 className="mt-1 font-display text-2xl font-bold text-white">Your quotes</h1>
+          <p className="mt-1 text-sm text-ink-300">
+            Request a quote by choosing what you want to track — no need to know tracker models.
+          </p>
+        </div>
+        <Link to="/portal/quotes/new" className={adminBtnPrimary}>
+          Request quote
+        </Link>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/40">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
+            <tr>
+              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Number</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-right">Total</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-ink-400">
+                  Loading…
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-ink-400">
+                  No quotations yet.{' '}
+                  <Link to="/portal/quotes/new" className="font-semibold text-brand-400">
+                    Request one
+                  </Link>
+                </td>
+              </tr>
+            ) : (
+              rows.map((q) => {
+                const canEdit = clientCanEditPortalQuote(q)
+                const awaiting = portalQuoteAwaitingApproval(q)
+                return (
+                  <tr key={q.id} className="bg-ink-900/20">
+                    <td className="px-4 py-3 whitespace-nowrap text-ink-300">
+                      {q.issue_date || '—'}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-white">{q.number || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${statusClass(q.status, awaiting)}`}
+                      >
+                        {quotationDisplayStatus(q)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-ink-200">
+                      {formatPula(q.total)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex flex-wrap items-center justify-end gap-3">
+                        {canEdit ? (
+                          <>
+                            <Link
+                              to={`/portal/quotes/${q.id}/edit`}
+                              className="text-xs font-semibold text-brand-400 hover:text-brand-300"
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              type="button"
+                              disabled={deletingId === q.id}
+                              onClick={() => handleDelete(q)}
+                              className="text-xs font-semibold text-red-300 hover:text-red-200 disabled:opacity-50"
+                            >
+                              {deletingId === q.id ? 'Deleting…' : 'Delete'}
+                            </button>
+                          </>
+                        ) : null}
+                        <Link
+                          to={`/portal/quotes/${q.id}`}
+                          className="text-xs font-semibold text-brand-400 hover:text-brand-300"
+                        >
+                          View
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
