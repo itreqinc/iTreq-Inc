@@ -14,6 +14,7 @@ const nav = [
   { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/monthly-fees', label: 'Monthly fees' },
   { to: '/admin/payments', label: 'Payments' },
+  { to: '/admin/expenses', label: 'Expenses' },
   { to: '/admin/reports', label: 'Reports' },
   { to: '/admin/settings', label: 'Settings' },
 ]

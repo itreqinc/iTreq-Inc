@@ -1,41 +1,321 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { opsApi } from '../../lib/opsApi'
+import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminFieldClass } from '../ui'
+import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
+import {
+  adminBtnPrimary,
+  adminBtnSecondary,
+  adminFieldClass,
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+} from '../ui'
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function emptyPoForm() {
+  return {
+    purchase_date: todayIso(),
+    supplier: '',
+    amount: '',
+    method: 'eft',
+    reference: '',
+    notes: '',
+    lines: [{ product_id: '', quantity_ordered: '' }],
+  }
+}
+
+function lineRemaining(line) {
+  return Math.max(0, Number(line.quantity_ordered) - Number(line.quantity_received))
+}
+
+function poStatusLabel(status) {
+  if (status === 'open') return 'Open'
+  if (status === 'closed') return 'Fully received'
+  if (status === 'cancelled') return 'Cancelled'
+  return status || '—'
+}
+
+function productLabel(line) {
+  const p = line.products
+  if (Array.isArray(p)) return p[0] ? `${p[0].sku} — ${p[0].name}` : '—'
+  if (p) return `${p.sku} — ${p.name}`
+  return '—'
+}
+
+function receiptLineLabel(line, poLines) {
+  if (line.products) return productLabel(line)
+  const poLine = (poLines || []).find((l) => l.id === line.purchase_order_line_id)
+  return poLine ? productLabel(poLine) : '—'
+}
+
+function maxEditableQty(receiptLine, poLines) {
+  const poLine = (poLines || []).find((l) => l.id === receiptLine.purchase_order_line_id)
+  if (!poLine) return Number(receiptLine.quantity) || 0
+  const oldQty = Number(receiptLine.quantity) || 0
+  const remainingExcludingThis =
+    Number(poLine.quantity_ordered) - (Number(poLine.quantity_received) - oldQty)
+  return Math.max(0, remainingExcludingThis)
+}
 
 export default function StockPage() {
-  const { showError, showSuccess } = useOpsAlert()
+  const { showError, showSuccess, confirm } = useOpsAlert()
   const [levels, setLevels] = useState([])
+  const [stockProducts, setStockProducts] = useState([])
+  const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
-  const [productId, setProductId] = useState('')
-  const [qty, setQty] = useState('')
-  const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const [view, setView] = useState('list') // list | newPo | detail
+  const [selectedId, setSelectedId] = useState(null)
+  const [detail, setDetail] = useState(null)
+
+  const [poForm, setPoForm] = useState(emptyPoForm)
+  const [receiveDate, setReceiveDate] = useState(todayIso)
+  const [receiveNotes, setReceiveNotes] = useState('')
+  const [receiveQty, setReceiveQty] = useState({})
+  const [editingReceiptId, setEditingReceiptId] = useState(null)
+  const [editDate, setEditDate] = useState(todayIso)
+  const [editNotes, setEditNotes] = useState('')
+  const [editQty, setEditQty] = useState({})
+
+  const [adjProductId, setAdjProductId] = useState('')
+  const [adjQty, setAdjQty] = useState('')
+  const [adjNote, setAdjNote] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data, error: err } = await opsApi.getStockLevels()
+    const [levelsRes, productsRes, ordersRes] = await Promise.all([
+      opsApi.getStockLevels(),
+      opsApi.listProducts({ activeOnly: true }),
+      opsApi.listPurchaseOrders(),
+    ])
     setLoading(false)
-    if (err) {
-      showError(err.message)
+
+    if (levelsRes.error) {
+      showError(levelsRes.error.message)
       return
     }
-    setLevels(data || [])
-    if (!productId && data?.[0]) setProductId(data[0].product_id)
-  }, [productId, showError])
+    if (productsRes.error) showError(productsRes.error.message)
+    if (ordersRes.error) showError(ordersRes.error.message)
+
+    const lv = levelsRes.data || []
+    setLevels(lv)
+    setStockProducts((productsRes.data || []).filter((p) => p.tracks_stock))
+    setOrders(ordersRes.data || [])
+    setAdjProductId((prev) => prev || lv[0]?.product_id || '')
+  }, [showError])
 
   useEffect(() => {
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
-  }, [])
+  }, [load])
+
+  const openOrders = useMemo(
+    () => (orders || []).filter((o) => o.status === 'open'),
+    [orders],
+  )
+
+  async function openDetail(id) {
+    const { data, error } = await opsApi.getPurchaseOrder(id)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    setDetail(data)
+    setSelectedId(id)
+    setView('detail')
+    setReceiveDate(todayIso())
+    setReceiveNotes('')
+    const qty = {}
+    for (const line of data.purchase_order_lines || []) {
+      qty[line.id] = ''
+    }
+    setReceiveQty(qty)
+    setEditingReceiptId(null)
+    setEditQty({})
+  }
+
+  function startNewPo() {
+    const first = stockProducts[0]?.id || ''
+    setPoForm({
+      ...emptyPoForm(),
+      lines: [{ product_id: first, quantity_ordered: '' }],
+    })
+    setView('newPo')
+    setSelectedId(null)
+    setDetail(null)
+  }
+
+  function backToList() {
+    setView('list')
+    setSelectedId(null)
+    setDetail(null)
+  }
+
+  async function handleCreatePo(e) {
+    e.preventDefault()
+    const ok = await confirm({
+      title: 'Save purchase order?',
+      message:
+        'This records money leaving the account for stock. Shelf counts will increase when you receive deliveries.',
+      confirmLabel: 'Save purchase order',
+    })
+    if (!ok) return
+
+    setSaving(true)
+    const { data, error } = await opsApi.createPurchaseOrder(poForm)
+    setSaving(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess(`Purchase order ${data.po_number} saved.`)
+    setOrders((prev) => [data, ...prev.filter((o) => o.id !== data.id)])
+    await openDetail(data.id)
+    const levelsRes = await opsApi.getStockLevels()
+    if (!levelsRes.error) setLevels(levelsRes.data || [])
+  }
+
+  async function handleReceive(e) {
+    e.preventDefault()
+    if (!detail) return
+
+    const lines = Object.entries(receiveQty)
+      .map(([purchase_order_line_id, quantity]) => ({
+        purchase_order_line_id,
+        quantity,
+      }))
+      .filter((l) => Number(l.quantity) > 0)
+
+    const ok = await confirm({
+      title: 'Record delivery?',
+      message: 'On-hand stock will increase by the quantities you enter.',
+      confirmLabel: 'Receive stock',
+    })
+    if (!ok) return
+
+    setSaving(true)
+    const { data, error } = await opsApi.receivePurchaseOrder({
+      purchase_order_id: detail.id,
+      received_date: receiveDate,
+      notes: receiveNotes,
+      lines,
+    })
+    setSaving(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+
+    showSuccess(
+      data.status === 'closed'
+        ? 'Delivery recorded — purchase order fully received.'
+        : 'Delivery recorded.',
+    )
+    setDetail(data)
+    setOrders((prev) => prev.map((o) => (o.id === data.id ? { ...o, ...data } : o)))
+    setReceiveQty((prev) => {
+      const next = { ...prev }
+      for (const key of Object.keys(next)) next[key] = ''
+      return next
+    })
+    setReceiveNotes('')
+    const levelsRes = await opsApi.getStockLevels()
+    if (!levelsRes.error) setLevels(levelsRes.data || [])
+  }
+
+  function startEditReceipt(receipt) {
+    setEditingReceiptId(receipt.id)
+    setEditDate(receipt.received_date || todayIso())
+    setEditNotes(receipt.notes || '')
+    const qty = {}
+    for (const line of receipt.purchase_receipt_lines || []) {
+      qty[line.id] = String(line.quantity)
+    }
+    setEditQty(qty)
+  }
+
+  function cancelEditReceipt() {
+    setEditingReceiptId(null)
+    setEditDate(todayIso())
+    setEditNotes('')
+    setEditQty({})
+  }
+
+  async function refreshAfterReceiptChange(data) {
+    setDetail(data)
+    setOrders((prev) => prev.map((o) => (o.id === data.id ? { ...o, ...data } : o)))
+    cancelEditReceipt()
+    const levelsRes = await opsApi.getStockLevels()
+    if (!levelsRes.error) setLevels(levelsRes.data || [])
+  }
+
+  async function handleSaveReceiptEdit(e) {
+    e.preventDefault()
+    if (!editingReceiptId) return
+    const receipt = (detail?.purchase_receipts || []).find((r) => r.id === editingReceiptId)
+    if (!receipt) return
+
+    const lines = (receipt.purchase_receipt_lines || []).map((line) => ({
+      id: line.id,
+      purchase_order_line_id: line.purchase_order_line_id,
+      quantity: editQty[line.id] ?? 0,
+    }))
+
+    const ok = await confirm({
+      title: 'Save delivery changes?',
+      message: 'Stock on hand and outstanding PO quantities will be updated.',
+      confirmLabel: 'Save',
+    })
+    if (!ok) return
+
+    setSaving(true)
+    const { data, error } = await opsApi.updatePurchaseReceipt({
+      id: editingReceiptId,
+      received_date: editDate,
+      notes: editNotes,
+      lines,
+    })
+    setSaving(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess('Delivery updated.')
+    await refreshAfterReceiptChange(data)
+  }
+
+  async function handleCancelReceipt(receipt) {
+    const ok = await confirm({
+      title: 'Cancel this delivery?',
+      message:
+        'Stock counts will go down by the quantities on this delivery, if on-hand stock allows it. The purchase order will reopen if anything is still outstanding.',
+      confirmLabel: 'Cancel delivery',
+    })
+    if (!ok) return
+
+    setSaving(true)
+    const { data, error } = await opsApi.cancelPurchaseReceipt(receipt.id)
+    setSaving(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess('Delivery cancelled.')
+    await refreshAfterReceiptChange(data)
+  }
 
   async function handleAdjust(e) {
     e.preventDefault()
     setSaving(true)
     const { error: err } = await opsApi.adjustStock({
-      productId,
-      quantityDelta: Number(qty),
-      note,
+      productId: adjProductId,
+      quantityDelta: Number(adjQty),
+      note: adjNote,
     })
     setSaving(false)
     if (err) {
@@ -43,88 +323,632 @@ export default function StockPage() {
       return
     }
     showSuccess('Stock adjustment saved.')
-    setQty('')
-    setNote('')
+    setAdjQty('')
+    setAdjNote('')
     const { data } = await opsApi.getStockLevels()
     setLevels(data || [])
   }
 
+  if (loading && levels.length === 0 && orders.length === 0) {
+    return <p className="text-sm text-ink-400">Loading stock…</p>
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-white">Stock</h1>
-        <p className="mt-1 text-sm text-ink-300">
-          On-hand levels for the different products we have in stock. Adjustments are logged.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        {loading ? (
-          <p className="text-sm text-ink-400">Loading…</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-white">Stock</h1>
+          <p className="mt-1 text-sm text-ink-300">
+            On-hand levels, purchase orders (money out for stock), and deliveries that bump counts.
+          </p>
+        </div>
+        {view === 'list' ? (
+          <button type="button" onClick={startNewPo} className={adminBtnPrimary}>
+            New purchase order
+          </button>
         ) : (
-          levels.map((row) => (
-            <div
-              key={row.product_id}
-              className="rounded-2xl border border-white/10 bg-ink-900/50 p-4"
-            >
-              <p className="font-mono text-xs text-ink-400">{row.sku}</p>
-              <p className="mt-1 text-sm text-ink-200">{row.name}</p>
-              <p className="mt-3 font-display text-3xl font-bold text-white">{row.on_hand}</p>
-              <p className="text-xs text-ink-500">on hand</p>
-            </div>
-          ))
+          <button type="button" onClick={backToList} className={adminBtnSecondary}>
+            Back to stock
+          </button>
         )}
       </div>
 
-      <form
-        onSubmit={handleAdjust}
-        className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
-      >
-        <h2 className="text-sm font-semibold text-white">Stock adjustment</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Product</span>
-            <select
-              className={adminFieldClass}
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              required
+      {view === 'list' ? (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {levels.map((row) => (
+              <div
+                key={row.product_id}
+                className="rounded-2xl border border-white/10 bg-ink-900/50 p-4"
+              >
+                <p className="font-mono text-xs text-ink-400">{row.sku}</p>
+                <p className="mt-1 text-sm text-ink-200">{row.name}</p>
+                <p className="mt-3 font-display text-3xl font-bold text-white">{row.on_hand}</p>
+                <p className="text-xs text-ink-500">on hand</p>
+              </div>
+            ))}
+          </div>
+
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-white">Purchase orders</h2>
+                <p className="mt-0.5 text-xs text-ink-400">
+                  Save when money leaves the account. Receive deliveries to update shelf counts.
+                  {openOrders.length
+                    ? ` ${openOrders.length} open.`
+                    : ''}
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-white/10">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-white/10 bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
+                  <tr>
+                    <th className="px-4 py-3">PO</th>
+                    <th className="px-4 py-3">Paid date</th>
+                    <th className="px-4 py-3">Supplier</th>
+                    <th className="px-4 py-3 text-right">Amount</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {orders.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-ink-400">
+                        No purchase orders yet. Create one when you pay for stock.
+                      </td>
+                    </tr>
+                  ) : (
+                    orders.map((row) => {
+                      const open = () => openDetail(row.id)
+                      return (
+                        <tr
+                          key={row.id}
+                          role="link"
+                          tabIndex={0}
+                          className={`group bg-ink-900/20 ${clickableRowClass}`}
+                          onClick={open}
+                          onKeyDown={(e) => activateRowKey(e, open)}
+                        >
+                          <td className="px-4 py-3">
+                            <span className={clickableDocClass}>{row.po_number}</span>
+                          </td>
+                          <td className="px-4 py-3 text-ink-300">{row.purchase_date}</td>
+                          <td className="px-4 py-3 text-ink-300">{row.supplier || '—'}</td>
+                          <td className="px-4 py-3 text-right font-medium text-ink-100">
+                            {formatPula(row.amount)}
+                          </td>
+                          <td className="px-4 py-3 text-ink-300">{poStatusLabel(row.status)}</td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <form
+            onSubmit={handleAdjust}
+            className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+          >
+            <div>
+              <h2 className="text-sm font-semibold text-white">Manual adjustment</h2>
+              <p className="mt-0.5 text-xs text-ink-400">
+                For corrections only (damage, count fix). Normal buys use a purchase order.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Product
+                </span>
+                <select
+                  className={adminFieldClass}
+                  value={adjProductId}
+                  onChange={(e) => setAdjProductId(e.target.value)}
+                  required
+                >
+                  {levels.map((row) => (
+                    <option key={row.product_id} value={row.product_id}>
+                      {row.sku}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Qty (+ / −)
+                </span>
+                <input
+                  required
+                  type="number"
+                  step="1"
+                  className={adminFieldClass}
+                  value={adjQty}
+                  onChange={(e) => setAdjQty(e.target.value)}
+                  placeholder="e.g. 10 or -2"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Note
+                </span>
+                <input
+                  className={adminFieldClass}
+                  value={adjNote}
+                  onChange={(e) => setAdjNote(e.target.value)}
+                  placeholder="Optional"
+                />
+              </label>
+            </div>
+            <button type="submit" disabled={saving} className={adminBtnSecondary}>
+              {saving ? 'Saving…' : 'Apply adjustment'}
+            </button>
+          </form>
+        </>
+      ) : null}
+
+      {view === 'newPo' ? (
+        <form
+          onSubmit={handleCreatePo}
+          className="max-w-2xl space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+        >
+          <div>
+            <h2 className="text-sm font-semibold text-white">New purchase order</h2>
+            <p className="mt-0.5 text-xs text-ink-400">
+              Date should match when money left the account. Stock counts update when you receive.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Paid date
+              </span>
+              <YearMonthDaySelect
+                value={poForm.purchase_date}
+                onChange={(v) => setPoForm((f) => ({ ...f, purchase_date: v }))}
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Supplier
+              </span>
+              <input
+                className={adminFieldClass}
+                value={poForm.supplier}
+                onChange={(e) => setPoForm((f) => ({ ...f, supplier: e.target.value }))}
+                placeholder="Optional"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Amount paid
+              </span>
+              <input
+                required
+                type="number"
+                min="0.01"
+                step="0.01"
+                className={adminFieldClass}
+                value={poForm.amount}
+                onChange={(e) => setPoForm((f) => ({ ...f, amount: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Method
+              </span>
+              <select
+                className={adminFieldClass}
+                value={poForm.method}
+                onChange={(e) => setPoForm((f) => ({ ...f, method: e.target.value }))}
+              >
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Reference
+              </span>
+              <input
+                className={adminFieldClass}
+                value={poForm.reference}
+                onChange={(e) => setPoForm((f) => ({ ...f, reference: e.target.value }))}
+                placeholder="Bank ref / invoice #"
+              />
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-wider text-ink-400">Products ordered</p>
+            {poForm.lines.map((line, idx) => (
+              <div key={idx} className="flex flex-wrap items-end gap-2">
+                <label className="min-w-[12rem] flex-1 block">
+                  <span className="mb-1 block text-xs text-ink-500">Product</span>
+                  <select
+                    required
+                    className={adminFieldClass}
+                    value={line.product_id}
+                    onChange={(e) =>
+                      setPoForm((f) => {
+                        const lines = [...f.lines]
+                        lines[idx] = { ...lines[idx], product_id: e.target.value }
+                        return { ...f, lines }
+                      })
+                    }
+                  >
+                    <option value="">Select…</option>
+                    {stockProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.sku} — {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="w-28 block">
+                  <span className="mb-1 block text-xs text-ink-500">Qty</span>
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    step="1"
+                    className={adminFieldClass}
+                    value={line.quantity_ordered}
+                    onChange={(e) =>
+                      setPoForm((f) => {
+                        const lines = [...f.lines]
+                        lines[idx] = { ...lines[idx], quantity_ordered: e.target.value }
+                        return { ...f, lines }
+                      })
+                    }
+                  />
+                </label>
+                {poForm.lines.length > 1 ? (
+                  <button
+                    type="button"
+                    className="mb-0.5 text-xs font-semibold text-red-400 hover:text-red-300"
+                    onClick={() =>
+                      setPoForm((f) => ({
+                        ...f,
+                        lines: f.lines.filter((_, i) => i !== idx),
+                      }))
+                    }
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            ))}
+            <button
+              type="button"
+              className="text-xs font-semibold text-brand-400 hover:text-brand-300"
+              onClick={() =>
+                setPoForm((f) => ({
+                  ...f,
+                  lines: [
+                    ...f.lines,
+                    { product_id: stockProducts[0]?.id || '', quantity_ordered: '' },
+                  ],
+                }))
+              }
             >
-              {levels.map((row) => (
-                <option key={row.product_id} value={row.product_id}>
-                  {row.sku}
-                </option>
-              ))}
-            </select>
-          </label>
+              + Add line
+            </button>
+          </div>
+
           <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Qty (+ receive / − remove)
-            </span>
-            <input
-              required
-              type="number"
-              step="1"
-              className={adminFieldClass}
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-              placeholder="e.g. 10 or -2"
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Notes</span>
+            <textarea
+              rows={2}
+              className={`${adminFieldClass} resize-y`}
+              value={poForm.notes}
+              onChange={(e) => setPoForm((f) => ({ ...f, notes: e.target.value }))}
             />
           </label>
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Note</span>
-            <input
-              className={adminFieldClass}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional"
-            />
-          </label>
+
+          <button type="submit" disabled={saving} className={adminBtnPrimary}>
+            {saving ? 'Saving…' : 'Save purchase order'}
+          </button>
+        </form>
+      ) : null}
+
+      {view === 'detail' && detail ? (
+        <div className="max-w-2xl space-y-5">
+          <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+            <p className="font-mono text-xs text-ink-400">{detail.po_number}</p>
+            <h2 className="mt-1 font-display text-xl font-bold text-white">
+              {formatPula(detail.amount)}
+            </h2>
+            <p className="mt-1 text-sm text-ink-300">
+              Paid {detail.purchase_date}
+              {detail.supplier ? ` · ${detail.supplier}` : ''}
+              {' · '}
+              {paymentMethodLabel(detail.method)}
+              {' · '}
+              {poStatusLabel(detail.status)}
+            </p>
+            {detail.reference ? (
+              <p className="mt-1 text-xs text-ink-500">Ref: {detail.reference}</p>
+            ) : null}
+            {detail.notes ? (
+              <p className="mt-2 text-sm text-ink-400">{detail.notes}</p>
+            ) : null}
+
+            <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-white/10 text-xs uppercase tracking-wider text-ink-400">
+                  <tr>
+                    <th className="px-3 py-2">Product</th>
+                    <th className="px-3 py-2 text-right">Ordered</th>
+                    <th className="px-3 py-2 text-right">Received</th>
+                    <th className="px-3 py-2 text-right">Left</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {(detail.purchase_order_lines || []).map((line) => (
+                    <tr key={line.id}>
+                      <td className="px-3 py-2 text-ink-200">{productLabel(line)}</td>
+                      <td className="px-3 py-2 text-right text-ink-300">
+                        {line.quantity_ordered}
+                      </td>
+                      <td className="px-3 py-2 text-right text-ink-300">
+                        {line.quantity_received}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-ink-100">
+                        {lineRemaining(line)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {detail.status === 'open' ? (
+            <form
+              onSubmit={handleReceive}
+              className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+            >
+              <div>
+                <h3 className="text-sm font-semibold text-white">Receive delivery</h3>
+                <p className="mt-0.5 text-xs text-ink-400">
+                  Enter quantities arriving today (or pick the delivery date). Partial OK.
+                </p>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Received date
+                </span>
+                <YearMonthDaySelect value={receiveDate} onChange={setReceiveDate} />
+              </label>
+
+              <div className="space-y-2">
+                {(detail.purchase_order_lines || []).map((line) => {
+                  const left = lineRemaining(line)
+                  if (left <= 0) return null
+                  return (
+                    <div
+                      key={line.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-ink-200">{productLabel(line)}</p>
+                        <p className="text-xs text-ink-500">{left} outstanding</p>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max={left}
+                        step="1"
+                        className={`${adminFieldClass} w-24`}
+                        value={receiveQty[line.id] ?? ''}
+                        onChange={(e) =>
+                          setReceiveQty((q) => ({ ...q, [line.id]: e.target.value }))
+                        }
+                        placeholder="0"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Delivery notes
+                </span>
+                <input
+                  className={adminFieldClass}
+                  value={receiveNotes}
+                  onChange={(e) => setReceiveNotes(e.target.value)}
+                  placeholder="Optional"
+                />
+              </label>
+
+              <button type="submit" disabled={saving} className={adminBtnPrimary}>
+                {saving ? 'Saving…' : 'Record delivery'}
+              </button>
+            </form>
+          ) : null}
+
+          {(detail.purchase_receipts || []).length > 0 ? (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-white">Delivery history</h3>
+              <ul className="divide-y divide-white/10 rounded-2xl border border-white/10">
+                {detail.purchase_receipts.map((r) => {
+                  const lines = r.purchase_receipt_lines || []
+                  const editing = editingReceiptId === r.id
+
+                  if (editing) {
+                    return (
+                      <li key={r.id} className="px-4 py-3">
+                        <form onSubmit={handleSaveReceiptEdit} className="space-y-3">
+                          <label className="block">
+                            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                              Received date
+                            </span>
+                            <YearMonthDaySelect value={editDate} onChange={setEditDate} />
+                          </label>
+                          <div className="space-y-2">
+                            {lines.map((line) => {
+                              const max = maxEditableQty(line, detail.purchase_order_lines)
+                              return (
+                                <div
+                                  key={line.id}
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 px-3 py-2"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm text-ink-200">
+                                      {receiptLineLabel(line, detail.purchase_order_lines)}
+                                    </p>
+                                    <p className="text-xs text-ink-500">Max {max}</p>
+                                  </div>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={max}
+                                    step="1"
+                                    className={`${adminFieldClass} w-24`}
+                                    value={editQty[line.id] ?? ''}
+                                    onChange={(e) =>
+                                      setEditQty((q) => ({ ...q, [line.id]: e.target.value }))
+                                    }
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <label className="block">
+                            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                              Notes
+                            </span>
+                            <input
+                              className={adminFieldClass}
+                              value={editNotes}
+                              onChange={(e) => setEditNotes(e.target.value)}
+                            />
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="submit"
+                              disabled={saving}
+                              className={adminBtnPrimary}
+                            >
+                              {saving ? 'Saving…' : 'Save delivery'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={cancelEditReceipt}
+                              className={adminBtnSecondary}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      </li>
+                    )
+                  }
+
+                  return (
+                    <li key={r.id} className="px-4 py-3 text-sm">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-ink-200">{r.received_date}</p>
+                          {r.notes ? (
+                            <p className="mt-0.5 text-xs text-ink-500">{r.notes}</p>
+                          ) : null}
+                          <ul className="mt-2 space-y-1">
+                            {lines.length === 0 ? (
+                              <li className="text-xs text-ink-500">No line items</li>
+                            ) : (
+                              lines.map((line) => (
+                                <li
+                                  key={line.id}
+                                  className="flex flex-wrap items-baseline justify-between gap-2 text-ink-300"
+                                >
+                                  <span>
+                                    {receiptLineLabel(line, detail.purchase_order_lines)}
+                                  </span>
+                                  <span className="font-medium text-ink-100">
+                                    × {line.quantity}
+                                  </span>
+                                </li>
+                              ))
+                            )}
+                          </ul>
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            disabled={saving || Boolean(editingReceiptId)}
+                            aria-label="Edit delivery"
+                            onClick={() => startEditReceipt(r)}
+                            className="group/iconTip relative inline-flex rounded-md p-1.5 text-brand-400 transition hover:bg-brand-500/10 hover:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.75}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            >
+                              <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                            </svg>
+                            <span
+                              role="tooltip"
+                              className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover/iconTip:opacity-100 group-focus-visible/iconTip:opacity-100"
+                            >
+                              Edit
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={saving || Boolean(editingReceiptId)}
+                            aria-label="Cancel delivery"
+                            onClick={() => handleCancelReceipt(r)}
+                            className="group/iconTip relative inline-flex rounded-md p-1.5 text-red-400 transition hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.75}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            >
+                              <path d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            <span
+                              role="tooltip"
+                              className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover/iconTip:opacity-100 group-focus-visible/iconTip:opacity-100"
+                            >
+                              Cancel delivery
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          ) : null}
         </div>
-        <button type="submit" disabled={saving} className={adminBtnPrimary}>
-          {saving ? 'Saving…' : 'Apply adjustment'}
-        </button>
-      </form>
+      ) : null}
     </div>
   )
 }

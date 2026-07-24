@@ -10,6 +10,7 @@ import SettingsPage from './admin/pages/Settings'
 import QuotationsPage from './admin/pages/Quotations'
 import InvoicesPage from './admin/pages/Invoices'
 import PaymentsPage from './admin/pages/Payments'
+import ExpensesPage from './admin/pages/Expenses'
 import ReportsPage from './admin/pages/Reports'
 import MonthlyFeesPage from './admin/pages/MonthlyFees'
 import TrackingCatalogPage from './admin/pages/TrackingCatalog'
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="quotations" element={<QuotationsPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="payments" element={<PaymentsPage />} />
+        <Route path="expenses" element={<ExpensesPage />} />
         <Route path="monthly-fees" element={<MonthlyFeesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />

@@ -7,6 +7,18 @@ import { prepareBillingDocumentBundle } from './billingDocument'
 import { preparePaymentDocumentBundle } from './paymentDocument'
 import { BALANCE_INVOICE_STATUSES, invoiceAffectsClientBalance } from './payments'
 
+/** A–Z by name; "Other" always last. */
+export function sortExpenseCategories(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const aOther = String(a?.name || '').trim().toLowerCase() === 'other'
+    const bOther = String(b?.name || '').trim().toLowerCase() === 'other'
+    if (aOther !== bOther) return aOther ? 1 : -1
+    return String(a?.name || '').localeCompare(String(b?.name || ''), undefined, {
+      sensitivity: 'base',
+    })
+  })
+}
+
 /**
  * Single entry point for ops data access.
  * Phase 0–5: direct Supabase under auth bypass + TEMP RLS.
@@ -184,6 +196,12 @@ export const opsApi = {
       active: Boolean(payload.active),
       updated_at: new Date().toISOString(),
     }
+    if (!row.name) {
+      return { data: null, error: { message: 'Product name is required.' } }
+    }
+    if (!(Number(row.unit_price) >= 0)) {
+      return { data: null, error: { message: 'Unit price must be zero or greater.' } }
+    }
     const { data, error } = await supabase
       .from('products')
       .update(row)
@@ -192,6 +210,46 @@ export const opsApi = {
       .single()
     if (error) return mapError(error)
     return { data, error: null }
+  },
+
+  async deleteProduct(id) {
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Product id is required.' } }
+    }
+
+    const checks = [
+      { table: 'stock_movements', label: 'stock movements' },
+      { table: 'purchase_order_lines', label: 'purchase orders' },
+      { table: 'trackable_item_components', label: 'tracking catalog packages' },
+      { table: 'quotation_lines', label: 'quotations' },
+      { table: 'invoice_lines', label: 'invoices' },
+    ]
+
+    for (const check of checks) {
+      const { count, error } = await supabase
+        .from(check.table)
+        .select('id', { count: 'exact', head: true })
+        .eq('product_id', id)
+      if (error) {
+        // Older DBs may not have every table; ignore missing-relation noise only if unexpected.
+        const msg = String(error.message || '').toLowerCase()
+        if (msg.includes('does not exist') || msg.includes('could not find')) continue
+        return mapError(error)
+      }
+      if ((count || 0) > 0) {
+        return {
+          data: null,
+          error: {
+            message: `This product is used on ${check.label}. Deactivate it instead of deleting.`,
+          },
+        }
+      }
+    }
+
+    const { error } = await supabase.from('products').delete().eq('id', id)
+    if (error) return mapError(error)
+    return { data: true, error: null }
   },
 
   async createProduct(payload) {
@@ -519,6 +577,520 @@ export const opsApi = {
       .single()
     if (error) return mapError(error)
     return { data, error: null }
+  },
+
+  // --- Stock purchase orders (money out + receives) ---
+
+  async listPurchaseOrders({ status } = {}) {
+    if (!supabase) return dbUnavailable()
+    let q = supabase
+      .from('purchase_orders')
+      .select('*, purchase_order_lines(id, product_id, quantity_ordered, quantity_received)')
+      .order('purchase_date', { ascending: false })
+      .order('created_at', { ascending: false })
+    if (status) q = q.eq('status', status)
+    const { data, error } = await q
+    if (error) return mapError(error)
+    return { data: data || [], error: null }
+  },
+
+  async getPurchaseOrder(id) {
+    if (!supabase) return dbUnavailable()
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .select(
+        `*,
+        purchase_order_lines(
+          id, product_id, quantity_ordered, quantity_received, unit_cost,
+          products(id, sku, name)
+        ),
+        purchase_receipts(
+          id, received_date, notes, created_at,
+          purchase_receipt_lines(
+            id, purchase_order_line_id, product_id, quantity,
+            products(id, sku, name)
+          )
+        )`,
+      )
+      .eq('id', id)
+      .single()
+    if (error) return mapError(error)
+    if (Array.isArray(data.purchase_receipts)) {
+      data.purchase_receipts.sort((a, b) =>
+        String(b.received_date).localeCompare(String(a.received_date)),
+      )
+    }
+    return { data, error: null }
+  },
+
+  async createPurchaseOrder({
+    purchase_date,
+    supplier,
+    amount,
+    method,
+    reference,
+    notes,
+    lines,
+  }) {
+    if (!supabase) return dbUnavailable()
+    const amt = Number(amount)
+    if (!(amt > 0)) {
+      return { data: null, error: { message: 'Enter the amount paid (greater than zero).' } }
+    }
+    if (!purchase_date) {
+      return { data: null, error: { message: 'Choose the date money left the account.' } }
+    }
+    const cleaned = (lines || [])
+      .map((l) => ({
+        product_id: l.product_id,
+        quantity_ordered: Math.trunc(Number(l.quantity_ordered)),
+        unit_cost:
+          l.unit_cost === '' || l.unit_cost == null ? null : Number(l.unit_cost),
+      }))
+      .filter((l) => l.product_id && l.quantity_ordered > 0)
+
+    if (cleaned.length === 0) {
+      return {
+        data: null,
+        error: { message: 'Add at least one product with quantity ordered.' },
+      }
+    }
+
+    const productIds = cleaned.map((l) => l.product_id)
+    const { data: products, error: pErr } = await supabase
+      .from('products')
+      .select('id, sku, tracks_stock, active')
+      .in('id', productIds)
+    if (pErr) return mapError(pErr)
+    const byId = Object.fromEntries((products || []).map((p) => [p.id, p]))
+    for (const line of cleaned) {
+      const p = byId[line.product_id]
+      if (!p) {
+        return { data: null, error: { message: 'One of the products was not found.' } }
+      }
+      if (!p.tracks_stock) {
+        return {
+          data: null,
+          error: {
+            message: `${p.sku} does not track stock — only stocked products can be on a purchase order.`,
+          },
+        }
+      }
+    }
+
+    const { data: po, error: poErr } = await supabase
+      .from('purchase_orders')
+      .insert({
+        purchase_date,
+        supplier: supplier?.trim() || null,
+        amount: amt,
+        method: method || 'eft',
+        reference: reference?.trim() || null,
+        notes: notes?.trim() || null,
+        status: 'open',
+      })
+      .select()
+      .single()
+    if (poErr) return mapError(poErr)
+
+    const lineRows = cleaned.map((l) => ({
+      purchase_order_id: po.id,
+      product_id: l.product_id,
+      quantity_ordered: l.quantity_ordered,
+      quantity_received: 0,
+      unit_cost:
+        l.unit_cost != null && Number.isFinite(l.unit_cost) && l.unit_cost >= 0
+          ? l.unit_cost
+          : null,
+    }))
+
+    const { error: lineErr } = await supabase.from('purchase_order_lines').insert(lineRows)
+    if (lineErr) {
+      await supabase.from('purchase_orders').delete().eq('id', po.id)
+      return mapError(lineErr)
+    }
+
+    return this.getPurchaseOrder(po.id)
+  },
+
+  async receivePurchaseOrder({ purchase_order_id, received_date, notes, lines }) {
+    if (!supabase) return dbUnavailable()
+    if (!purchase_order_id) {
+      return { data: null, error: { message: 'Purchase order is required.' } }
+    }
+    if (!received_date) {
+      return { data: null, error: { message: 'Choose the date stock was received.' } }
+    }
+
+    const { data: po, error: poErr } = await this.getPurchaseOrder(purchase_order_id)
+    if (poErr) return { data: null, error: poErr }
+    if (!po || po.status !== 'open') {
+      return {
+        data: null,
+        error: { message: 'Only open purchase orders can receive stock.' },
+      }
+    }
+
+    const poLines = po.purchase_order_lines || []
+    const byLineId = Object.fromEntries(poLines.map((l) => [l.id, l]))
+
+    const cleaned = (lines || [])
+      .map((l) => ({
+        purchase_order_line_id: l.purchase_order_line_id,
+        quantity: Math.trunc(Number(l.quantity)),
+      }))
+      .filter((l) => l.purchase_order_line_id && l.quantity > 0)
+
+    if (cleaned.length === 0) {
+      return {
+        data: null,
+        error: { message: 'Enter at least one quantity received.' },
+      }
+    }
+
+    for (const row of cleaned) {
+      const line = byLineId[row.purchase_order_line_id]
+      if (!line) {
+        return { data: null, error: { message: 'A receive line does not belong to this PO.' } }
+      }
+      const remaining = Number(line.quantity_ordered) - Number(line.quantity_received)
+      if (row.quantity > remaining) {
+        const sku = line.products?.sku || 'item'
+        return {
+          data: null,
+          error: {
+            message: `Cannot receive ${row.quantity} of ${sku} — only ${remaining} still outstanding.`,
+          },
+        }
+      }
+    }
+
+    const { data: receipt, error: rErr } = await supabase
+      .from('purchase_receipts')
+      .insert({
+        purchase_order_id,
+        received_date,
+        notes: notes?.trim() || null,
+      })
+      .select()
+      .single()
+    if (rErr) return mapError(rErr)
+
+    const receiptLines = cleaned.map((row) => {
+      const line = byLineId[row.purchase_order_line_id]
+      return {
+        purchase_receipt_id: receipt.id,
+        purchase_order_line_id: row.purchase_order_line_id,
+        product_id: line.product_id,
+        quantity: row.quantity,
+      }
+    })
+
+    const { error: rlErr } = await supabase
+      .from('purchase_receipt_lines')
+      .insert(receiptLines)
+    if (rlErr) {
+      await supabase.from('purchase_receipts').delete().eq('id', receipt.id)
+      return mapError(rlErr)
+    }
+
+    for (const row of cleaned) {
+      const line = byLineId[row.purchase_order_line_id]
+      const nextReceived = Number(line.quantity_received) + row.quantity
+      const { error: uErr } = await supabase
+        .from('purchase_order_lines')
+        .update({ quantity_received: nextReceived })
+        .eq('id', line.id)
+      if (uErr) return mapError(uErr)
+
+      const { error: mErr } = await supabase.from('stock_movements').insert({
+        product_id: line.product_id,
+        quantity_delta: row.quantity,
+        reason: 'purchase_receive',
+        note: `PO ${po.po_number}`,
+        reference_type: 'purchase_receipt',
+        reference_id: receipt.id,
+      })
+      if (mErr) return mapError(mErr)
+
+      line.quantity_received = nextReceived
+    }
+
+    const fullyReceived = poLines.every(
+      (l) => Number(l.quantity_received) >= Number(l.quantity_ordered),
+    )
+    if (fullyReceived) {
+      const { error: sErr } = await supabase
+        .from('purchase_orders')
+        .update({ status: 'closed', updated_at: new Date().toISOString() })
+        .eq('id', purchase_order_id)
+      if (sErr) return mapError(sErr)
+    } else {
+      await supabase
+        .from('purchase_orders')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', purchase_order_id)
+    }
+
+    return this.getPurchaseOrder(purchase_order_id)
+  },
+
+  async updatePurchaseReceipt({ id, received_date, notes, lines }) {
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Delivery is required.' } }
+    }
+    if (!received_date) {
+      return { data: null, error: { message: 'Choose the date stock was received.' } }
+    }
+
+    const { data: receipt, error: rErr } = await supabase
+      .from('purchase_receipts')
+      .select(
+        `*,
+        purchase_receipt_lines(id, purchase_order_line_id, product_id, quantity),
+        purchase_orders(id, po_number, status)`,
+      )
+      .eq('id', id)
+      .single()
+    if (rErr) return mapError(rErr)
+
+    const poId = receipt.purchase_order_id
+    const { data: po, error: poErr } = await this.getPurchaseOrder(poId)
+    if (poErr) return { data: null, error: poErr }
+
+    const poLines = po.purchase_order_lines || []
+    const byPoLineId = Object.fromEntries(poLines.map((l) => [l.id, l]))
+    const oldLines = receipt.purchase_receipt_lines || []
+    const byReceiptLineId = Object.fromEntries(oldLines.map((l) => [l.id, l]))
+
+    const cleaned = (lines || [])
+      .map((l) => ({
+        id: l.id,
+        purchase_order_line_id: l.purchase_order_line_id,
+        quantity: Math.trunc(Number(l.quantity)),
+      }))
+      .filter((l) => l.id && byReceiptLineId[l.id])
+
+    if (cleaned.length !== oldLines.length) {
+      return {
+        data: null,
+        error: { message: 'Delivery lines are incomplete. Refresh and try again.' },
+      }
+    }
+
+    if (cleaned.every((l) => l.quantity <= 0)) {
+      return this.cancelPurchaseReceipt(id)
+    }
+
+    for (const row of cleaned) {
+      if (row.quantity < 0) {
+        return { data: null, error: { message: 'Quantities cannot be negative.' } }
+      }
+      const old = byReceiptLineId[row.id]
+      const poLine = byPoLineId[old.purchase_order_line_id]
+      if (!poLine) {
+        return { data: null, error: { message: 'A delivery line no longer matches this PO.' } }
+      }
+      const oldQty = Number(old.quantity)
+      const newQty = row.quantity
+      const delta = newQty - oldQty
+      if (delta === 0) continue
+
+      if (delta > 0) {
+        const remainingExcludingThis =
+          Number(poLine.quantity_ordered) -
+          (Number(poLine.quantity_received) - oldQty)
+        if (newQty > remainingExcludingThis) {
+          const sku = poLine.products?.sku || 'item'
+          return {
+            data: null,
+            error: {
+              message: `Cannot set ${newQty} of ${sku} — only ${remainingExcludingThis} can be on this delivery.`,
+            },
+          }
+        }
+      } else {
+        const { data: levels, error: levelErr } = await supabase
+          .from('stock_levels')
+          .select('on_hand, sku')
+          .eq('product_id', old.product_id)
+          .maybeSingle()
+        if (levelErr) return mapError(levelErr)
+        const onHand = levels?.on_hand ?? 0
+        if (onHand + delta < 0) {
+          const sku = levels?.sku || poLine.products?.sku || 'item'
+          return {
+            data: null,
+            error: {
+              message: `Cannot reduce ${sku} by ${-delta} — only ${onHand} on hand.`,
+            },
+          }
+        }
+      }
+    }
+
+    const { error: updErr } = await supabase
+      .from('purchase_receipts')
+      .update({
+        received_date,
+        notes: notes?.trim() || null,
+      })
+      .eq('id', id)
+    if (updErr) return mapError(updErr)
+
+    for (const row of cleaned) {
+      const old = byReceiptLineId[row.id]
+      const poLine = byPoLineId[old.purchase_order_line_id]
+      const oldQty = Number(old.quantity)
+      const newQty = row.quantity
+      const delta = newQty - oldQty
+
+      if (newQty === 0) {
+        const { error: delErr } = await supabase
+          .from('purchase_receipt_lines')
+          .delete()
+          .eq('id', row.id)
+        if (delErr) return mapError(delErr)
+      } else if (delta !== 0) {
+        const { error: lineUpdErr } = await supabase
+          .from('purchase_receipt_lines')
+          .update({ quantity: newQty })
+          .eq('id', row.id)
+        if (lineUpdErr) return mapError(lineUpdErr)
+      }
+
+      if (delta !== 0) {
+        const nextReceived = Number(poLine.quantity_received) + delta
+        const { error: poLineErr } = await supabase
+          .from('purchase_order_lines')
+          .update({ quantity_received: nextReceived })
+          .eq('id', poLine.id)
+        if (poLineErr) return mapError(poLineErr)
+        poLine.quantity_received = nextReceived
+
+        const { error: mErr } = await supabase.from('stock_movements').insert({
+          product_id: old.product_id,
+          quantity_delta: delta,
+          reason: delta > 0 ? 'purchase_receive' : 'purchase_receive_adjust',
+          note: `PO ${po.po_number} (edit delivery)`,
+          reference_type: 'purchase_receipt',
+          reference_id: id,
+        })
+        if (mErr) return mapError(mErr)
+      }
+    }
+
+    const fullyReceived = poLines.every(
+      (l) => Number(l.quantity_received) >= Number(l.quantity_ordered),
+    )
+    const nextStatus = fullyReceived ? 'closed' : 'open'
+    if (po.status !== nextStatus) {
+      const { error: sErr } = await supabase
+        .from('purchase_orders')
+        .update({ status: nextStatus, updated_at: new Date().toISOString() })
+        .eq('id', poId)
+      if (sErr) return mapError(sErr)
+    } else {
+      await supabase
+        .from('purchase_orders')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', poId)
+    }
+
+    return this.getPurchaseOrder(poId)
+  },
+
+  async cancelPurchaseReceipt(id) {
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Delivery is required.' } }
+    }
+
+    const { data: receipt, error: rErr } = await supabase
+      .from('purchase_receipts')
+      .select(
+        `*,
+        purchase_receipt_lines(id, purchase_order_line_id, product_id, quantity)`,
+      )
+      .eq('id', id)
+      .single()
+    if (rErr) return mapError(rErr)
+
+    const poId = receipt.purchase_order_id
+    const { data: po, error: poErr } = await this.getPurchaseOrder(poId)
+    if (poErr) return { data: null, error: poErr }
+
+    const poLines = po.purchase_order_lines || []
+    const byPoLineId = Object.fromEntries(poLines.map((l) => [l.id, l]))
+    const receiptLines = receipt.purchase_receipt_lines || []
+
+    for (const row of receiptLines) {
+      const qty = Number(row.quantity)
+      if (!(qty > 0)) continue
+      const { data: levels, error: levelErr } = await supabase
+        .from('stock_levels')
+        .select('on_hand, sku')
+        .eq('product_id', row.product_id)
+        .maybeSingle()
+      if (levelErr) return mapError(levelErr)
+      const onHand = levels?.on_hand ?? 0
+      if (onHand < qty) {
+        const sku =
+          levels?.sku || byPoLineId[row.purchase_order_line_id]?.products?.sku || 'item'
+        return {
+          data: null,
+          error: {
+            message: `Cannot cancel this delivery — ${sku} only has ${onHand} on hand (need to reverse ${qty}).`,
+          },
+        }
+      }
+    }
+
+    for (const row of receiptLines) {
+      const qty = Number(row.quantity)
+      const poLine = byPoLineId[row.purchase_order_line_id]
+      if (!poLine) {
+        return { data: null, error: { message: 'A delivery line no longer matches this PO.' } }
+      }
+
+      const nextReceived = Math.max(0, Number(poLine.quantity_received) - qty)
+      const { error: uErr } = await supabase
+        .from('purchase_order_lines')
+        .update({ quantity_received: nextReceived })
+        .eq('id', poLine.id)
+      if (uErr) return mapError(uErr)
+      poLine.quantity_received = nextReceived
+
+      if (qty > 0) {
+        const { error: mErr } = await supabase.from('stock_movements').insert({
+          product_id: row.product_id,
+          quantity_delta: -qty,
+          reason: 'purchase_receive_cancel',
+          note: `PO ${po.po_number} (cancel delivery)`,
+          reference_type: 'purchase_receipt',
+          reference_id: id,
+        })
+        if (mErr) return mapError(mErr)
+      }
+    }
+
+    const { error: delErr } = await supabase.from('purchase_receipts').delete().eq('id', id)
+    if (delErr) return mapError(delErr)
+
+    const fullyReceived = poLines.every(
+      (l) => Number(l.quantity_received) >= Number(l.quantity_ordered),
+    )
+    const { error: sErr } = await supabase
+      .from('purchase_orders')
+      .update({
+        status: fullyReceived ? 'closed' : 'open',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', poId)
+    if (sErr) return mapError(sErr)
+
+    return this.getPurchaseOrder(poId)
   },
 
   // --- Settings ---
@@ -1445,5 +2017,167 @@ export const opsApi = {
       },
       error: null,
     }
+  },
+
+  // --- Expenses ---
+
+  async listExpenseCategories({ activeOnly = false, withUsage = false } = {}) {
+    if (!supabase) return dbUnavailable()
+    let q = supabase.from('expense_categories').select('*')
+    if (activeOnly) q = q.eq('active', true)
+    const { data, error } = await q
+    if (error) return mapError(error)
+
+    let usedIds = new Set()
+    if (withUsage) {
+      const { data: usedRows, error: usedErr } = await supabase
+        .from('expenses')
+        .select('category_id')
+      if (usedErr) return mapError(usedErr)
+      usedIds = new Set((usedRows || []).map((r) => r.category_id).filter(Boolean))
+    }
+
+    const rows = (data || []).map((c) =>
+      withUsage ? { ...c, in_use: usedIds.has(c.id) } : c,
+    )
+    return { data: sortExpenseCategories(rows), error: null }
+  },
+
+  async saveExpenseCategory({ id, name, sort_order, active }) {
+    if (!supabase) return dbUnavailable()
+    const trimmed = String(name || '').trim()
+    if (!trimmed) {
+      return { data: null, error: { message: 'Category name is required.' } }
+    }
+    const row = {
+      name: trimmed,
+      sort_order: Number(sort_order) || 100,
+      active: active !== false,
+      updated_at: new Date().toISOString(),
+    }
+    if (id) {
+      const { data, error } = await supabase
+        .from('expense_categories')
+        .update(row)
+        .eq('id', id)
+        .select()
+        .single()
+      if (error) return mapError(error)
+      return { data, error: null }
+    }
+    const { data, error } = await supabase
+      .from('expense_categories')
+      .insert({ ...row, created_at: new Date().toISOString() })
+      .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async deleteExpenseCategory(id) {
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Category id is required.' } }
+    }
+    const { count, error: countErr } = await supabase
+      .from('expenses')
+      .select('id', { count: 'exact', head: true })
+      .eq('category_id', id)
+    if (countErr) return mapError(countErr)
+    if ((count || 0) > 0) {
+      return {
+        data: null,
+        error: {
+          message:
+            'This category is used by existing expenses. Deactivate it instead of deleting.',
+        },
+      }
+    }
+    const { error } = await supabase.from('expense_categories').delete().eq('id', id)
+    if (error) return mapError(error)
+    return { data: true, error: null }
+  },
+
+  async listExpenses({ from, to, category_id } = {}) {
+    if (!supabase) return dbUnavailable()
+    let q = supabase
+      .from('expenses')
+      .select('*, expense_categories(id, name)')
+      .order('expense_date', { ascending: false })
+      .order('created_at', { ascending: false })
+    if (from) q = q.gte('expense_date', from)
+    if (to) q = q.lte('expense_date', to)
+    if (category_id) q = q.eq('category_id', category_id)
+    const { data, error } = await q
+    if (error) return mapError(error)
+    return { data: data || [], error: null }
+  },
+
+  async getExpense(id) {
+    if (!supabase) return dbUnavailable()
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*, expense_categories(id, name)')
+      .eq('id', id)
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async saveExpense({
+    id,
+    expense_date,
+    amount,
+    category_id,
+    vendor,
+    method,
+    reference,
+    notes,
+  }) {
+    if (!supabase) return dbUnavailable()
+    if (!category_id) {
+      return { data: null, error: { message: 'Please select a category.' } }
+    }
+    const amt = Number(amount)
+    if (!(amt > 0)) {
+      return { data: null, error: { message: 'Enter an amount greater than zero.' } }
+    }
+    if (!expense_date) {
+      return { data: null, error: { message: 'Choose an expense date.' } }
+    }
+    const row = {
+      expense_date,
+      amount: amt,
+      category_id,
+      vendor: vendor?.trim() || null,
+      method: method || 'cash',
+      reference: reference?.trim() || null,
+      notes: notes?.trim() || null,
+      updated_at: new Date().toISOString(),
+    }
+    if (id) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .update(row)
+        .eq('id', id)
+        .select('*, expense_categories(id, name)')
+        .single()
+      if (error) return mapError(error)
+      return { data, error: null }
+    }
+    const { data, error } = await supabase
+      .from('expenses')
+      .insert(row)
+      .select('*, expense_categories(id, name)')
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async deleteExpense(id) {
+    if (!supabase) return dbUnavailable()
+    const { error } = await supabase.from('expenses').delete().eq('id', id)
+    if (error) return mapError(error)
+    return { data: true, error: null }
   },
 }

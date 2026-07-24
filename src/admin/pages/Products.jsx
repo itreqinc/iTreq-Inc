@@ -11,12 +11,66 @@ const emptyNewProduct = {
   active: true,
 }
 
+function ActionIcon({ d }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d={d} />
+    </svg>
+  )
+}
+
+const ICONS = {
+  pencil:
+    'M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10',
+  trash:
+    'M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0',
+  check: 'M4.5 12.75l6 6 9-13.5',
+  x: 'M6 18L18 6M6 6l12 12',
+}
+
+function IconAction({ label, onClick, disabled, tone = 'default', children }) {
+  const toneClass =
+    tone === 'danger'
+      ? 'text-red-400 hover:bg-red-500/10 hover:text-red-300'
+      : tone === 'muted'
+        ? 'text-ink-400 hover:bg-white/5 hover:text-ink-200'
+        : 'text-brand-400 hover:bg-brand-500/10 hover:text-brand-300'
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`group/iconTip relative inline-flex rounded-md p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
+    >
+      {children}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover/iconTip:opacity-100 group-focus-visible/iconTip:opacity-100"
+      >
+        {label}
+      </span>
+    </button>
+  )
+}
+
 export default function ProductsPage() {
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
-  const [savingId, setSavingId] = useState(null)
-  const [drafts, setDrafts] = useState({})
+  const [busyId, setBusyId] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [draft, setDraft] = useState(null)
   const [showNew, setShowNew] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newProduct, setNewProduct] = useState(emptyNewProduct)
@@ -30,37 +84,58 @@ export default function ProductsPage() {
       return
     }
     setProducts(data || [])
-    const next = {}
-    for (const p of data || []) {
-      next[p.id] = {
-        name: p.name,
-        unit_price: String(p.unit_price),
-        active: p.active,
-      }
-    }
-    setDrafts(next)
   }, [showError])
 
   useEffect(() => {
     load()
   }, [load])
 
-  function updateDraft(id, patch) {
-    setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }))
+  function startEdit(p) {
+    setEditingId(p.id)
+    setDraft({
+      name: p.name,
+      unit_price: String(p.unit_price),
+      active: p.active,
+    })
   }
 
-  async function save(id) {
-    const draft = drafts[id]
+  function cancelEdit() {
+    setEditingId(null)
+    setDraft(null)
+  }
+
+  async function saveEdit(id) {
     if (!draft) return
-    setSavingId(id)
-    const { error: err } = await opsApi.updateProduct(id, draft)
-    setSavingId(null)
+    setBusyId(id)
+    const { data, error: err } = await opsApi.updateProduct(id, draft)
+    setBusyId(null)
     if (err) {
       showError(err.message)
       return
     }
+    setProducts((prev) => prev.map((row) => (row.id === id ? { ...row, ...data } : row)))
+    cancelEdit()
     showSuccess('Product updated.')
-    await load()
+  }
+
+  async function handleDelete(p) {
+    const ok = await confirm({
+      title: 'Delete product?',
+      message: `Delete ${p.sku}? Only unused products can be deleted — otherwise deactivate instead.`,
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
+
+    setBusyId(p.id)
+    const { error } = await opsApi.deleteProduct(p.id)
+    setBusyId(null)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    setProducts((prev) => prev.filter((row) => row.id !== p.id))
+    if (editingId === p.id) cancelEdit()
+    showSuccess('Product deleted.')
   }
 
   function startNew() {
@@ -83,15 +158,17 @@ export default function ProductsPage() {
     if (!ok) return
 
     setCreating(true)
-    const { error: err } = await opsApi.createProduct(newProduct)
+    const { data, error: err } = await opsApi.createProduct(newProduct)
     setCreating(false)
     if (err) {
       showError(err.message)
       return
     }
+    setProducts((prev) =>
+      [...prev, data].sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
+    )
     showSuccess('Product added.')
     closeNew()
-    await load()
   }
 
   return (
@@ -191,7 +268,7 @@ export default function ProductsPage() {
               <th className="px-4 py-3">Price</th>
               <th className="px-4 py-3">Stocked</th>
               <th className="px-4 py-3">Active</th>
-              <th className="px-4 py-3" />
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -209,45 +286,101 @@ export default function ProductsPage() {
               </tr>
             ) : (
               products.map((p) => {
-                const d = drafts[p.id] || {}
+                const editing = editingId === p.id
+                const busy = busyId === p.id
+
+                if (editing && draft) {
+                  return (
+                    <tr key={p.id} className="bg-ink-900/30 align-top">
+                      <td className="px-4 py-3 font-mono text-xs text-ink-300">{p.sku}</td>
+                      <td className="px-4 py-3">
+                        <input
+                          className={adminFieldClass}
+                          value={draft.name}
+                          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                          autoFocus
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className={`${adminFieldClass} max-w-[8rem]`}
+                          value={draft.unit_price}
+                          onChange={(e) =>
+                            setDraft((d) => ({ ...d, unit_price: e.target.value }))
+                          }
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-ink-300">
+                        {p.tracks_stock ? 'Yes' : 'No'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <label className="inline-flex items-center gap-2 text-ink-300">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(draft.active)}
+                            onChange={(e) =>
+                              setDraft((d) => ({ ...d, active: e.target.checked }))
+                            }
+                          />
+                          {draft.active ? 'Yes' : 'No'}
+                        </label>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center justify-end gap-0.5">
+                          <IconAction
+                            label="Save"
+                            disabled={busy || !draft.name.trim()}
+                            onClick={() => saveEdit(p.id)}
+                          >
+                            <ActionIcon d={ICONS.check} />
+                          </IconAction>
+                          <IconAction
+                            label="Cancel"
+                            tone="muted"
+                            disabled={busy}
+                            onClick={cancelEdit}
+                          >
+                            <ActionIcon d={ICONS.x} />
+                          </IconAction>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                }
+
                 return (
-                  <tr key={p.id} className="bg-ink-900/20 align-top">
+                  <tr
+                    key={p.id}
+                    className={`bg-ink-900/20 ${p.active ? '' : 'opacity-50'}`}
+                  >
                     <td className="px-4 py-3 font-mono text-xs text-ink-300">{p.sku}</td>
-                    <td className="px-4 py-3">
-                      <input
-                        className={adminFieldClass}
-                        value={d.name || ''}
-                        onChange={(e) => updateDraft(p.id, { name: e.target.value })}
-                      />
+                    <td className="px-4 py-3 text-ink-200">{p.name}</td>
+                    <td className="px-4 py-3 text-ink-100">{formatPula(p.unit_price)}</td>
+                    <td className="px-4 py-3 text-ink-300">
+                      {p.tracks_stock ? 'Yes' : 'No'}
                     </td>
-                    <td className="px-4 py-3">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className={`${adminFieldClass} max-w-[8rem]`}
-                        value={d.unit_price ?? ''}
-                        onChange={(e) => updateDraft(p.id, { unit_price: e.target.value })}
-                      />
-                      <p className="mt-1 text-[11px] text-ink-500">{formatPula(d.unit_price)}</p>
-                    </td>
-                    <td className="px-4 py-3 text-ink-300">{p.tracks_stock ? 'Yes' : 'No'}</td>
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(d.active)}
-                        onChange={(e) => updateDraft(p.id, { active: e.target.checked })}
-                      />
-                    </td>
+                    <td className="px-4 py-3 text-ink-300">{p.active ? 'Yes' : 'No'}</td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        disabled={savingId === p.id}
-                        onClick={() => save(p.id)}
-                        className={adminBtnPrimary}
-                      >
-                        {savingId === p.id ? 'Saving…' : 'Save'}
-                      </button>
+                      <div className="inline-flex items-center justify-end gap-0.5">
+                        <IconAction
+                          label="Edit"
+                          disabled={busy || Boolean(editingId)}
+                          onClick={() => startEdit(p)}
+                        >
+                          <ActionIcon d={ICONS.pencil} />
+                        </IconAction>
+                        <IconAction
+                          label="Delete"
+                          tone="danger"
+                          disabled={busy || Boolean(editingId)}
+                          onClick={() => handleDelete(p)}
+                        >
+                          <ActionIcon d={ICONS.trash} />
+                        </IconAction>
+                      </div>
                     </td>
                   </tr>
                 )
