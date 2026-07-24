@@ -15,7 +15,20 @@ import {
   closePaymentDocumentPrintWindow,
 } from '../../lib/paymentDocument'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
-import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminFieldClass, activateRowKey, clickableDocClass, clickableRowClass, formatPula } from '../ui'
+import { AdminIconAction } from '../AdminIconAction'
+import {
+  adminBtnDanger,
+  adminBtnPrimary,
+  adminBtnSecondary,
+  adminFieldClass,
+  adminTableClass,
+  adminTableShellClass,
+  adminColSecondary,
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+} from '../ui'
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -541,14 +554,14 @@ export default function PaymentsPage() {
         </form>
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
+      <div className={adminTableShellClass}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Client</th>
-              <th className="px-4 py-3">Method</th>
-              <th className="px-4 py-3">Reference</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Method</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Reference</th>
               <th className="px-4 py-3">Amount</th>
               <th className="px-4 py-3" />
             </tr>
@@ -579,42 +592,41 @@ export default function PaymentsPage() {
                   onKeyDown={(e) => activateRowKey(e, open)}
                 >
                   <td className="px-4 py-3 text-ink-300">{row.payment_date}</td>
-                  <td className="px-4 py-3">
+                  <td className="min-w-0 break-words px-4 py-3">
                     <span className={clickableDocClass}>{row.clients?.name || '—'}</span>
                   </td>
-                  <td className="px-4 py-3 text-ink-300">{paymentMethodLabel(row.method)}</td>
-                  <td className="px-4 py-3 text-ink-300">{row.reference || '—'}</td>
+                  <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                    {paymentMethodLabel(row.method)}
+                  </td>
+                  <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                    {row.reference || '—'}
+                  </td>
                   <td className="px-4 py-3 font-medium text-ink-100">{formatPula(row.amount)}</td>
                   <td
                     className="px-4 py-3 text-right"
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => e.stopPropagation()}
                   >
-                    <div className="flex flex-wrap justify-end gap-3">
-                      <button
-                        type="button"
+                    <div className="inline-flex items-center justify-end gap-0.5">
+                      <AdminIconAction
+                        label="Print"
+                        icon="print"
                         disabled={saving}
                         onClick={() => printSavedPayment(row.id)}
-                        className="text-xs font-semibold text-brand-400 hover:text-brand-300"
-                      >
-                        Print
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <AdminIconAction
+                        label="Edit"
+                        icon="pencil"
                         disabled={saving}
                         onClick={open}
-                        className="text-xs font-semibold text-brand-400 hover:text-brand-300"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <AdminIconAction
+                        label="Delete"
+                        icon="trash"
+                        tone="danger"
                         disabled={saving}
                         onClick={() => handleDelete(row)}
-                        className="text-xs font-semibold text-red-300 hover:text-red-200"
-                      >
-                        Delete
-                      </button>
+                      />
                     </div>
                   </td>
                 </tr>

@@ -1,4 +1,11 @@
-import { adminBtnSecondary, adminFieldClass, formatPula } from './ui'
+import {
+  adminBtnSecondary,
+  adminFieldClass,
+  formatPula,
+  adminTableShellSmClass,
+  adminTableClass,
+  adminColSecondary,
+} from './ui'
 import { calcDocTotals, calcLineTotal, emptyLine } from '../lib/billing'
 import { useOpsAlert } from './OpsAlertContext'
 
@@ -106,16 +113,16 @@ export function LineItemsEditor({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
+      <div className={adminTableShellSmClass}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-950/60 text-xs uppercase tracking-wider text-ink-400">
             <tr>
               <th className="px-3 py-2">Item to track</th>
-              <th className="px-3 py-2">Product</th>
-              <th className="px-3 py-2">Description</th>
+              <th className={`px-3 py-2 ${adminColSecondary}`}>Product</th>
+              <th className={`px-3 py-2 ${adminColSecondary}`}>Description</th>
               <th className="px-3 py-2">Qty</th>
               <th className="px-3 py-2">Unit price</th>
-              <th className="px-3 py-2">Line</th>
+              <th className={`px-3 py-2 ${adminColSecondary}`}>Line</th>
               {!readOnly ? <th className="px-3 py-2" /> : null}
             </tr>
           </thead>
@@ -125,7 +132,7 @@ export function LineItemsEditor({
                 <td className="px-3 py-2">
                   <select
                     disabled={readOnly || !catalog.length}
-                    className={`${adminFieldClass} min-w-[10rem]`}
+                    className={`${adminFieldClass} min-w-0 w-full sm:min-w-[10rem]`}
                     value={line.trackable_item_id || ''}
                     onChange={(e) => pickTrackableItem(index, e.target.value)}
                     title="Pick what the client wants tracked — fills product, description and price"
@@ -138,10 +145,10 @@ export function LineItemsEditor({
                     ))}
                   </select>
                 </td>
-                <td className="px-3 py-2">
+                <td className={`px-3 py-2 ${adminColSecondary}`}>
                   <select
                     disabled={readOnly}
-                    className={`${adminFieldClass} min-w-[9rem]`}
+                    className={`${adminFieldClass} min-w-0 w-full sm:min-w-[9rem]`}
                     value={line.product_id || ''}
                     onChange={(e) => pickProduct(index, e.target.value)}
                   >
@@ -153,7 +160,7 @@ export function LineItemsEditor({
                     ))}
                   </select>
                 </td>
-                <td className="px-3 py-2">
+                <td className={`px-3 py-2 ${adminColSecondary}`}>
                   <input
                     disabled={readOnly}
                     className={adminFieldClass}
@@ -199,7 +206,7 @@ export function LineItemsEditor({
                     onInput={(e) => e.target.setCustomValidity('')}
                   />
                 </td>
-                <td className="px-3 py-2 text-ink-200">
+                <td className={`px-3 py-2 text-ink-200 ${adminColSecondary}`}>
                   {formatPula(calcLineTotal(line.quantity, line.unit_price))}
                 </td>
                 {!readOnly ? (

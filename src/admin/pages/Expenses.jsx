@@ -9,11 +9,16 @@ import {
   adminBtnPrimary,
   adminBtnSecondary,
   adminFieldClass,
+  adminTableClass,
+  adminTableShellClass,
+  adminColSecondary,
+  adminCellPad,
   activateRowKey,
   clickableDocClass,
   clickableRowClass,
   formatPula,
 } from '../ui'
+import { AdminIconAction } from '../AdminIconAction'
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -340,29 +345,29 @@ export default function ExpensesPage() {
         </form>
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
+      <div className={adminTableShellClass}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Vendor</th>
-              <th className="px-4 py-3">Method</th>
-              <th className="px-4 py-3">Reference</th>
-              <th className="px-4 py-3 text-right">Amount</th>
-              <th className="px-4 py-3" />
+              <th className={adminCellPad}>Date</th>
+              <th className={adminCellPad}>Category</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Vendor</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Method</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Reference</th>
+              <th className={`${adminCellPad} text-right`}>Amount</th>
+              <th className={adminCellPad} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-ink-400">
+                <td colSpan={7} className={`${adminCellPad} text-ink-400`}>
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-ink-400">
+                <td colSpan={7} className={`${adminCellPad} text-ink-400`}>
                   No expenses recorded yet.
                 </td>
               </tr>
@@ -378,49 +383,42 @@ export default function ExpensesPage() {
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
-                    <td className="px-4 py-3 text-ink-300">{row.expense_date}</td>
-                    <td className="px-4 py-3">
-                      <span className={clickableDocClass}>{categoryName(row)}</span>
+                    <td className={`${adminCellPad} text-ink-300`}>{row.expense_date}</td>
+                    <td className={`${adminCellPad} min-w-0`}>
+                      <span className={`${clickableDocClass} break-words`}>{categoryName(row)}</span>
                     </td>
-                    <td className="px-4 py-3 text-ink-300">{row.vendor || '—'}</td>
-                    <td className="px-4 py-3 text-ink-300">
+                    <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                      {row.vendor || '—'}
+                    </td>
+                    <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
                       {paymentMethodLabel(row.method)}
                     </td>
-                    <td className="px-4 py-3 text-ink-300">{row.reference || '—'}</td>
-                    <td className="px-4 py-3 text-right font-medium text-ink-100">
+                    <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                      {row.reference || '—'}
+                    </td>
+                    <td className={`${adminCellPad} text-right font-medium text-ink-100`}>
                       {formatPula(row.amount)}
                     </td>
                     <td
-                      className="px-4 py-3 text-right"
+                      className={`${adminCellPad} text-right`}
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >
-                      <button
-                        type="button"
-                        disabled={saving}
-                        aria-label="Delete"
-                        onClick={() => handleDelete(row)}
-                        className="group/iconTip relative inline-flex rounded-md p-1.5 text-red-400 transition hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={1.75}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
-                          aria-hidden="true"
-                        >
-                          <path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                        <span
-                          role="tooltip"
-                          className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover/iconTip:opacity-100 group-focus-visible/iconTip:opacity-100"
-                        >
-                          Delete
-                        </span>
-                      </button>
+                      <div className="inline-flex items-center justify-end gap-0.5">
+                        <AdminIconAction
+                          label="Edit"
+                          icon="pencil"
+                          disabled={saving}
+                          onClick={open}
+                        />
+                        <AdminIconAction
+                          label="Delete"
+                          icon="trash"
+                          tone="danger"
+                          disabled={saving}
+                          onClick={() => handleDelete(row)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 )

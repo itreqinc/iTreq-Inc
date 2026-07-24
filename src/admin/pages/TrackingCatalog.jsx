@@ -17,6 +17,7 @@ export default function TrackingCatalogPage() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState(null)
+  const [creating, setCreating] = useState(false)
   const [itemForm, setItemForm] = useState(emptyItem())
   const [components, setComponents] = useState([emptyComponent()])
   const [savingItem, setSavingItem] = useState(false)
@@ -47,11 +48,20 @@ export default function TrackingCatalogPage() {
 
   function startNew() {
     setSelectedId(null)
+    setCreating(true)
+    setItemForm(emptyItem())
+    setComponents([emptyComponent()])
+  }
+
+  function clearRight() {
+    setSelectedId(null)
+    setCreating(false)
     setItemForm(emptyItem())
     setComponents([emptyComponent()])
   }
 
   function selectItem(item) {
+    setCreating(false)
     setSelectedId(item.id)
     setItemForm({
       name: item.name || '',
@@ -128,11 +138,12 @@ export default function TrackingCatalogPage() {
       return
     }
     showSuccess('Item deleted.')
-    startNew()
+    clearRight()
     await load()
   }
 
   const selected = items.find((i) => i.id === selectedId)
+  const showRight = creating || Boolean(selectedId)
 
   return (
     <div className="space-y-6">
@@ -148,24 +159,43 @@ export default function TrackingCatalogPage() {
         </button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_1fr]">
-        <aside className="max-h-[70vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-900/40">
+      <div
+        className={
+          showRight
+            ? 'grid gap-4 lg:grid-cols-[minmax(0,18rem)_1fr]'
+            : 'grid gap-4 lg:grid-cols-[minmax(0,18rem)]'
+        }
+      >
+        <aside className="admin-scroll max-h-[70vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-900/40">
           <div className="sticky top-0 border-b border-white/10 bg-ink-900/95 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
             Items
           </div>
           {loading ? (
             <p className="px-3 py-6 text-sm text-ink-400">Loading…</p>
-          ) : items.length === 0 ? (
-            <p className="px-3 py-6 text-sm text-ink-400">No items yet.</p>
+          ) : items.length === 0 && !creating ? (
+            <p className="px-3 py-6 text-sm text-ink-400">
+              No items yet. Use New item to add one.
+            </p>
           ) : (
             <ul>
+              {creating ? (
+                <li>
+                  <button
+                    type="button"
+                    className="w-full bg-brand-500/15 px-3 py-2.5 text-left text-sm text-white"
+                  >
+                    <span className="font-medium">New item</span>
+                    <span className="mt-0.5 block text-xs text-ink-500">Draft — not saved yet</span>
+                  </button>
+                </li>
+              ) : null}
               {items.map((item) => (
                 <li key={item.id}>
                   <button
                     type="button"
                     onClick={() => selectItem(item)}
                     className={`w-full px-3 py-2.5 text-left text-sm ${
-                      item.id === selectedId
+                      !creating && item.id === selectedId
                         ? 'bg-brand-500/15 text-white'
                         : 'text-ink-200 hover:bg-white/5'
                     }`}
@@ -183,16 +213,27 @@ export default function TrackingCatalogPage() {
               ))}
             </ul>
           )}
+          {!loading && !showRight && items.length > 0 ? (
+            <p className="border-t border-white/10 px-3 py-3 text-xs text-ink-500">
+              Select an item to edit it.
+            </p>
+          ) : null}
         </aside>
 
+        {showRight ? (
         <div className="space-y-4">
           <form
             onSubmit={saveItem}
             className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
           >
-            <h2 className="text-sm font-semibold text-white">
-              {selectedId ? 'Edit item' : 'New item'}
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-white">
+                {selectedId ? 'Edit item' : 'New item'}
+              </h2>
+              <button type="button" onClick={clearRight} className={adminBtnSecondary}>
+                Close
+              </button>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block sm:col-span-2">
                 <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
@@ -327,6 +368,7 @@ export default function TrackingCatalogPage() {
             </div>
           </div>
         </div>
+        ) : null}
       </div>
     </div>
   )

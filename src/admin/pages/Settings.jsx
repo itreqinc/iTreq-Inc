@@ -3,7 +3,7 @@ import { COMPANY } from '../../data/site'
 import { emptyDocumentSettingsFields } from '../../lib/companyDocumentSettings'
 import { opsApi, sortExpenseCategories } from '../../lib/opsApi'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, adminFieldClass } from '../ui'
+import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, adminFieldReadonlyClass } from '../ui'
 
 const empty = {
   company_name: 'iTreq Inc',
@@ -102,26 +102,30 @@ function CollapsibleSection({
   description,
   children,
   className = sectionClass,
+  headerEnd,
 }) {
   const panelId = useId()
 
   return (
     <section className={className}>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => onToggle(id)}
-        className="flex w-full items-start gap-2 text-left"
-      >
-        <ChevronIcon open={open} />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-white">{title}</span>
-          {description ? (
-            <span className="mt-1 block text-xs text-ink-400">{description}</span>
-          ) : null}
-        </span>
-      </button>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => onToggle(id)}
+          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+        >
+          <ChevronIcon open={open} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-white">{title}</span>
+            {description ? (
+              <span className="mt-1 block text-xs text-ink-400">{description}</span>
+            ) : null}
+          </span>
+        </button>
+        {headerEnd}
+      </div>
       <div
         id={panelId}
         aria-hidden={!open}
@@ -157,6 +161,31 @@ function snapshotSettingsForm(form) {
   })
 }
 
+const SECTION_FIELDS = {
+  letterhead: [
+    'company_name',
+    'letterhead_address',
+    'letterhead_phone',
+    'letterhead_email',
+    'banking_details',
+  ],
+  currency: ['currency', 'default_tax_rate'],
+  numbering: [
+    'quote_prefix',
+    'invoice_prefix',
+    'next_quote_number',
+    'next_invoice_number',
+  ],
+}
+
+function snapshotSection(form, sectionId) {
+  const full = JSON.parse(snapshotSettingsForm(form))
+  const keys = SECTION_FIELDS[sectionId] || []
+  const slice = {}
+  for (const key of keys) slice[key] = full[key]
+  return JSON.stringify(slice)
+}
+
 function formFromSnapshot(json) {
   if (!json) return { ...empty }
   try {
@@ -166,11 +195,44 @@ function formFromSnapshot(json) {
   }
 }
 
+function SectionEditActions({ editing, dirty, saving, onEdit, onCancel, onSave }) {
+  if (!editing) {
+    return (
+      <div className="pt-1">
+        <button type="button" onClick={onEdit} className={adminBtnPrimary}>
+          Edit
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2 pt-1">
+      <button type="button" onClick={onCancel} disabled={saving} className={adminBtnSecondary}>
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving || !dirty}
+        title={!dirty ? 'Change something before saving' : undefined}
+        className={adminBtnPrimary}
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+    </div>
+  )
+}
+
+function fieldClass(editable, extra = '') {
+  return `${editable ? adminFieldClass : adminFieldReadonlyClass}${extra ? ` ${extra}` : ''}`
+}
+
 export default function SettingsPage() {
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [form, setForm] = useState(empty)
   const [baseline, setBaseline] = useState('')
-  const [editing, setEditing] = useState(false)
+  const [editingSection, setEditingSection] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [categories, setCategories] = useState([])
@@ -179,9 +241,52 @@ export default function SettingsPage() {
   const [editingCatId, setEditingCatId] = useState(null)
   const [editingCatName, setEditingCatName] = useState('')
   const [openSection, setOpenSection] = useState(null)
+  const [companyOpen, setCompanyOpen] = useState(false)
 
-  function toggleSection(id) {
-    setOpenSection((current) => (current === id ? null : id))
+  const sectionDirty = useMemo(() => {
+    if (!editingSection || !baseline) return false
+    const base = formFromSnapshot(baseline)
+    return snapshotSection(form, editingSection) !== snapshotSection(base, editingSection)
+  }, [editingSection, form, baseline])
+
+  async function discardIfNeeded() {
+    if (!editingSection) return true
+    if (sectionDirty) {
+      const ok = await confirm({
+        title: 'Discard changes?',
+        message: 'Your edits will be lost.',
+        confirmLabel: 'Discard',
+      })
+      if (!ok) return false
+    }
+    setForm(formFromSnapshot(baseline))
+    setEditingSection(null)
+    return true
+  }
+
+  async function toggleSection(id) {
+    if (openSection === id) {
+      const ok = await discardIfNeeded()
+      if (!ok) return
+      setOpenSection(null)
+      return
+    }
+    if (editingSection && editingSection !== id) {
+      const ok = await discardIfNeeded()
+      if (!ok) return
+    }
+    setOpenSection(id)
+  }
+
+  async function toggleCompany() {
+    if (companyOpen) {
+      const ok = await discardIfNeeded()
+      if (!ok) return
+      setOpenSection(null)
+      setCompanyOpen(false)
+      return
+    }
+    setCompanyOpen(true)
   }
 
   async function addCategory() {
@@ -201,13 +306,6 @@ export default function SettingsPage() {
     setCategories((prev) => sortExpenseCategories([...prev, { ...data, in_use: false }]))
     showSuccess('Category added.')
   }
-
-  const isDirty = useMemo(
-    () => editing && snapshotSettingsForm(form) !== baseline,
-    [editing, form, baseline],
-  )
-
-  const readOnly = !editing
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -240,7 +338,7 @@ export default function SettingsPage() {
       }
       setForm(next)
       setBaseline(snapshotSettingsForm(next))
-      setEditing(false)
+      setEditingSection(null)
     }
   }, [showError])
 
@@ -248,32 +346,27 @@ export default function SettingsPage() {
     load()
   }, [load])
 
-  function startEdit() {
-    setEditing(true)
+  async function startEdit(sectionId) {
+    if (editingSection && editingSection !== sectionId) {
+      const ok = await discardIfNeeded()
+      if (!ok) return
+    }
+    setEditingSection(sectionId)
   }
 
   async function cancelEdit() {
-    if (isDirty) {
-      const ok = await confirm({
-        title: 'Discard changes?',
-        message: 'Your edits to settings will be lost.',
-        confirmLabel: 'Discard',
-      })
-      if (!ok) return
-    }
-    setForm(formFromSnapshot(baseline))
-    setEditing(false)
+    const ok = await discardIfNeeded()
+    if (!ok) return
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!editing || !isDirty) return
+  async function saveSection(sectionId) {
+    if (editingSection !== sectionId || !sectionDirty) return
 
     const ok = await confirm({
       title: 'Save settings?',
       message:
         'These details are used on quotations, invoices, and document numbering. Save your changes?',
-      confirmLabel: 'Save settings',
+      confirmLabel: 'Save',
     })
     if (!ok) return
 
@@ -284,9 +377,8 @@ export default function SettingsPage() {
       showError(err.message)
       return
     }
-    const snap = snapshotSettingsForm(form)
-    setBaseline(snap)
-    setEditing(false)
+    setBaseline(snapshotSettingsForm(form))
+    setEditingSection(null)
     showSuccess('Settings saved.')
   }
 
@@ -294,221 +386,242 @@ export default function SettingsPage() {
     return <p className="text-sm text-ink-400">Loading settings…</p>
   }
 
+  const letterheadEditing = editingSection === 'letterhead'
+  const currencyEditing = editingSection === 'currency'
+  const numberingEditing = editingSection === 'numbering'
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-white">Settings</h1>
-          <p className="mt-1 text-sm text-ink-300">
-            Company details for quotes and invoices, plus document numbering.
-          </p>
-        </div>
-        {!editing ? (
-          <button type="button" onClick={startEdit} className={adminBtnPrimary}>
-            Edit settings
-          </button>
-        ) : (
-          <button type="button" onClick={cancelEdit} disabled={saving} className={adminBtnSecondary}>
-            Cancel
-          </button>
-        )}
+      <div>
+        <h1 className="font-display text-2xl font-bold text-white">Settings</h1>
+        <p className="mt-1 text-sm text-ink-300">
+          Company details for quotes and invoices, plus document numbering.
+        </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <CollapsibleSection
-          id="letterhead"
-          open={openSection === 'letterhead'}
-          onToggle={toggleSection}
-          title="Quote & invoice letterhead"
-          description={
-            <>
-              Shown under your logo on printed and emailed estimates and invoices. Logo is the site
-              image at <span className="text-ink-300">/logo.png</span>.
-            </>
-          }
-        >
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Legal / display name
-            </span>
-            <input
-              readOnly={readOnly}
-              className={adminFieldClass}
-              value={form.company_name}
-              onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))}
-              placeholder="iTreq Inc"
-            />
-            <span className="mt-1 block text-xs text-ink-500">
-              Used for accessibility on the logo and in email subjects—not printed as a heading.
-            </span>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Address
-            </span>
-            <textarea
-              readOnly={readOnly}
-              rows={3}
-              className={`${adminFieldClass} resize-y`}
-              value={form.letterhead_address}
-              onChange={(e) => setForm((f) => ({ ...f, letterhead_address: e.target.value }))}
-              placeholder={`One line per row, e.g.\n${COMPANY.location}`}
-            />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Contact phone
-              </span>
-              <input
-                readOnly={readOnly}
-                className={adminFieldClass}
-                value={form.letterhead_phone}
-                onChange={(e) => setForm((f) => ({ ...f, letterhead_phone: e.target.value }))}
-                placeholder={COMPANY.phone}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Email
-              </span>
-              <input
-                readOnly={readOnly}
-                type="email"
-                className={adminFieldClass}
-                value={form.letterhead_email}
-                onChange={(e) => setForm((f) => ({ ...f, letterhead_email: e.target.value }))}
-                placeholder={COMPANY.email}
-              />
-            </label>
-          </div>
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Banking details
-            </span>
-            <textarea
-              readOnly={readOnly}
-              rows={5}
-              className={`${adminFieldClass} resize-y`}
-              value={form.banking_details}
-              onChange={(e) => setForm((f) => ({ ...f, banking_details: e.target.value }))}
-              placeholder={'Account name\nBank name\nBranch\nACC: …'}
-            />
-            <span className="mt-1 block text-xs text-ink-500">
-              One line per row; appears in the banking box at the bottom of each document.
-            </span>
-          </label>
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          id="currency"
-          open={openSection === 'currency'}
-          onToggle={toggleSection}
-          title="Currency & tax"
-        >
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Currency code
-            </span>
-            <input
-              readOnly={readOnly}
-              className={adminFieldClass}
-              value={form.currency}
-              onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-            />
-            <p className="mt-1 text-xs text-ink-500">
-              Use BWP for Botswana Pula — amounts display as P everywhere.
-            </p>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Default tax rate (%)
-            </span>
-            <input
-              readOnly={readOnly}
-              type="number"
-              min="0"
-              step="0.01"
-              className={adminFieldClass}
-              value={form.default_tax_rate}
-              onChange={(e) => setForm((f) => ({ ...f, default_tax_rate: Number(e.target.value) }))}
-            />
-          </label>
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          id="numbering"
-          open={openSection === 'numbering'}
-          onToggle={toggleSection}
-          title="Document numbering"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Quote prefix
-              </span>
-              <input
-                readOnly={readOnly}
-                className={adminFieldClass}
-                value={form.quote_prefix}
-                onChange={(e) => setForm((f) => ({ ...f, quote_prefix: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Next quote #
-              </span>
-              <input
-                readOnly={readOnly}
-                type="number"
-                min="1"
-                className={adminFieldClass}
-                value={form.next_quote_number}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, next_quote_number: Number(e.target.value) }))
-                }
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Invoice prefix
-              </span>
-              <input
-                readOnly={readOnly}
-                className={adminFieldClass}
-                value={form.invoice_prefix}
-                onChange={(e) => setForm((f) => ({ ...f, invoice_prefix: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Next invoice #
-              </span>
-              <input
-                readOnly={readOnly}
-                type="number"
-                min="1"
-                className={adminFieldClass}
-                value={form.next_invoice_number}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, next_invoice_number: Number(e.target.value) }))
-                }
-              />
-            </label>
-          </div>
-        </CollapsibleSection>
-
-        {editing ? (
-          <button
-            type="submit"
-            disabled={saving || !isDirty}
-            title={!isDirty ? 'Change something before saving' : undefined}
-            className={adminBtnPrimary}
+      <CollapsibleSection
+        id="company"
+        open={companyOpen}
+        onToggle={toggleCompany}
+        title="Company document settings"
+        description="Letterhead, banking, currency, tax, and quote / invoice numbering."
+      >
+        <div className="space-y-3">
+          <CollapsibleSection
+            id="letterhead"
+            open={openSection === 'letterhead'}
+            onToggle={toggleSection}
+            className="rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4"
+            title="Quote & invoice letterhead"
+            description={
+              <>
+                Shown under your logo on printed and emailed estimates and invoices. Logo is the site
+                image at <span className="text-ink-300">/logo.png</span>.
+              </>
+            }
           >
-            {saving ? 'Saving…' : 'Save settings'}
-          </button>
-        ) : null}
-      </form>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Legal / display name
+              </span>
+              <input
+                readOnly={!letterheadEditing}
+                className={fieldClass(letterheadEditing)}
+                value={form.company_name}
+                onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))}
+                placeholder="iTreq Inc"
+              />
+              <span className="mt-1 block text-xs text-ink-500">
+                Used for accessibility on the logo and in email subjects—not printed as a heading.
+              </span>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Address
+              </span>
+              <textarea
+                readOnly={!letterheadEditing}
+                rows={3}
+                className={fieldClass(letterheadEditing, 'resize-y')}
+                value={form.letterhead_address}
+                onChange={(e) => setForm((f) => ({ ...f, letterhead_address: e.target.value }))}
+                placeholder={`One line per row, e.g.\n${COMPANY.location}`}
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Contact phone
+                </span>
+                <input
+                  readOnly={!letterheadEditing}
+                  className={fieldClass(letterheadEditing)}
+                  value={form.letterhead_phone}
+                  onChange={(e) => setForm((f) => ({ ...f, letterhead_phone: e.target.value }))}
+                  placeholder={COMPANY.phone}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Email
+                </span>
+                <input
+                  readOnly={!letterheadEditing}
+                  type="email"
+                  className={fieldClass(letterheadEditing)}
+                  value={form.letterhead_email}
+                  onChange={(e) => setForm((f) => ({ ...f, letterhead_email: e.target.value }))}
+                  placeholder={COMPANY.email}
+                />
+              </label>
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Banking details
+              </span>
+              <textarea
+                readOnly={!letterheadEditing}
+                rows={5}
+                className={fieldClass(letterheadEditing, 'resize-y')}
+                value={form.banking_details}
+                onChange={(e) => setForm((f) => ({ ...f, banking_details: e.target.value }))}
+                placeholder={'Account name\nBank name\nBranch\nACC: …'}
+              />
+              <span className="mt-1 block text-xs text-ink-500">
+                One line per row; appears in the banking box at the bottom of each document.
+              </span>
+            </label>
+            <SectionEditActions
+              editing={letterheadEditing}
+              dirty={letterheadEditing && sectionDirty}
+              saving={saving}
+              onEdit={() => startEdit('letterhead')}
+              onCancel={cancelEdit}
+              onSave={() => saveSection('letterhead')}
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="currency"
+            open={openSection === 'currency'}
+            onToggle={toggleSection}
+            className="rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4"
+            title="Currency & tax"
+            description="Default currency for amounts on quotes and invoices, plus the tax rate applied unless you override it on a document."
+          >
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Currency code
+              </span>
+              <input
+                readOnly={!currencyEditing}
+                className={fieldClass(currencyEditing)}
+                value={form.currency}
+                onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
+              />
+              <p className="mt-1 text-xs text-ink-500">
+                Use BWP for Botswana Pula — amounts display as P everywhere.
+              </p>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Default tax rate (%)
+              </span>
+              <input
+                readOnly={!currencyEditing}
+                type="number"
+                min="0"
+                step="0.01"
+                className={fieldClass(currencyEditing)}
+                value={form.default_tax_rate}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, default_tax_rate: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <SectionEditActions
+              editing={currencyEditing}
+              dirty={currencyEditing && sectionDirty}
+              saving={saving}
+              onEdit={() => startEdit('currency')}
+              onCancel={cancelEdit}
+              onSave={() => saveSection('currency')}
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="numbering"
+            open={openSection === 'numbering'}
+            onToggle={toggleSection}
+            className="rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4"
+            title="Document numbering"
+            description="Prefixes and next numbers used when creating new quotes and invoices."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Quote prefix
+                </span>
+                <input
+                  readOnly={!numberingEditing}
+                  className={fieldClass(numberingEditing)}
+                  value={form.quote_prefix}
+                  onChange={(e) => setForm((f) => ({ ...f, quote_prefix: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Next quote #
+                </span>
+                <input
+                  readOnly={!numberingEditing}
+                  type="number"
+                  min="1"
+                  className={fieldClass(numberingEditing)}
+                  value={form.next_quote_number}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, next_quote_number: Number(e.target.value) }))
+                  }
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Invoice prefix
+                </span>
+                <input
+                  readOnly={!numberingEditing}
+                  className={fieldClass(numberingEditing)}
+                  value={form.invoice_prefix}
+                  onChange={(e) => setForm((f) => ({ ...f, invoice_prefix: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Next invoice #
+                </span>
+                <input
+                  readOnly={!numberingEditing}
+                  type="number"
+                  min="1"
+                  className={fieldClass(numberingEditing)}
+                  value={form.next_invoice_number}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, next_invoice_number: Number(e.target.value) }))
+                  }
+                />
+              </label>
+            </div>
+            <SectionEditActions
+              editing={numberingEditing}
+              dirty={numberingEditing && sectionDirty}
+              saving={saving}
+              onEdit={() => startEdit('numbering')}
+              onCancel={cancelEdit}
+              onSave={() => saveSection('numbering')}
+            />
+          </CollapsibleSection>
+        </div>
+      </CollapsibleSection>
 
       <CollapsibleSection
         id="categories"
@@ -531,7 +644,7 @@ export default function SettingsPage() {
                 {editingCatId === c.id ? (
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                     <input
-                      className={`${adminFieldClass} min-w-[10rem] flex-1`}
+                      className={`${adminFieldClass} min-w-0 flex-1`}
                       value={editingCatName}
                       onChange={(e) => setEditingCatName(e.target.value)}
                       autoFocus
@@ -672,7 +785,7 @@ export default function SettingsPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           <input
-            className={`${adminFieldClass} min-w-[12rem] flex-1`}
+            className={`${adminFieldClass} min-w-0 flex-1`}
             value={catName}
             onChange={(e) => setCatName(e.target.value)}
             placeholder="New category name"

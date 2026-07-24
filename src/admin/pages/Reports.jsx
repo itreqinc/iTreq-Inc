@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useState,
+} from 'react'
 import { useNavigate } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { paymentMethodLabel } from '../../lib/payments'
@@ -8,6 +13,18 @@ import {
   fillStatementDocumentPrintWindow,
   prepareStatementDocument,
 } from '../../lib/statementDocument'
+import {
+  openExpenseCategoryReportPrintWindow,
+  closeExpenseCategoryReportPrintWindow,
+  fillExpenseCategoryReportPrintWindow,
+  prepareExpenseCategoryReportDocument,
+} from '../../lib/expenseCategoryReportDocument'
+import {
+  openIncomeMethodReportPrintWindow,
+  closeIncomeMethodReportPrintWindow,
+  fillIncomeMethodReportPrintWindow,
+  prepareIncomeMethodReportDocument,
+} from '../../lib/incomeMethodReportDocument'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import {
@@ -18,6 +35,10 @@ import {
   clickableDocClass,
   clickableRowClass,
   formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
+  adminCellPad,
 } from '../ui'
 
 function monthStartIso() {
@@ -27,6 +48,89 @@ function monthStartIso() {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
+}
+
+function ChevronIcon({ open }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+      className={`mt-0.5 h-4 w-4 shrink-0 text-ink-400 transition-transform duration-300 ease-in-out ${
+        open ? 'rotate-90' : 'rotate-0'
+      }`}
+    >
+      <path
+        fillRule="evenodd"
+        d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+        clipRule="evenodd"
+      />
+    </svg>
+  )
+}
+
+function CollapsibleSection({ open, onToggle, title, description, className, children }) {
+  const panelId = useId()
+
+  return (
+    <section className={className}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        className="flex w-full items-start gap-2 text-left print:hidden"
+      >
+        <ChevronIcon open={open} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-white">{title}</span>
+          {description ? (
+            <span className="mt-1 block text-xs text-ink-400">{description}</span>
+          ) : null}
+        </span>
+      </button>
+      <div
+        id={panelId}
+        aria-hidden={!open}
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out print:!grid-rows-[1fr] print:!opacity-100 ${
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="min-w-0 overflow-hidden">
+          <div className={`space-y-3 pt-3 ${open ? '' : 'pointer-events-none print:pointer-events-auto'}`}>
+            {children}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const reportSectionClass =
+  'w-full min-w-0 max-w-3xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5'
+
+function DateRangeBox({ label, children }) {
+  return (
+    <fieldset className="min-w-0 rounded-xl border border-white/10 bg-ink-950/60 px-3.5 pb-3.5 pt-1">
+      <legend className="mx-auto w-auto px-2 text-center text-xs font-medium uppercase tracking-wider text-ink-300">
+        {label}
+      </legend>
+      {children}
+    </fieldset>
+  )
+}
+
+function DateRangeFields({ from, to, onFromChange, onToChange }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <DateRangeBox label="From">
+        <YearMonthDaySelect value={from} onChange={onFromChange} showHint={false} />
+      </DateRangeBox>
+      <DateRangeBox label="To">
+        <YearMonthDaySelect value={to} onChange={onToChange} showHint={false} />
+      </DateRangeBox>
+    </div>
+  )
 }
 
 export default function ReportsPage() {
@@ -43,6 +147,15 @@ export default function ReportsPage() {
   const [incomeTo, setIncomeTo] = useState(todayIso())
   const [income, setIncome] = useState(null)
   const [incomeLoading, setIncomeLoading] = useState(false)
+  const [incomeIncludeZeroMethods, setIncomeIncludeZeroMethods] = useState(false)
+  const [incomePrinting, setIncomePrinting] = useState(false)
+
+  const [expenseFrom, setExpenseFrom] = useState(monthStartIso())
+  const [expenseTo, setExpenseTo] = useState(todayIso())
+  const [expensesReport, setExpensesReport] = useState(null)
+  const [expenseLoading, setExpenseLoading] = useState(false)
+  const [expenseIncludeZeroCategories, setExpenseIncludeZeroCategories] = useState(false)
+  const [expensePrinting, setExpensePrinting] = useState(false)
 
   const [stmtClient, setStmtClient] = useState('')
   const [stmtFrom, setStmtFrom] = useState(monthStartIso())
@@ -50,6 +163,11 @@ export default function ReportsPage() {
   const [statement, setStatement] = useState(null)
   const [stmtLoading, setStmtLoading] = useState(false)
   const [stmtPrinting, setStmtPrinting] = useState(false)
+  const [openSection, setOpenSection] = useState(null)
+
+  function toggleSection(id) {
+    setOpenSection((current) => (current === id ? null : id))
+  }
 
   useEffect(() => {
     opsApi.listClients().then(({ data, error }) => {
@@ -85,6 +203,76 @@ export default function ReportsPage() {
     }
     setIncome(data)
   }, [incomeFrom, incomeTo, showError])
+
+  async function printIncomeByMethod() {
+    if (!income) return
+
+    const opened = openIncomeMethodReportPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+
+    setIncomePrinting(true)
+    const settingsRes = await opsApi.getSettings()
+    setIncomePrinting(false)
+    if (settingsRes.error) {
+      closeIncomeMethodReportPrintWindow(win)
+      showError(settingsRes.error.message)
+      return
+    }
+
+    const { model } = prepareIncomeMethodReportDocument({
+      report: income,
+      settings: settingsRes.data,
+      includeZeroMethods: incomeIncludeZeroMethods,
+    })
+    const result = fillIncomeMethodReportPrintWindow(win, model)
+    if (!result.ok) showError(result.message)
+  }
+
+  const runExpenses = useCallback(async () => {
+    setExpenseLoading(true)
+    const { data, error } = await opsApi.getExpensesReport({
+      from: expenseFrom,
+      to: expenseTo,
+    })
+    setExpenseLoading(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    setExpensesReport(data)
+  }, [expenseFrom, expenseTo, showError])
+
+  async function printExpensesByCategory() {
+    if (!expensesReport) return
+
+    const opened = openExpenseCategoryReportPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+
+    setExpensePrinting(true)
+    const settingsRes = await opsApi.getSettings()
+    setExpensePrinting(false)
+    if (settingsRes.error) {
+      closeExpenseCategoryReportPrintWindow(win)
+      showError(settingsRes.error.message)
+      return
+    }
+
+    const { model } = prepareExpenseCategoryReportDocument({
+      report: expensesReport,
+      settings: settingsRes.data,
+      includeZeroCategories: expenseIncludeZeroCategories,
+    })
+    const result = fillExpenseCategoryReportPrintWindow(win, model)
+    if (!result.ok) showError(result.message)
+  }
 
   const runStatement = useCallback(async () => {
     if (!stmtClient) {
@@ -136,49 +324,45 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="space-y-8 print:space-y-4">
+    <div className="space-y-6 print:space-y-4">
       <div className="print:hidden">
         <h1 className="font-display text-2xl font-bold text-white">Reports</h1>
         <p className="mt-1 text-sm text-ink-300">
-          Compare invoices issued (expected) with payments collected, plus income totals and client
-          statements.
+          Compare invoices issued (expected) with payments collected, income and expense totals, and
+          client statements.
         </p>
       </div>
 
-      <section className="space-y-3 print:hidden">
-        <div className="max-w-3xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
-          <h2 className="text-sm font-semibold text-white">Expected vs collected</h2>
-          <p className="mt-1 text-xs text-ink-400">
+      <CollapsibleSection
+        open={openSection === 'compare'}
+        onToggle={() => toggleSection('compare')}
+        className={`${reportSectionClass} print:hidden`}
+        title="Expected vs collected"
+        description={
+          <>
             <strong className="text-ink-300">Expected</strong> = totals of invoices issued in the
             range. <strong className="text-ink-300">Collected</strong> = payments recorded in the
             same range (may include payments on older invoices).
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <YearMonthDaySelect
-              label="From"
-              value={compareFrom}
-              onChange={setCompareFrom}
-              showHint={false}
-            />
-            <YearMonthDaySelect
-              label="To"
-              value={compareTo}
-              onChange={setCompareTo}
-              showHint={false}
-            />
-          </div>
-          <button
-            type="button"
-            disabled={compareLoading}
-            onClick={runCompare}
-            className={`${adminBtnPrimary} mt-3`}
-          >
-            {compareLoading ? 'Loading…' : 'Run comparison'}
-          </button>
-        </div>
+          </>
+        }
+      >
+        <DateRangeFields
+          from={compareFrom}
+          to={compareTo}
+          onFromChange={setCompareFrom}
+          onToChange={setCompareTo}
+        />
+        <button
+          type="button"
+          disabled={compareLoading}
+          onClick={runCompare}
+          className={adminBtnPrimary}
+        >
+          {compareLoading ? 'Loading…' : 'Run comparison'}
+        </button>
 
         {compare ? (
-          <div className="max-w-3xl space-y-4">
+          <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
                 <p className="text-xs uppercase tracking-wider text-ink-400">Expected</p>
@@ -227,7 +411,7 @@ export default function ReportsPage() {
             </div>
 
             {compare.collectedByMethod?.length ? (
-              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm">
+              <div className="hidden rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm sm:block">
                 <p className="text-xs uppercase tracking-wider text-ink-400">Collected by method</p>
                 <ul className="mt-2 space-y-1 text-ink-300">
                   {compare.collectedByMethod.map((row) => (
@@ -240,23 +424,23 @@ export default function ReportsPage() {
               </div>
             ) : null}
 
-            <div className="overflow-x-auto rounded-2xl border border-white/10">
-              <table className="min-w-full text-left text-sm">
+            <div className={adminTableShellClass}>
+              <table className={adminTableClass}>
                 <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
                   <tr>
-                    <th className="px-4 py-3">Issued</th>
-                    <th className="px-4 py-3">Invoice</th>
-                    <th className="px-4 py-3">Client</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Expected</th>
-                    <th className="px-4 py-3 text-right">Paid</th>
-                    <th className="px-4 py-3 text-right">Balance</th>
+                    <th className={`${adminCellPad} ${adminColSecondary}`}>Issued</th>
+                    <th className={adminCellPad}>Invoice</th>
+                    <th className={`${adminCellPad} ${adminColSecondary}`}>Client</th>
+                    <th className={`${adminCellPad} ${adminColSecondary}`}>Status</th>
+                    <th className={`${adminCellPad} text-right`}>Expected</th>
+                    <th className={`${adminCellPad} ${adminColSecondary} text-right`}>Paid</th>
+                    <th className={`${adminCellPad} text-right`}>Balance</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {compare.invoices.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-6 text-ink-400">
+                      <td colSpan={7} className={`${adminCellPad} text-ink-400`}>
                         No issued invoices in this date range.
                       </td>
                     </tr>
@@ -264,30 +448,36 @@ export default function ReportsPage() {
                     compare.invoices.map((inv) => {
                       const open = () => navigate(`/admin/invoices?open=${inv.id}`)
                       return (
-                      <tr
-                        key={inv.id}
-                        role="link"
-                        tabIndex={0}
-                        className={`group bg-ink-900/20 ${clickableRowClass}`}
-                        onClick={open}
-                        onKeyDown={(e) => activateRowKey(e, open)}
-                      >
-                        <td className="px-4 py-3 text-ink-300">{inv.issue_date || '—'}</td>
-                        <td className="px-4 py-3">
-                          <span className={clickableDocClass}>{inv.number || '—'}</span>
-                        </td>
-                        <td className="px-4 py-3 text-ink-300">{inv.client_name}</td>
-                        <td className="px-4 py-3 capitalize text-ink-300">{inv.status}</td>
-                        <td className="px-4 py-3 text-right text-ink-200">
-                          {formatPula(inv.total)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-ink-300">
-                          {formatPula(inv.amount_paid)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-ink-100">
-                          {formatPula(inv.balance)}
-                        </td>
-                      </tr>
+                        <tr
+                          key={inv.id}
+                          role="link"
+                          tabIndex={0}
+                          className={`group bg-ink-900/20 ${clickableRowClass}`}
+                          onClick={open}
+                          onKeyDown={(e) => activateRowKey(e, open)}
+                        >
+                          <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                            {inv.issue_date || '—'}
+                          </td>
+                          <td className={adminCellPad}>
+                            <span className={clickableDocClass}>{inv.number || '—'}</span>
+                          </td>
+                          <td className={`${adminCellPad} ${adminColSecondary} min-w-0 break-words text-ink-300`}>
+                            {inv.client_name}
+                          </td>
+                          <td className={`${adminCellPad} ${adminColSecondary} capitalize text-ink-300`}>
+                            {inv.status}
+                          </td>
+                          <td className={`${adminCellPad} text-right text-ink-200`}>
+                            {formatPula(inv.total)}
+                          </td>
+                          <td className={`${adminCellPad} ${adminColSecondary} text-right text-ink-300`}>
+                            {formatPula(inv.amount_paid)}
+                          </td>
+                          <td className={`${adminCellPad} text-right text-ink-100`}>
+                            {formatPula(inv.balance)}
+                          </td>
+                        </tr>
                       )
                     })
                   )}
@@ -296,25 +486,21 @@ export default function ReportsPage() {
             </div>
           </div>
         ) : null}
-      </section>
+      </CollapsibleSection>
 
-      <section className="max-w-xl space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5 print:hidden">
-        <h2 className="text-sm font-semibold text-white">Income report</h2>
-        <p className="text-xs text-ink-400">Totals for recorded payments in a date range only.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <YearMonthDaySelect
-            label="From"
-            value={incomeFrom}
-            onChange={setIncomeFrom}
-            showHint={false}
-          />
-          <YearMonthDaySelect
-            label="To"
-            value={incomeTo}
-            onChange={setIncomeTo}
-            showHint={false}
-          />
-        </div>
+      <CollapsibleSection
+        open={openSection === 'income'}
+        onToggle={() => toggleSection('income')}
+        className={`${reportSectionClass} print:hidden`}
+        title="Income report"
+        description="All payments recorded in a date range, with totals by payment method."
+      >
+        <DateRangeFields
+          from={incomeFrom}
+          to={incomeTo}
+          onFromChange={setIncomeFrom}
+          onToChange={setIncomeTo}
+        />
         <button
           type="button"
           disabled={incomeLoading}
@@ -324,153 +510,386 @@ export default function ReportsPage() {
           {incomeLoading ? 'Loading…' : 'Run report'}
         </button>
         {income ? (
-          <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm">
-            <p className="text-ink-400">
-              {income.from} → {income.to} · {income.paymentCount} payment(s)
-            </p>
-            <p className="mt-2 text-lg font-semibold text-white">Total: {formatPula(income.total)}</p>
-            {income.byMethod.length ? (
-              <ul className="mt-2 space-y-1 text-ink-300">
-                {income.byMethod.map((row) => (
-                  <li key={row.method} className="flex justify-between gap-4">
-                    <span>{paymentMethodLabel(row.method)}</span>
-                    <span>{formatPula(row.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="space-y-3">
-        <div className="max-w-xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5 print:hidden">
-          <h2 className="text-sm font-semibold text-white">Client statement</h2>
-          <p className="mt-1 text-xs text-ink-400">
-            Invoices and payments for one client; opening balance is activity before the start date.
-          </p>
-          <div className="mt-3 space-y-3">
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Client</span>
-              <select
-                className={adminFieldClass}
-                value={stmtClient}
-                onChange={(e) => setStmtClient(e.target.value)}
-              >
-                <option value="">Select client…</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <YearMonthDaySelect
-                label="From"
-                value={stmtFrom}
-                onChange={setStmtFrom}
-                showHint={false}
-              />
-              <YearMonthDaySelect
-                label="To"
-                value={stmtTo}
-                onChange={setStmtTo}
-                showHint={false}
-              />
+          <div className="space-y-4">
+            <div className="grid items-start gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wider text-ink-400">By method</p>
+                {income.byMethod.length ? (
+                  <ul className="mt-2 space-y-1 text-ink-300">
+                    {income.byMethod.map((row) => (
+                      <li key={row.method} className="flex justify-between gap-4">
+                        <span>{paymentMethodLabel(row.method)}</span>
+                        <span>{formatPula(row.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-ink-500">No payments in this range.</p>
+                )}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wider text-ink-400">Total collected</p>
+                <p className="mt-1 text-lg font-semibold text-white">
+                  {formatPula(income.total)}
+                </p>
+                <p className="text-xs text-ink-500">
+                  {income.from} → {income.to} · {income.paymentCount} payment(s)
+                </p>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+
+            <div className={adminTableShellClass}>
+              <table className={adminTableClass}>
+                <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
+                  <tr>
+                    <th className={adminCellPad}>Date</th>
+                    <th className={adminCellPad}>Client</th>
+                    <th className={`${adminCellPad} ${adminColSecondary}`}>Method</th>
+                    <th className={`${adminCellPad} ${adminColSecondary}`}>Reference</th>
+                    <th className={`${adminCellPad} text-right`}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {income.payments.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className={`${adminCellPad} text-ink-400`}>
+                        No payments in this date range.
+                      </td>
+                    </tr>
+                  ) : (
+                    income.payments.map((row) => {
+                      const open = () => navigate(`/admin/payments?open=${row.id}`)
+                      return (
+                        <tr
+                          key={row.id}
+                          role="link"
+                          tabIndex={0}
+                          className={`group bg-ink-900/20 ${clickableRowClass}`}
+                          onClick={open}
+                          onKeyDown={(e) => activateRowKey(e, open)}
+                        >
+                          <td className={`${adminCellPad} text-ink-300`}>{row.payment_date}</td>
+                          <td className={`${adminCellPad} min-w-0 break-words text-ink-200`}>
+                            {row.client_name}
+                          </td>
+                          <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                            {paymentMethodLabel(row.method)}
+                          </td>
+                          <td className={`${adminCellPad} ${adminColSecondary}`}>
+                            <span className={clickableDocClass}>{row.reference || '—'}</span>
+                          </td>
+                          <td className={`${adminCellPad} text-right font-medium text-ink-100`}>
+                            {formatPula(row.amount)}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
+              <label className="flex min-w-0 cursor-pointer items-start gap-2 text-sm text-ink-300">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 shrink-0 rounded border-white/20 bg-ink-950 text-brand-500 focus:ring-brand-500/40"
+                  checked={incomeIncludeZeroMethods}
+                  onChange={(e) => setIncomeIncludeZeroMethods(e.target.checked)}
+                />
+                <span className="min-w-0">
+                  When printing, include all methods (also those with P0)
+                </span>
+              </label>
               <button
                 type="button"
-                disabled={stmtLoading}
-                onClick={runStatement}
-                className={adminBtnPrimary}
+                disabled={incomePrinting}
+                onClick={printIncomeByMethod}
+                className={`${adminBtnSecondary} shrink-0`}
               >
-                {stmtLoading ? 'Loading…' : 'Generate statement'}
+                {incomePrinting ? 'Opening…' : 'Print / Save PDF'}
               </button>
-              {statement ? (
-                <button
-                  type="button"
-                  disabled={stmtPrinting}
-                  onClick={printStatement}
-                  className={adminBtnSecondary}
-                >
-                  {stmtPrinting ? 'Opening…' : 'Print / Save PDF'}
-                </button>
-              ) : null}
             </div>
+          </div>
+        ) : null}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        open={openSection === 'expenses'}
+        onToggle={() => toggleSection('expenses')}
+        className={`${reportSectionClass} print:hidden`}
+        title="Expenses report"
+        description="All operating expenses recorded in a date range, with totals by category and payment method."
+      >
+        <DateRangeFields
+          from={expenseFrom}
+          to={expenseTo}
+          onFromChange={setExpenseFrom}
+          onToChange={setExpenseTo}
+        />
+        <button
+          type="button"
+          disabled={expenseLoading}
+          onClick={runExpenses}
+          className={adminBtnPrimary}
+        >
+          {expenseLoading ? 'Loading…' : 'Run report'}
+        </button>
+        {expensesReport ? (
+          <div className="space-y-4">
+            <div className="grid items-start gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wider text-ink-400">By category</p>
+                {expensesReport.byCategory.length ? (
+                  <ul className="mt-2 space-y-1 text-ink-300">
+                    {expensesReport.byCategory.map((row) => (
+                      <li key={row.category} className="flex justify-between gap-4">
+                        <span>{row.category}</span>
+                        <span>{formatPula(row.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-ink-500">No expenses in this range.</p>
+                )}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wider text-ink-400">Total spent</p>
+                <p className="mt-1 text-lg font-semibold text-white">
+                  {formatPula(expensesReport.total)}
+                </p>
+                <p className="text-xs text-ink-500">
+                  {expensesReport.from} → {expensesReport.to} · {expensesReport.expenseCount}{' '}
+                  expense(s)
+                </p>
+              </div>
+            </div>
+
+            {expensesReport.byMethod.length ? (
+              <div className="hidden rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm sm:block">
+                <p className="text-xs uppercase tracking-wider text-ink-400">By method</p>
+                <ul className="mt-2 space-y-1 text-ink-300">
+                  {expensesReport.byMethod.map((row) => (
+                    <li key={row.method} className="flex justify-between gap-4">
+                      <span>{paymentMethodLabel(row.method)}</span>
+                      <span>{formatPula(row.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className={adminTableShellClass}>
+              <table className={adminTableClass}>
+                <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
+                  <tr>
+                    <th className={adminCellPad}>Date</th>
+                    <th className={adminCellPad}>Category</th>
+                    <th className={`${adminCellPad} ${adminColSecondary}`}>Vendor</th>
+                    <th className={`${adminCellPad} ${adminColSecondary}`}>Method</th>
+                    <th className={`${adminCellPad} ${adminColSecondary}`}>Reference</th>
+                    <th className={`${adminCellPad} text-right`}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {expensesReport.expenses.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className={`${adminCellPad} text-ink-400`}>
+                        No expenses in this date range.
+                      </td>
+                    </tr>
+                  ) : (
+                    expensesReport.expenses.map((row) => {
+                      const open = () => navigate(`/admin/expenses?open=${row.id}`)
+                      return (
+                        <tr
+                          key={row.id}
+                          role="link"
+                          tabIndex={0}
+                          className={`group bg-ink-900/20 ${clickableRowClass}`}
+                          onClick={open}
+                          onKeyDown={(e) => activateRowKey(e, open)}
+                        >
+                          <td className={`${adminCellPad} text-ink-300`}>{row.expense_date}</td>
+                          <td className={`${adminCellPad} min-w-0 break-words text-ink-200`}>
+                            {row.category_name}
+                          </td>
+                          <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                            {row.vendor || '—'}
+                          </td>
+                          <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                            {paymentMethodLabel(row.method)}
+                          </td>
+                          <td className={`${adminCellPad} ${adminColSecondary}`}>
+                            <span className={clickableDocClass}>{row.reference || '—'}</span>
+                          </td>
+                          <td className={`${adminCellPad} text-right font-medium text-ink-100`}>
+                            {formatPula(row.amount)}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
+              <label className="flex min-w-0 cursor-pointer items-start gap-2 text-sm text-ink-300">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 shrink-0 rounded border-white/20 bg-ink-950 text-brand-500 focus:ring-brand-500/40"
+                  checked={expenseIncludeZeroCategories}
+                  onChange={(e) => setExpenseIncludeZeroCategories(e.target.checked)}
+                />
+                <span className="min-w-0">
+                  When printing, include all categories (also those with P0)
+                </span>
+              </label>
+              <button
+                type="button"
+                disabled={expensePrinting}
+                onClick={printExpensesByCategory}
+                className={`${adminBtnSecondary} shrink-0`}
+              >
+                {expensePrinting ? 'Opening…' : 'Print / Save PDF'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        open={openSection === 'statement'}
+        onToggle={() => toggleSection('statement')}
+        className={reportSectionClass}
+        title="Client statement"
+        description="Invoices and payments for one client; opening balance is activity before the start date."
+      >
+        <div className="space-y-3 print:hidden">
+          <label className="block">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Client</span>
+            <select
+              className={adminFieldClass}
+              value={stmtClient}
+              onChange={(e) => setStmtClient(e.target.value)}
+            >
+              <option value="">Select client…</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <DateRangeFields
+            from={stmtFrom}
+            to={stmtTo}
+            onFromChange={setStmtFrom}
+            onToChange={setStmtTo}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={stmtLoading}
+              onClick={runStatement}
+              className={adminBtnPrimary}
+            >
+              {stmtLoading ? 'Loading…' : 'Generate statement'}
+            </button>
+            {statement ? (
+              <button
+                type="button"
+                disabled={stmtPrinting}
+                onClick={printStatement}
+                className={adminBtnSecondary}
+              >
+                {stmtPrinting ? 'Opening…' : 'Print / Save PDF'}
+              </button>
+            ) : null}
           </div>
         </div>
 
         {statement ? (
-          <div className="max-w-3xl rounded-2xl border border-ink-200 bg-white p-6 text-black shadow-sm">
+          <div className="min-w-0 rounded-2xl border border-ink-200 bg-white p-4 text-black shadow-sm sm:p-6">
             <h3 className="text-lg font-bold text-black">Account statement</h3>
-            <p className="mt-1 text-sm font-bold text-black">{statement.client?.name}</p>
+            <p className="mt-1 break-words text-sm font-bold text-black">{statement.client?.name}</p>
             <p className="text-sm font-bold text-black">
               Period: {statement.from || '—'} to {statement.to || '—'}
             </p>
             <p className="mt-3 text-sm font-bold text-black">
               Opening balance: {formatPula(statement.openingBalance)}
             </p>
-            <table className="mt-4 w-full border-collapse text-sm text-black">
-              <thead>
-                <tr className="border-b border-black/20 text-left text-xs uppercase text-black">
-                  <th className="py-2 pr-2 font-bold">Date</th>
-                  <th className="py-2 pr-2 font-bold">Description</th>
-                  <th className="py-2 pr-2 text-right font-bold">Debit</th>
-                  <th className="py-2 pr-2 text-right font-bold">Credit</th>
-                  <th className="py-2 text-right font-bold">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {statement.lines.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-4 text-black/50">
-                      No activity in this period.
+            <div className="mt-4 max-w-full overflow-x-auto">
+              <table className="w-full border-collapse text-sm text-black">
+                <thead>
+                  <tr className="border-b border-black/20 text-left text-xs uppercase text-black">
+                    <th className="py-2 pr-2 font-bold">Date</th>
+                    <th className="py-2 pr-2 font-bold">Description</th>
+                    <th className={`${adminColSecondary} py-2 pr-2 text-right font-bold`}>Debit</th>
+                    <th className={`${adminColSecondary} py-2 pr-2 text-right font-bold`}>Credit</th>
+                    <th className="py-2 text-right font-bold">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statement.lines.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-black/50">
+                        No activity in this period.
+                      </td>
+                    </tr>
+                  ) : (
+                    statement.lines.map((line, i) => (
+                      <tr key={i} className="border-b border-black/10">
+                        <td className="whitespace-nowrap py-2 pr-2">{line.sortDate}</td>
+                        <td className="min-w-0 break-words py-2 pr-2">
+                          {line.type === 'invoice' ? `Invoice ${line.label}` : `Payment ${line.label}`}
+                          {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
+                          <span className="mt-0.5 block text-xs text-black/55 sm:hidden">
+                            {line.debit
+                              ? `Debit ${formatPula(line.debit)}`
+                              : line.credit
+                                ? `Credit ${formatPula(line.credit)}`
+                                : null}
+                          </span>
+                        </td>
+                        <td className={`${adminColSecondary} py-2 pr-2 text-right`}>
+                          {line.debit ? formatPula(line.debit) : '—'}
+                        </td>
+                        <td className={`${adminColSecondary} py-2 pr-2 text-right`}>
+                          {line.credit ? formatPula(line.credit) : '—'}
+                        </td>
+                        <td className="whitespace-nowrap py-2 text-right">
+                          {formatPula(line.balance)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-black">
+                    <td className="py-3 pr-2 font-bold" colSpan={2}>
+                      Period totals
+                    </td>
+                    <td className={`${adminColSecondary} py-3 pr-2 text-right font-bold`}>
+                      {formatPula(statement.periodCharges)}
+                    </td>
+                    <td className={`${adminColSecondary} py-3 pr-2 text-right font-bold`}>
+                      {formatPula(statement.periodCredits)}
+                    </td>
+                    <td className="py-3 text-right font-bold">
+                      {formatPula(statement.closingBalance)}
                     </td>
                   </tr>
-                ) : (
-                  statement.lines.map((line, i) => (
-                    <tr key={i} className="border-b border-black/10">
-                      <td className="py-2 pr-2">{line.sortDate}</td>
-                      <td className="py-2 pr-2">
-                        {line.type === 'invoice' ? `Invoice ${line.label}` : `Payment ${line.label}`}
-                        {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
-                      </td>
-                      <td className="py-2 pr-2 text-right">
-                        {line.debit ? formatPula(line.debit) : '—'}
-                      </td>
-                      <td className="py-2 pr-2 text-right">
-                        {line.credit ? formatPula(line.credit) : '—'}
-                      </td>
-                      <td className="py-2 text-right">{formatPula(line.balance)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-black">
-                  <td className="py-3 pr-2 font-bold" colSpan={2}>
-                    Period totals
-                  </td>
-                  <td className="py-3 pr-2 text-right font-bold">
-                    {formatPula(statement.periodCharges)}
-                  </td>
-                  <td className="py-3 pr-2 text-right font-bold">
-                    {formatPula(statement.periodCredits)}
-                  </td>
-                  <td className="py-3 text-right font-bold">
-                    {formatPula(statement.closingBalance)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+                </tfoot>
+              </table>
+            </div>
             <p className="mt-4 text-base font-bold text-black">
               Closing balance: {formatPula(statement.closingBalance)}
             </p>
           </div>
         ) : null}
-      </section>
+      </CollapsibleSection>
     </div>
   )
 }

@@ -1,8 +1,17 @@
-import { useMemo, useState } from 'react'
+import {
+  useMemo,
+  useState } from 'react'
 import { Link } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, formatPula } from '../ui'
+import { adminBtnPrimary,
+  adminBtnSecondary,
+  adminFieldClass,
+  formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
+} from '../ui'
 import { formatBillingPeriodLabel } from '../../lib/invoiceDates'
 
 function monthStartIso(d = new Date()) {
@@ -160,22 +169,26 @@ export default function MonthlyFeesPage() {
           </div>
 
           {createRows.length ? (
-            <div className="overflow-x-auto rounded-2xl border border-white/10">
-              <table className="min-w-full text-left text-sm">
+            <div className={adminTableShellClass}>
+              <table className={adminTableClass}>
                 <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
                   <tr>
                     <th className="px-4 py-3">Client</th>
-                    <th className="px-4 py-3">Source invoice</th>
-                    <th className="px-4 py-3">Fee lines</th>
+                    <th className={`px-4 py-3 ${adminColSecondary}`}>Source invoice</th>
+                    <th className={`px-4 py-3 ${adminColSecondary}`}>Fee lines</th>
                     <th className="px-4 py-3">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {createRows.map((row) => (
                     <tr key={row.client_id} className="bg-emerald-500/10">
-                      <td className="px-4 py-3 text-white">{row.client_name}</td>
-                      <td className="px-4 py-3 text-ink-300">{row.source_number || '—'}</td>
-                      <td className="px-4 py-3 text-ink-300">{row.fee_line_count}</td>
+                      <td className="min-w-0 break-words px-4 py-3 text-white">{row.client_name}</td>
+                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                        {row.source_number || '—'}
+                      </td>
+                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                        {row.fee_line_count}
+                      </td>
                       <td className="px-4 py-3 text-ink-200">{actionLabel(row.action)}</td>
                     </tr>
                   ))}

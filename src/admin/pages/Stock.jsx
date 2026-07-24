@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from 'react'
 import { opsApi } from '../../lib/opsApi'
-import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
+import { PAYMENT_METHODS,
+  paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
+import { AdminIconAction } from '../AdminIconAction'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import {
   adminBtnPrimary,
@@ -11,6 +19,11 @@ import {
   clickableDocClass,
   clickableRowClass,
   formatPula,
+  adminTableShellClass,
+  adminTableShellSmClass,
+  adminTableClass,
+  adminColSecondary,
+  adminCellPad,
 } from '../ui'
 
 function todayIso() {
@@ -62,6 +75,63 @@ function maxEditableQty(receiptLine, poLines) {
   return Math.max(0, remainingExcludingThis)
 }
 
+function ChevronIcon({ open }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+      className={`mt-0.5 h-4 w-4 shrink-0 text-ink-400 transition-transform duration-300 ease-in-out ${
+        open ? 'rotate-90' : 'rotate-0'
+      }`}
+    >
+      <path
+        fillRule="evenodd"
+        d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+        clipRule="evenodd"
+      />
+    </svg>
+  )
+}
+
+function CollapsiblePanel({ open, onToggle, title, description, headerEnd, children }) {
+  const panelId = useId()
+
+  return (
+    <section className="space-y-0">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+        >
+          <ChevronIcon open={open} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-white">{title}</span>
+            {description ? (
+              <span className="mt-0.5 block text-xs text-ink-400">{description}</span>
+            ) : null}
+          </span>
+        </button>
+        {headerEnd}
+      </div>
+      <div
+        id={panelId}
+        aria-hidden={!open}
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="min-w-0 overflow-hidden">
+          <div className={`space-y-3 pt-3 ${open ? '' : 'pointer-events-none'}`}>{children}</div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export default function StockPage() {
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [levels, setLevels] = useState([])
@@ -86,13 +156,18 @@ export default function StockPage() {
   const [adjProductId, setAdjProductId] = useState('')
   const [adjQty, setAdjQty] = useState('')
   const [adjNote, setAdjNote] = useState('')
+  const [adjustments, setAdjustments] = useState([])
+  const [poSectionOpen, setPoSectionOpen] = useState(false)
+  const [adjSectionOpen, setAdjSectionOpen] = useState(false)
+  const [manualAdjOpen, setManualAdjOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [levelsRes, productsRes, ordersRes] = await Promise.all([
+    const [levelsRes, productsRes, ordersRes, adjRes] = await Promise.all([
       opsApi.getStockLevels(),
       opsApi.listProducts({ activeOnly: true }),
       opsApi.listPurchaseOrders(),
+      opsApi.listStockAdjustments(),
     ])
     setLoading(false)
 
@@ -102,11 +177,13 @@ export default function StockPage() {
     }
     if (productsRes.error) showError(productsRes.error.message)
     if (ordersRes.error) showError(ordersRes.error.message)
+    if (adjRes.error) showError(adjRes.error.message)
 
     const lv = levelsRes.data || []
     setLevels(lv)
     setStockProducts((productsRes.data || []).filter((p) => p.tracks_stock))
     setOrders(ordersRes.data || [])
+    setAdjustments(adjRes.data || [])
     setAdjProductId((prev) => prev || lv[0]?.product_id || '')
   }, [showError])
 
@@ -325,8 +402,12 @@ export default function StockPage() {
     showSuccess('Stock adjustment saved.')
     setAdjQty('')
     setAdjNote('')
-    const { data } = await opsApi.getStockLevels()
-    setLevels(data || [])
+    const [levelsRes, adjRes] = await Promise.all([
+      opsApi.getStockLevels(),
+      opsApi.listStockAdjustments(),
+    ])
+    if (!levelsRes.error) setLevels(levelsRes.data || [])
+    if (!adjRes.error) setAdjustments(adjRes.data || [])
   }
 
   if (loading && levels.length === 0 && orders.length === 0) {
@@ -342,15 +423,11 @@ export default function StockPage() {
             On-hand levels, purchase orders (money out for stock), and deliveries that bump counts.
           </p>
         </div>
-        {view === 'list' ? (
-          <button type="button" onClick={startNewPo} className={adminBtnPrimary}>
-            New purchase order
-          </button>
-        ) : (
+        {view !== 'list' ? (
           <button type="button" onClick={backToList} className={adminBtnSecondary}>
             Back to stock
           </button>
-        )}
+        ) : null}
       </div>
 
       {view === 'list' ? (
@@ -369,125 +446,207 @@ export default function StockPage() {
             ))}
           </div>
 
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-white">Purchase orders</h2>
-                <p className="mt-0.5 text-xs text-ink-400">
+          <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+            <CollapsiblePanel
+              open={poSectionOpen}
+              onToggle={() => setPoSectionOpen((v) => !v)}
+              title="Purchase orders"
+              description={
+                <>
                   Save when money leaves the account. Receive deliveries to update shelf counts.
-                  {openOrders.length
-                    ? ` ${openOrders.length} open.`
-                    : ''}
-                </p>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-2xl border border-white/10">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-white/10 bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
-                  <tr>
-                    <th className="px-4 py-3">PO</th>
-                    <th className="px-4 py-3">Paid date</th>
-                    <th className="px-4 py-3">Supplier</th>
-                    <th className="px-4 py-3 text-right">Amount</th>
-                    <th className="px-4 py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {orders.length === 0 ? (
+                  {openOrders.length ? ` ${openOrders.length} open.` : ''}
+                </>
+              }
+              headerEnd={
+                <button type="button" onClick={startNewPo} className={adminBtnPrimary}>
+                  New purchase order
+                </button>
+              }
+            >
+              <div className={adminTableShellClass}>
+                <table className={adminTableClass}>
+                  <thead className="border-b border-white/10 bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
                     <tr>
-                      <td colSpan={5} className="px-4 py-6 text-ink-400">
-                        No purchase orders yet. Create one when you pay for stock.
-                      </td>
+                      <th className={adminCellPad}>PO</th>
+                      <th className={`${adminCellPad} ${adminColSecondary}`}>Paid date</th>
+                      <th className={`${adminCellPad} ${adminColSecondary}`}>Supplier</th>
+                      <th className={`${adminCellPad} text-right`}>Amount</th>
+                      <th className={`${adminCellPad} ${adminColSecondary}`}>Status</th>
                     </tr>
-                  ) : (
-                    orders.map((row) => {
-                      const open = () => openDetail(row.id)
-                      return (
-                        <tr
-                          key={row.id}
-                          role="link"
-                          tabIndex={0}
-                          className={`group bg-ink-900/20 ${clickableRowClass}`}
-                          onClick={open}
-                          onKeyDown={(e) => activateRowKey(e, open)}
-                        >
-                          <td className="px-4 py-3">
-                            <span className={clickableDocClass}>{row.po_number}</span>
-                          </td>
-                          <td className="px-4 py-3 text-ink-300">{row.purchase_date}</td>
-                          <td className="px-4 py-3 text-ink-300">{row.supplier || '—'}</td>
-                          <td className="px-4 py-3 text-right font-medium text-ink-100">
-                            {formatPula(row.amount)}
-                          </td>
-                          <td className="px-4 py-3 text-ink-300">{poStatusLabel(row.status)}</td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {orders.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className={`${adminCellPad} text-ink-400`}>
+                          No purchase orders yet. Create one when you pay for stock.
+                        </td>
+                      </tr>
+                    ) : (
+                      orders.map((row) => {
+                        const open = () => openDetail(row.id)
+                        return (
+                          <tr
+                            key={row.id}
+                            role="link"
+                            tabIndex={0}
+                            className={`group bg-ink-900/20 ${clickableRowClass}`}
+                            onClick={open}
+                            onKeyDown={(e) => activateRowKey(e, open)}
+                          >
+                            <td className={adminCellPad}>
+                              <span className={clickableDocClass}>{row.po_number}</span>
+                            </td>
+                            <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                              {row.purchase_date}
+                            </td>
+                            <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                              {row.supplier || '—'}
+                            </td>
+                            <td className={`${adminCellPad} text-right font-medium text-ink-100`}>
+                              {formatPula(row.amount)}
+                            </td>
+                            <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                              {poStatusLabel(row.status)}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CollapsiblePanel>
+          </div>
 
-          <form
-            onSubmit={handleAdjust}
-            className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
-          >
-            <div>
-              <h2 className="text-sm font-semibold text-white">Manual adjustment</h2>
-              <p className="mt-0.5 text-xs text-ink-400">
-                For corrections only (damage, count fix). Normal buys use a purchase order.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Product
-                </span>
-                <select
-                  className={adminFieldClass}
-                  value={adjProductId}
-                  onChange={(e) => setAdjProductId(e.target.value)}
-                  required
+          <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+            <CollapsiblePanel
+              open={adjSectionOpen}
+              onToggle={() => setAdjSectionOpen((v) => !v)}
+              title="Adjustments"
+              description="Correction history (damage, count fixes). Normal buys use a purchase order."
+            >
+              <div className={adminTableShellClass}>
+                <table className={adminTableClass}>
+                  <thead className="border-b border-white/10 bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
+                    <tr>
+                      <th className={adminCellPad}>Date</th>
+                      <th className={`${adminCellPad} ${adminColSecondary}`}>Product</th>
+                      <th className={adminCellPad}>Name</th>
+                      <th className={`${adminCellPad} text-right`}>Qty</th>
+                      <th className={`${adminCellPad} ${adminColSecondary}`}>Note</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {adjustments.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className={`${adminCellPad} text-ink-400`}>
+                          No adjustments yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      adjustments.map((row) => {
+                        const p = Array.isArray(row.products) ? row.products[0] : row.products
+                        const delta = Number(row.quantity_delta) || 0
+                        const when = row.created_at
+                          ? new Date(row.created_at).toLocaleString(undefined, {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : '—'
+                        return (
+                          <tr key={row.id} className="bg-ink-900/20">
+                            <td className={`${adminCellPad} text-ink-300`}>{when}</td>
+                            <td className={`${adminCellPad} ${adminColSecondary} font-mono text-ink-200`}>
+                              {p?.sku || '—'}
+                            </td>
+                            <td className={`${adminCellPad} min-w-0 break-words text-ink-300`}>
+                              {p?.name || '—'}
+                            </td>
+                            <td
+                              className={`${adminCellPad} text-right font-medium tabular-nums ${
+                                delta > 0
+                                  ? 'text-emerald-400'
+                                  : delta < 0
+                                    ? 'text-red-400'
+                                    : 'text-ink-100'
+                              }`}
+                            >
+                              {delta > 0 ? `+${delta}` : String(delta)}
+                            </td>
+                            <td className={`${adminCellPad} ${adminColSecondary} text-ink-400`}>
+                              {row.note || '—'}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4">
+                <CollapsiblePanel
+                  open={manualAdjOpen}
+                  onToggle={() => setManualAdjOpen((v) => !v)}
+                  title="Manual adjustment"
+                  description="Apply a one-off quantity change. Does not create a purchase order."
                 >
-                  {levels.map((row) => (
-                    <option key={row.product_id} value={row.product_id}>
-                      {row.sku}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Qty (+ / −)
-                </span>
-                <input
-                  required
-                  type="number"
-                  step="1"
-                  className={adminFieldClass}
-                  value={adjQty}
-                  onChange={(e) => setAdjQty(e.target.value)}
-                  placeholder="e.g. 10 or -2"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Note
-                </span>
-                <input
-                  className={adminFieldClass}
-                  value={adjNote}
-                  onChange={(e) => setAdjNote(e.target.value)}
-                  placeholder="Optional"
-                />
-              </label>
-            </div>
-            <button type="submit" disabled={saving} className={adminBtnSecondary}>
-              {saving ? 'Saving…' : 'Apply adjustment'}
-            </button>
-          </form>
+                  <form onSubmit={handleAdjust} className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <label className="block">
+                        <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                          Product
+                        </span>
+                        <select
+                          className={adminFieldClass}
+                          value={adjProductId}
+                          onChange={(e) => setAdjProductId(e.target.value)}
+                          required={manualAdjOpen}
+                        >
+                          {levels.map((row) => (
+                            <option key={row.product_id} value={row.product_id}>
+                              {row.sku}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                          Qty (+ / −)
+                        </span>
+                        <input
+                          required={manualAdjOpen}
+                          type="number"
+                          step="1"
+                          className={adminFieldClass}
+                          value={adjQty}
+                          onChange={(e) => setAdjQty(e.target.value)}
+                          placeholder="e.g. 10 or -2"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                          Note
+                        </span>
+                        <input
+                          className={adminFieldClass}
+                          value={adjNote}
+                          onChange={(e) => setAdjNote(e.target.value)}
+                          placeholder="Optional"
+                        />
+                      </label>
+                    </div>
+                    <button type="submit" disabled={saving} className={adminBtnPrimary}>
+                      {saving ? 'Saving…' : 'Apply adjustment'}
+                    </button>
+                  </form>
+                </CollapsiblePanel>
+              </div>
+            </CollapsiblePanel>
+          </div>
         </>
       ) : null}
 
@@ -571,7 +730,7 @@ export default function StockPage() {
             <p className="text-xs uppercase tracking-wider text-ink-400">Products ordered</p>
             {poForm.lines.map((line, idx) => (
               <div key={idx} className="flex flex-wrap items-end gap-2">
-                <label className="min-w-[12rem] flex-1 block">
+                <label className="block min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-[12rem]">
                   <span className="mb-1 block text-xs text-ink-500">Product</span>
                   <select
                     required
@@ -593,7 +752,7 @@ export default function StockPage() {
                     ))}
                   </select>
                 </label>
-                <label className="w-28 block">
+                <label className="block w-full max-w-[7rem]">
                   <span className="mb-1 block text-xs text-ink-500">Qty</span>
                   <input
                     required
@@ -682,24 +841,26 @@ export default function StockPage() {
               <p className="mt-2 text-sm text-ink-400">{detail.notes}</p>
             ) : null}
 
-            <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
-              <table className="min-w-full text-left text-sm">
+            <div className={`mt-4 ${adminTableShellSmClass}`}>
+              <table className={adminTableClass}>
                 <thead className="border-b border-white/10 text-xs uppercase tracking-wider text-ink-400">
                   <tr>
                     <th className="px-3 py-2">Product</th>
                     <th className="px-3 py-2 text-right">Ordered</th>
-                    <th className="px-3 py-2 text-right">Received</th>
+                    <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Received</th>
                     <th className="px-3 py-2 text-right">Left</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {(detail.purchase_order_lines || []).map((line) => (
                     <tr key={line.id}>
-                      <td className="px-3 py-2 text-ink-200">{productLabel(line)}</td>
+                      <td className="min-w-0 break-words px-3 py-2 text-ink-200">
+                        {productLabel(line)}
+                      </td>
                       <td className="px-3 py-2 text-right text-ink-300">
                         {line.quantity_ordered}
                       </td>
-                      <td className="px-3 py-2 text-right text-ink-300">
+                      <td className={`px-3 py-2 text-right text-ink-300 ${adminColSecondary}`}>
                         {line.quantity_received}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-ink-100">
@@ -887,58 +1048,19 @@ export default function StockPage() {
                           </ul>
                         </div>
                         <div className="flex items-center gap-0.5">
-                          <button
-                            type="button"
+                          <AdminIconAction
+                            label="Edit delivery"
+                            icon="pencil"
                             disabled={saving || Boolean(editingReceiptId)}
-                            aria-label="Edit delivery"
                             onClick={() => startEditReceipt(r)}
-                            className="group/iconTip relative inline-flex rounded-md p-1.5 text-brand-400 transition hover:bg-brand-500/10 hover:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.75}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className="h-4 w-4"
-                              aria-hidden="true"
-                            >
-                              <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                            </svg>
-                            <span
-                              role="tooltip"
-                              className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover/iconTip:opacity-100 group-focus-visible/iconTip:opacity-100"
-                            >
-                              Edit
-                            </span>
-                          </button>
-                          <button
-                            type="button"
+                          />
+                          <AdminIconAction
+                            label="Cancel delivery"
+                            icon="x"
+                            tone="danger"
                             disabled={saving || Boolean(editingReceiptId)}
-                            aria-label="Cancel delivery"
                             onClick={() => handleCancelReceipt(r)}
-                            className="group/iconTip relative inline-flex rounded-md p-1.5 text-red-400 transition hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.75}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className="h-4 w-4"
-                              aria-hidden="true"
-                            >
-                              <path d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                            <span
-                              role="tooltip"
-                              className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover/iconTip:opacity-100 group-focus-visible/iconTip:opacity-100"
-                            >
-                              Cancel delivery
-                            </span>
-                          </button>
+                          />
                         </div>
                       </div>
                     </li>

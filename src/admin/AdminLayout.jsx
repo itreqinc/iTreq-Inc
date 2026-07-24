@@ -24,7 +24,7 @@ export function AdminLayout() {
 
   return (
     <OpsAlertProvider>
-    <div className="min-h-screen bg-ink-950 text-ink-100">
+    <div className="min-h-screen overflow-x-clip bg-ink-950 text-ink-100">
       <header className="border-b border-white/10 bg-ink-900/80">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-4">

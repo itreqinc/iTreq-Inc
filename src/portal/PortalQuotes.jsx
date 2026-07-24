@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import {
+  useEffect,
+  useState } from 'react'
+import { Link,
+  useNavigate,
+  useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
 import {
   clientCanEditPortalQuote,
   portalQuoteAwaitingApproval,
   quotationDisplayStatus,
-} from '../lib/portalQuote'
+  } from '../lib/portalQuote'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   adminBtnPrimary,
@@ -13,6 +17,9 @@ import {
   clickableDocClass,
   clickableRowClass,
   formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
 } from '../admin/ui'
 
 function statusClass(status, awaiting) {
@@ -91,11 +98,11 @@ export default function PortalQuotes() {
         </Link>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/40">
-        <table className="min-w-full text-left text-sm">
+      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3">Date</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Date</th>
               <th className="px-4 py-3">Number</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Total</th>
@@ -132,7 +139,7 @@ export default function PortalQuotes() {
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
-                    <td className="px-4 py-3 whitespace-nowrap text-ink-300">
+                    <td className={`whitespace-nowrap px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                       {q.issue_date || '—'}
                     </td>
                     <td className="px-4 py-3">

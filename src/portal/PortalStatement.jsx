@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import {
+  useCallback,
+  useEffect,
+  useState } from 'react'
+import { useNavigate,
+  useOutletContext } from 'react-router-dom'
 import { YearMonthDaySelect } from '../components/YearMonthDaySelect'
 import { opsApi } from '../lib/opsApi'
 import { paymentMethodLabel } from '../lib/payments'
@@ -8,7 +12,7 @@ import {
   closeStatementDocumentPrintWindow,
   fillStatementDocumentPrintWindow,
   prepareStatementDocument,
-} from '../lib/statementDocument'
+  } from '../lib/statementDocument'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   adminBtnPrimary,
@@ -17,6 +21,9 @@ import {
   clickableDocClass,
   clickableRowClass,
   formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
 } from '../admin/ui'
 
 function monthStartIso() {
@@ -155,14 +162,14 @@ export default function PortalStatement() {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/40">
-            <table className="min-w-full text-left text-sm">
+          <div className={`${adminTableShellClass} bg-ink-900/40`}>
+            <table className={adminTableClass}>
               <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Description</th>
-                  <th className="px-4 py-3 text-right">Debit</th>
-                  <th className="px-4 py-3 text-right">Credit</th>
+                  <th className={`px-4 py-3 text-right ${adminColSecondary}`}>Debit</th>
+                  <th className={`px-4 py-3 text-right ${adminColSecondary}`}>Credit</th>
                   <th className="px-4 py-3 text-right">Balance</th>
                 </tr>
               </thead>
@@ -196,19 +203,26 @@ export default function PortalStatement() {
                       onClick={openable ? open : undefined}
                       onKeyDown={openable ? (e) => activateRowKey(e, open) : undefined}
                     >
-                      <td className="px-4 py-2 whitespace-nowrap text-ink-300">{line.sortDate}</td>
-                      <td className="px-4 py-2 text-ink-200">
+                      <td className="whitespace-nowrap px-4 py-2 text-ink-300">{line.sortDate}</td>
+                      <td className="min-w-0 break-words px-4 py-2 text-ink-200">
                         {openable ? (
                           <span className={clickableDocClass}>{label}</span>
                         ) : (
                           label
                         )}
                         {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
+                        <span className="mt-0.5 block text-xs text-ink-500 sm:hidden">
+                          {line.debit
+                            ? `Debit ${formatPula(line.debit)}`
+                            : line.credit
+                              ? `Credit ${formatPula(line.credit)}`
+                              : null}
+                        </span>
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-ink-300">
+                      <td className={`px-4 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
                         {line.debit ? formatPula(line.debit) : '—'}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-ink-300">
+                      <td className={`px-4 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
                         {line.credit ? formatPula(line.credit) : '—'}
                       </td>
                       <td

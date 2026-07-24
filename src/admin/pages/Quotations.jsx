@@ -1,14 +1,32 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState } from 'react'
+import { useNavigate,
+  useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
-import { emptyLine, mapDocLinesForEditor } from '../../lib/billing'
-import { portalQuoteAwaitingApproval, quotationDisplayStatus } from '../../lib/portalQuote'
+import { emptyLine,
+  mapDocLinesForEditor } from '../../lib/billing'
+import { portalQuoteAwaitingApproval,
+  quotationDisplayStatus } from '../../lib/portalQuote'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import { ClientSelect } from '../ClientSelect'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
-import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminFieldClass, activateRowKey, clickableDocClass, clickableRowClass, formatPula } from '../ui'
+import { adminBtnDanger,
+  adminBtnPrimary,
+  adminBtnSecondary,
+  adminFieldClass,
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
+} from '../ui'
 
 function snapshotQuotationForm(form) {
   return JSON.stringify({
@@ -458,16 +476,16 @@ export default function QuotationsPage() {
         </form>
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
+      <div className={adminTableShellClass}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
               <th className="px-4 py-3">Number</th>
               <th className="px-4 py-3">Client</th>
-              <th className="px-4 py-3">Date</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Date</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3" />
+              <th className={`px-4 py-3 ${adminColSecondary}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -499,8 +517,10 @@ export default function QuotationsPage() {
                   <td className="px-4 py-3">
                     <span className={clickableDocClass}>{row.number || '—'}</span>
                   </td>
-                  <td className="px-4 py-3 text-ink-300">{row.clients?.name || '—'}</td>
-                  <td className="px-4 py-3 text-ink-300">{row.issue_date}</td>
+                  <td className="min-w-0 break-words px-4 py-3 text-ink-300">
+                    {row.clients?.name || '—'}
+                  </td>
+                  <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>{row.issue_date}</td>
                   <td className="px-4 py-3 text-ink-300">
                     <span
                       className={
@@ -516,7 +536,7 @@ export default function QuotationsPage() {
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-ink-200">{formatPula(row.total)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className={`px-4 py-3 text-right ${adminColSecondary}`}>
                     <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
                       Open
                     </span>

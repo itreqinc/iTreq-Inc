@@ -1,14 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState } from 'react'
+import { Link,
+  useNavigate,
+  useOutletContext,
+  useParams } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
 import { paymentMethodLabel } from '../lib/payments'
 import {
   openPaymentDocumentPrintWindow,
   fillPaymentDocumentPrintWindow,
   closePaymentDocumentPrintWindow,
-} from '../lib/paymentDocument'
+  } from '../lib/paymentDocument'
 import { useOpsAlert } from '../admin/OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, formatPula } from '../admin/ui'
+import { adminBtnPrimary,
+  adminBtnSecondary,
+  formatPula,
+  adminTableShellClass,
+  adminTableClass
+} from '../admin/ui'
 
 export default function PortalPaymentDetail() {
   const { id } = useParams()
@@ -128,8 +140,8 @@ export default function PortalPaymentDetail() {
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/40">
-        <table className="min-w-full text-left text-sm">
+      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
               <th className="px-4 py-3">Applied to</th>

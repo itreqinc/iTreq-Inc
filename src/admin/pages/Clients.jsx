@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
-import { clientToForm, emptyClientForm } from '../../lib/clientRegistration'
+import { clientToForm,
+  emptyClientForm } from '../../lib/clientRegistration'
 import { validateClientForm } from '../../lib/clientValidation'
 import { paymentMethodLabel } from '../../lib/payments'
 import { quotationDisplayStatus } from '../../lib/portalQuote'
@@ -10,11 +15,32 @@ import {
   closeStatementDocumentPrintWindow,
   fillStatementDocumentPrintWindow,
   prepareStatementDocument,
-} from '../../lib/statementDocument'
+  } from '../../lib/statementDocument'
 import { CountryPhoneInput } from '../../components/CountryPhoneInput'
+import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, activateRowKey, clickableDocClass, clickableRowClass, formatPula } from '../ui'
+import { adminBtnPrimary,
+  adminBtnSecondary,
+  adminFieldClass,
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+  adminTableShellClass,
+  adminTableShellSmClass,
+  adminTableClass,
+  adminColSecondary,
+} from '../ui'
+
+function monthStartIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
 
 function balanceClass(balance) {
   const n = Number(balance) || 0
@@ -52,6 +78,7 @@ const ICONS = {
 }
 
 function IconAction({ label, onClick, disabled, tone = 'default', children }) {
+  const [showTip, setShowTip] = useState(false)
   const toneClass =
     tone === 'danger'
       ? 'text-red-400 hover:bg-red-500/10 hover:text-red-300'
@@ -65,15 +92,21 @@ function IconAction({ label, onClick, disabled, tone = 'default', children }) {
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`group/iconTip relative inline-flex rounded-md p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
+      onMouseEnter={() => setShowTip(true)}
+      onMouseLeave={() => setShowTip(false)}
+      onFocus={() => setShowTip(true)}
+      onBlur={() => setShowTip(false)}
+      className={`relative inline-flex rounded-md p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
     >
       {children}
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover/iconTip:opacity-100 group-focus-visible/iconTip:opacity-100"
-      >
-        {label}
-      </span>
+      {showTip ? (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 shadow-lg"
+        >
+          {label}
+        </span>
+      ) : null}
     </button>
   )
 }
@@ -116,6 +149,9 @@ export default function ClientsPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [printingStmt, setPrintingStmt] = useState(false)
+  const [stmtModalClient, setStmtModalClient] = useState(null)
+  const [stmtFrom, setStmtFrom] = useState(monthStartIso)
+  const [stmtTo, setStmtTo] = useState(todayIso)
 
   const [selectedId, setSelectedId] = useState(null)
   const [statement, setStatement] = useState(null)
@@ -139,6 +175,20 @@ export default function ClientsPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (!stmtModalClient) return undefined
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    function onKey(e) {
+      if (e.key === 'Escape') closeStatementRangeModal()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [stmtModalClient, printingStmt])
 
   useEffect(() => {
     if (view !== 'accounts') {
@@ -199,7 +249,23 @@ export default function ClientsPage() {
     setShowForm(false)
   }
 
-  async function printClientStatement(clientId) {
+  function openStatementRangeModal(client) {
+    setStmtFrom(monthStartIso())
+    setStmtTo(todayIso())
+    setStmtModalClient(client)
+  }
+
+  function closeStatementRangeModal() {
+    if (printingStmt) return
+    setStmtModalClient(null)
+  }
+
+  async function printClientStatement(clientId, from, to) {
+    if (from && to && from > to) {
+      showWarning('From date must be on or before To date.')
+      return
+    }
+
     const opened = openStatementDocumentPrintWindow()
     if (!opened.ok) {
       showError(opened.message)
@@ -208,7 +274,7 @@ export default function ClientsPage() {
     const { win } = opened
     setPrintingStmt(true)
     const [stmtRes, settingsRes] = await Promise.all([
-      opsApi.getClientStatement({ client_id: clientId }),
+      opsApi.getClientStatement({ client_id: clientId, from, to }),
       opsApi.getSettings(),
     ])
     setPrintingStmt(false)
@@ -217,10 +283,15 @@ export default function ClientsPage() {
       showError(stmtRes.error?.message || settingsRes.error?.message)
       return
     }
+    const printable = {
+      ...stmtRes.data,
+      lines: (stmtRes.data.lines || []).filter((l) => !l.inactive || l.alwaysShow),
+    }
     const { model } = prepareStatementDocument({
-      statement: stmtRes.data,
+      statement: printable,
       settings: settingsRes.data,
     })
+    setStmtModalClient(null)
     const result = fillStatementDocumentPrintWindow(win, model)
     if (!result.ok) showError(result.message)
   }
@@ -236,7 +307,7 @@ export default function ClientsPage() {
       onEdit: () => startEdit(client),
       onInvoice: () => navigate(`/admin/invoices?client=${client.id}`),
       onPayment: () => navigate(`/admin/payments?client=${client.id}`),
-      onPrint: () => printClientStatement(client.id),
+      onPrint: () => openStatementRangeModal(client),
       printing: printingStmt,
     }
   }
@@ -529,14 +600,14 @@ export default function ClientsPage() {
       ) : null}
 
       {view === 'directory' ? (
-        <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="min-w-full text-left text-sm">
+        <div className={adminTableShellClass}>
+          <table className={adminTableClass}>
             <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
               <tr>
                 <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">ID</th>
+                <th className={`px-4 py-3 ${adminColSecondary}`}>ID</th>
                 <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Email</th>
+                <th className={`px-4 py-3 ${adminColSecondary}`}>Email</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -565,12 +636,16 @@ export default function ClientsPage() {
                       onClick={open}
                       onKeyDown={(e) => activateRowKey(e, open)}
                     >
-                      <td className="px-4 py-3">
+                      <td className="min-w-0 break-words px-4 py-3">
                         <span className={clickableDocClass}>{c.name}</span>
                       </td>
-                      <td className="px-4 py-3 text-ink-300">{c.id_number || '—'}</td>
+                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                        {c.id_number || '—'}
+                      </td>
                       <td className="px-4 py-3 text-ink-300">{c.cellphone || c.phone || '—'}</td>
-                      <td className="px-4 py-3 text-ink-300">{c.email || '—'}</td>
+                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                        {c.email || '—'}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <ClientRowActions {...clientIconActions(c)} />
                       </td>
@@ -583,7 +658,7 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:grid-cols-[minmax(0,17rem)_1fr]">
-          <aside className="max-h-[70vh] overflow-y-auto border-b border-white/10 lg:border-b-0">
+          <aside className="admin-scroll max-h-[70vh] overflow-y-auto border-b border-white/10 lg:border-b-0">
             <div className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
               Clients
             </div>
@@ -664,16 +739,16 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-xl border border-white/10 bg-ink-950/30">
-                  <table className="min-w-full text-left text-sm">
+                <div className={`${adminTableShellSmClass} bg-ink-950/30`}>
+                  <table className={adminTableClass}>
                     <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
                       <tr>
                         <th className="px-3 py-2">Date</th>
                         <th className="px-3 py-2">Description</th>
-                        <th className="px-3 py-2 text-right">Debit</th>
-                        <th className="px-3 py-2 text-right">Credit</th>
+                        <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Debit</th>
+                        <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Credit</th>
                         <th className="px-3 py-2 text-right">Balance</th>
-                        <th className="px-2 py-2 w-10" />
+                        <th className="w-10 px-2 py-2" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -711,7 +786,7 @@ export default function ClientsPage() {
                             <td className="px-3 py-2 whitespace-nowrap text-ink-300">
                               {line.sortDate}
                             </td>
-                            <td className="px-3 py-2 text-ink-200">
+                            <td className="min-w-0 break-words px-3 py-2 text-ink-200">
                               {openable ? (
                                 <span className={clickableDocClass}>{label}</span>
                               ) : (
@@ -727,11 +802,18 @@ export default function ClientsPage() {
                                   )
                                 </span>
                               ) : null}
+                              <span className="mt-0.5 block text-xs text-ink-500 sm:hidden">
+                                {line.debit
+                                  ? `Debit ${formatPula(line.debit)}`
+                                  : line.credit
+                                    ? `Credit ${formatPula(line.credit)}`
+                                    : null}
+                              </span>
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-ink-300">
+                            <td className={`px-3 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
                               {line.debit ? formatPula(line.debit) : '—'}
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-ink-300">
+                            <td className={`px-3 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
                               {line.credit ? formatPula(line.credit) : '—'}
                             </td>
                             <td
@@ -766,6 +848,65 @@ export default function ClientsPage() {
           </section>
         </div>
       )}
+
+      {stmtModalClient ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-ink-950/50 backdrop-blur-[2px]"
+            aria-label="Close dialog"
+            onClick={closeStatementRangeModal}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="statement-range-title"
+            className="relative w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-5 shadow-xl"
+          >
+            <h2 id="statement-range-title" className="text-base font-semibold text-white">
+              Print statement
+            </h2>
+            <p className="mt-1 text-sm text-ink-300">
+              Choose the period for{' '}
+              <span className="text-ink-100">{stmtModalClient.name}</span>.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <YearMonthDaySelect
+                label="From"
+                value={stmtFrom}
+                onChange={setStmtFrom}
+                showHint={false}
+              />
+              <YearMonthDaySelect
+                label="To"
+                value={stmtTo}
+                onChange={setStmtTo}
+                showHint={false}
+              />
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={printingStmt}
+                onClick={closeStatementRangeModal}
+                className={adminBtnSecondary}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={printingStmt || !stmtFrom || !stmtTo}
+                onClick={() =>
+                  printClientStatement(stmtModalClient.id, stmtFrom, stmtTo)
+                }
+                className={adminBtnPrimary}
+              >
+                {printingStmt ? 'Opening…' : 'Open statement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

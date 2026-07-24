@@ -64,7 +64,7 @@ function PortalShell() {
     }`
 
   return (
-    <div className="min-h-screen bg-ink-950 text-ink-100">
+    <div className="min-h-screen overflow-x-clip bg-ink-950 text-ink-100">
       <header className="border-b border-white/10 bg-ink-900/80">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-4">
@@ -135,7 +135,7 @@ function PortalShell() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <main className="mx-auto min-w-0 max-w-5xl px-4 py-6 sm:px-6">
         {!clientId ? (
           <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-8 text-center">
             <h1 className="font-display text-xl font-bold text-white">Select your account</h1>

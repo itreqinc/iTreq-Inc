@@ -136,7 +136,7 @@ export default function PortalQuoteNew() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900/40">
+        <div className="max-w-full overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/40">
           {loading ? (
             <p className="px-4 py-6 text-sm text-ink-400">Loading…</p>
           ) : catalog.length === 0 ? (
@@ -144,23 +144,23 @@ export default function PortalQuoteNew() {
               The tracking catalog is not ready yet. Please contact iTreq Inc.
             </p>
           ) : (
-            <table className="min-w-full text-left text-sm">
+            <table className="w-full text-left text-sm">
               <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
                 <tr>
-                  <th className="px-4 py-3">What to track</th>
-                  <th className="px-4 py-3 w-28 text-right">Quantity</th>
+                  <th className="px-3 py-3 sm:px-4">What to track</th>
+                  <th className="w-24 px-3 py-3 text-right sm:w-28 sm:px-4">Quantity</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {catalog.map((item) => (
                   <tr key={item.id}>
-                    <td className="px-4 py-3">
+                    <td className="min-w-0 break-words px-3 py-3 sm:px-4">
                       <p className="font-medium text-white">{item.name}</p>
                       {item.blurb ? (
                         <p className="mt-0.5 text-xs text-ink-400">{item.blurb}</p>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-3 text-right sm:px-4">
                       <input
                         type="number"
                         min="0"

@@ -1,7 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useState } from 'react'
 import { opsApi } from '../../lib/opsApi'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, formatPula } from '../ui'
+import { adminBtnPrimary,
+  adminBtnSecondary,
+  adminFieldClass,
+  formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
+} from '../ui'
 
 const emptyNewProduct = {
   sku: '',
@@ -38,6 +48,7 @@ const ICONS = {
 }
 
 function IconAction({ label, onClick, disabled, tone = 'default', children }) {
+  const [showTip, setShowTip] = useState(false)
   const toneClass =
     tone === 'danger'
       ? 'text-red-400 hover:bg-red-500/10 hover:text-red-300'
@@ -51,15 +62,21 @@ function IconAction({ label, onClick, disabled, tone = 'default', children }) {
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`group/iconTip relative inline-flex rounded-md p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
+      onMouseEnter={() => setShowTip(true)}
+      onMouseLeave={() => setShowTip(false)}
+      onFocus={() => setShowTip(true)}
+      onBlur={() => setShowTip(false)}
+      className={`relative inline-flex rounded-md p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
     >
       {children}
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 opacity-0 shadow-lg transition-opacity duration-150 group-hover/iconTip:opacity-100 group-focus-visible/iconTip:opacity-100"
-      >
-        {label}
-      </span>
+      {showTip ? (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-medium text-ink-100 shadow-lg"
+        >
+          {label}
+        </span>
+      ) : null}
     </button>
   )
 }
@@ -259,15 +276,15 @@ export default function ProductsPage() {
         </form>
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
+      <div className={adminTableShellClass}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3">SKU</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>SKU</th>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Price</th>
-              <th className="px-4 py-3">Stocked</th>
-              <th className="px-4 py-3">Active</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Stocked</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Active</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -292,7 +309,9 @@ export default function ProductsPage() {
                 if (editing && draft) {
                   return (
                     <tr key={p.id} className="bg-ink-900/30 align-top">
-                      <td className="px-4 py-3 font-mono text-xs text-ink-300">{p.sku}</td>
+                      <td className={`px-4 py-3 font-mono text-xs text-ink-300 ${adminColSecondary}`}>
+                        {p.sku}
+                      </td>
                       <td className="px-4 py-3">
                         <input
                           className={adminFieldClass}
@@ -313,10 +332,10 @@ export default function ProductsPage() {
                           }
                         />
                       </td>
-                      <td className="px-4 py-3 text-ink-300">
+                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                         {p.tracks_stock ? 'Yes' : 'No'}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={`px-4 py-3 ${adminColSecondary}`}>
                         <label className="inline-flex items-center gap-2 text-ink-300">
                           <input
                             type="checkbox"
@@ -356,13 +375,17 @@ export default function ProductsPage() {
                     key={p.id}
                     className={`bg-ink-900/20 ${p.active ? '' : 'opacity-50'}`}
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-ink-300">{p.sku}</td>
-                    <td className="px-4 py-3 text-ink-200">{p.name}</td>
+                    <td className={`px-4 py-3 font-mono text-xs text-ink-300 ${adminColSecondary}`}>
+                      {p.sku}
+                    </td>
+                    <td className="min-w-0 break-words px-4 py-3 text-ink-200">{p.name}</td>
                     <td className="px-4 py-3 text-ink-100">{formatPula(p.unit_price)}</td>
-                    <td className="px-4 py-3 text-ink-300">
+                    <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                       {p.tracks_stock ? 'Yes' : 'No'}
                     </td>
-                    <td className="px-4 py-3 text-ink-300">{p.active ? 'Yes' : 'No'}</td>
+                    <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                      {p.active ? 'Yes' : 'No'}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex items-center justify-end gap-0.5">
                         <IconAction

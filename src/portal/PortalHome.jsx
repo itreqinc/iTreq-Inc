@@ -5,6 +5,9 @@ import { paymentMethodLabel } from '../lib/payments'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
   clickableDocClass,
   clickableRowClass,
   formatPula,
@@ -86,7 +89,7 @@ export default function PortalHome() {
         </Link>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900/40">
+      <section className={`${adminTableShellClass} bg-ink-900/40`}>
         <div className="border-b border-white/10 px-4 py-3">
           <h2 className="text-sm font-semibold text-white">Recent activity</h2>
         </div>
@@ -95,13 +98,13 @@ export default function PortalHome() {
         ) : recent.length === 0 ? (
           <p className="px-4 py-6 text-sm text-ink-400">No invoices or payments yet.</p>
         ) : (
-          <table className="min-w-full text-left text-sm">
+          <table className={adminTableClass}>
             <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
               <tr>
-                <th className="px-4 py-2">Date</th>
-                <th className="px-4 py-2">Description</th>
-                <th className="px-4 py-2 text-right">Amount</th>
-                <th className="px-4 py-2 text-right">Balance</th>
+                <th className="px-3 py-2 sm:px-4">Date</th>
+                <th className="px-3 py-2 sm:px-4">Description</th>
+                <th className={`${adminColSecondary} px-3 py-2 text-right sm:px-4`}>Amount</th>
+                <th className="px-3 py-2 text-right sm:px-4">Balance</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -128,11 +131,18 @@ export default function PortalHome() {
                     onClick={openable ? open : undefined}
                     onKeyDown={openable ? (e) => activateRowKey(e, open) : undefined}
                   >
-                    <td className="px-4 py-2 whitespace-nowrap text-ink-300">{line.sortDate}</td>
-                    <td className="px-4 py-2 text-ink-200">
+                    <td className="whitespace-nowrap px-3 py-2 text-ink-300 sm:px-4">{line.sortDate}</td>
+                    <td className="min-w-0 break-words px-3 py-2 text-ink-200 sm:px-4">
                       {openable ? <span className={clickableDocClass}>{label}</span> : label}
+                      <span className="mt-0.5 block tabular-nums text-xs text-ink-400 sm:hidden">
+                        {line.debit
+                          ? formatPula(line.debit)
+                          : line.credit
+                            ? `−${formatPula(line.credit)}`
+                            : null}
+                      </span>
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-ink-300">
+                    <td className={`${adminColSecondary} px-3 py-2 text-right tabular-nums text-ink-300 sm:px-4`}>
                       {line.debit
                         ? formatPula(line.debit)
                         : line.credit
@@ -140,7 +150,7 @@ export default function PortalHome() {
                           : '—'}
                     </td>
                     <td
-                      className={`px-4 py-2 text-right tabular-nums font-medium ${balanceClass(line.balance)}`}
+                      className={`whitespace-nowrap px-3 py-2 text-right tabular-nums font-medium sm:px-4 ${balanceClass(line.balance)}`}
                     >
                       {formatPula(line.balance)}
                     </td>

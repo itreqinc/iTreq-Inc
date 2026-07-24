@@ -1,15 +1,28 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import {
+  useCallback,
+  useEffect,
+  useState } from 'react'
+import { Link,
+  useNavigate,
+  useOutletContext,
+  useParams } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
-import { invoiceBalanceDue, invoiceDisplayStatus } from '../lib/payments'
+import { invoiceBalanceDue,
+  invoiceDisplayStatus } from '../lib/payments'
 import { clientInvoiceBillingDisplay } from '../lib/invoiceDates'
 import {
   openBillingDocumentPrintWindow,
   fillBillingDocumentPrintWindow,
   closeBillingDocumentPrintWindow,
-} from '../lib/billingDocument'
+  } from '../lib/billingDocument'
 import { useOpsAlert } from '../admin/OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, formatPula } from '../admin/ui'
+import { adminBtnPrimary,
+  adminBtnSecondary,
+  formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
+} from '../admin/ui'
 import { BillingDocumentScreenFooter } from './BillingDocumentScreenFooter'
 
 export default function PortalInvoiceDetail() {
@@ -135,24 +148,24 @@ export default function PortalInvoiceDetail() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/40">
-        <table className="min-w-full text-left text-sm">
+      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
               <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3 text-right">Qty</th>
-              <th className="px-4 py-3 text-right">Unit price</th>
+              <th className={`px-4 py-3 text-right ${adminColSecondary}`}>Unit price</th>
               <th className="px-4 py-3 text-right">Line total</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {lines.map((line) => (
               <tr key={line.id || `${line.sort_order}-${line.description}`}>
-                <td className="px-4 py-3 text-ink-200">{line.description}</td>
+                <td className="min-w-0 break-words px-4 py-3 text-ink-200">{line.description}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-ink-300">
                   {line.quantity}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums text-ink-300">
+                <td className={`px-4 py-3 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
                   {formatPula(line.unit_price)}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums text-ink-200">

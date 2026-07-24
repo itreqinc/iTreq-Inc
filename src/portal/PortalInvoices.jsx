@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import {
+  useEffect,
+  useState } from 'react'
+import { Link,
+  useNavigate,
+  useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
-import { invoiceBalanceDue, invoiceDisplayStatus } from '../lib/payments'
+import { invoiceBalanceDue,
+  invoiceDisplayStatus } from '../lib/payments'
 import { clientInvoiceBillingDisplay } from '../lib/invoiceDates'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
@@ -9,6 +14,9 @@ import {
   clickableDocClass,
   clickableRowClass,
   formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
 } from '../admin/ui'
 
 function statusClass(status) {
@@ -57,17 +65,17 @@ export default function PortalInvoices() {
         <p className="mt-1 text-sm text-ink-300">Issued, partially paid, and paid invoices only.</p>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/40">
-        <table className="min-w-full text-left text-sm">
+      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3">Billing</th>
-              <th className="px-4 py-3">Due</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Billing</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Due</th>
               <th className="px-4 py-3">Number</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Total</th>
+              <th className={`px-4 py-3 text-right ${adminColSecondary}`}>Total</th>
               <th className="px-4 py-3 text-right">Balance due</th>
-              <th className="px-4 py-3" />
+              <th className={`px-4 py-3 ${adminColSecondary}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -97,10 +105,10 @@ export default function PortalInvoices() {
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
-                    <td className="px-4 py-3 whitespace-nowrap text-ink-300">
+                    <td className={`whitespace-nowrap px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                       {inv.billing_period ? billing.value : '—'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-ink-300">
+                    <td className={`whitespace-nowrap px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                       {inv.due_date || '—'}
                     </td>
                     <td className="px-4 py-3">
@@ -113,13 +121,13 @@ export default function PortalInvoices() {
                         {displayStatus}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-200">
+                    <td className={`px-4 py-3 text-right tabular-nums text-ink-200 ${adminColSecondary}`}>
                       {formatPula(inv.total)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink-200">
                       {formatPula(invoiceBalanceDue(inv))}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className={`px-4 py-3 text-right ${adminColSecondary}`}>
                       <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
                         View
                       </span>

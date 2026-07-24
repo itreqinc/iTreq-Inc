@@ -1,13 +1,30 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { opsApi } from '../../lib/opsApi'
-import { emptyLine, mapDocLinesForEditor } from '../../lib/billing'
-import { invoiceBalanceDue, invoiceDisplayStatus } from '../../lib/payments'
+import { emptyLine,
+  mapDocLinesForEditor } from '../../lib/billing'
+import { invoiceBalanceDue,
+  invoiceDisplayStatus } from '../../lib/payments'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminFieldClass, activateRowKey, clickableDocClass, clickableRowClass, formatPula } from '../ui'
+import { adminBtnDanger,
+  adminBtnPrimary,
+  adminBtnSecondary,
+  adminFieldClass,
+  activateRowKey,
+  clickableDocClass,
+  clickableRowClass,
+  formatPula,
+  adminTableShellClass,
+  adminTableClass,
+  adminColSecondary,
+} from '../ui'
 
 function invoiceRowClass(status) {
   switch (status) {
@@ -570,17 +587,17 @@ export default function InvoicesPage() {
         </form>
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
+      <div className={adminTableShellClass}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
               <th className="px-4 py-3">Number</th>
               <th className="px-4 py-3">Client</th>
-              <th className="px-4 py-3">Issued</th>
-              <th className="px-4 py-3">Due</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Issued</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Due</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3" />
+              <th className={`px-4 py-3 ${adminColSecondary}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -612,9 +629,15 @@ export default function InvoicesPage() {
                     <td className="px-4 py-3">
                       <span className={clickableDocClass}>{row.number || 'Draft'}</span>
                     </td>
-                    <td className="px-4 py-3 text-ink-300">{row.clients?.name || '—'}</td>
-                    <td className="px-4 py-3 text-ink-300">{row.issue_date || '—'}</td>
-                    <td className="px-4 py-3 text-ink-300">{row.due_date || '—'}</td>
+                    <td className="min-w-0 break-words px-4 py-3 text-ink-300">
+                      {row.clients?.name || '—'}
+                    </td>
+                    <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                      {row.issue_date || '—'}
+                    </td>
+                    <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                      {row.due_date || '—'}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${invoiceStatusClass(displayStatus)}`}
@@ -623,7 +646,7 @@ export default function InvoicesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-ink-200">{formatPula(row.total)}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className={`px-4 py-3 text-right ${adminColSecondary}`}>
                       <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
                         Open
                       </span>

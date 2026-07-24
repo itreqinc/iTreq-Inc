@@ -5,7 +5,7 @@ import { buildClientDisplayName, formToClientRow } from './clientRegistration'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
 import { preparePaymentDocumentBundle } from './paymentDocument'
-import { BALANCE_INVOICE_STATUSES, invoiceAffectsClientBalance } from './payments'
+import { BALANCE_INVOICE_STATUSES, invoiceAffectsClientBalance, PAYMENT_METHODS } from './payments'
 
 /** A–Z by name; "Other" always last. */
 export function sortExpenseCategories(rows) {
@@ -577,6 +577,17 @@ export const opsApi = {
       .single()
     if (error) return mapError(error)
     return { data, error: null }
+  },
+
+  async listStockAdjustments() {
+    if (!supabase) return dbUnavailable()
+    const { data, error } = await supabase
+      .from('stock_movements')
+      .select('id, product_id, quantity_delta, note, created_at, products(sku, name)')
+      .eq('reason', 'adjustment')
+      .order('created_at', { ascending: false })
+    if (error) return mapError(error)
+    return { data: data || [], error: null }
   },
 
   // --- Stock purchase orders (money out + receives) ---
@@ -1779,7 +1790,11 @@ export const opsApi = {
 
   async getIncomeReport({ from, to }) {
     if (!supabase) return dbUnavailable()
-    let q = supabase.from('payments').select('amount, method, payment_date')
+    let q = supabase
+      .from('payments')
+      .select('id, amount, method, payment_date, reference, notes, clients(name)')
+      .order('payment_date', { ascending: true })
+      .order('created_at', { ascending: true })
     if (from) q = q.gte('payment_date', from)
     if (to) q = q.lte('payment_date', to)
     const { data, error } = await q
@@ -1793,16 +1808,135 @@ export const opsApi = {
       const key = row.method || 'other'
       byMethod[key] = (byMethod[key] || 0) + amt
     }
+
+    const seen = new Set()
+    const methodTotals = PAYMENT_METHODS.map((m) => {
+      seen.add(m.value)
+      return {
+        method: m.value,
+        label: m.label,
+        amount: Math.round((byMethod[m.value] || 0) * 100) / 100,
+      }
+    })
+    for (const [method, amount] of Object.entries(byMethod)) {
+      if (seen.has(method)) continue
+      methodTotals.push({
+        method,
+        label: method,
+        amount: Math.round(amount * 100) / 100,
+      })
+    }
+
     return {
       data: {
         from: from || null,
         to: to || null,
         total: Math.round(total * 100) / 100,
+        paymentCount: rows.length,
+        methodTotals,
+        byMethod: methodTotals.filter((row) => row.amount > 0),
+        payments: rows.map((row) => {
+          const client = Array.isArray(row.clients) ? row.clients[0] : row.clients
+          return {
+            id: row.id,
+            payment_date: row.payment_date,
+            amount: Number(row.amount) || 0,
+            method: row.method || 'other',
+            reference: row.reference || null,
+            notes: row.notes || null,
+            client_name: client?.name || '—',
+          }
+        }),
+      },
+      error: null,
+    }
+  },
+
+  async getExpensesReport({ from, to }) {
+    if (!supabase) return dbUnavailable()
+    let q = supabase
+      .from('expenses')
+      .select(
+        'id, expense_date, amount, vendor, method, reference, notes, category_id, expense_categories(id, name)',
+      )
+      .order('expense_date', { ascending: true })
+      .order('created_at', { ascending: true })
+    if (from) q = q.gte('expense_date', from)
+    if (to) q = q.lte('expense_date', to)
+
+    const [expRes, catRes] = await Promise.all([
+      q,
+      this.listExpenseCategories({ activeOnly: false }),
+    ])
+    if (expRes.error) return mapError(expRes.error)
+    if (catRes.error) return catRes
+
+    const rows = expRes.data || []
+    const byMethod = {}
+    const byCategoryId = {}
+    const byCategoryName = {}
+    let total = 0
+    for (const row of rows) {
+      const amt = Number(row.amount) || 0
+      total += amt
+      const methodKey = row.method || 'other'
+      byMethod[methodKey] = (byMethod[methodKey] || 0) + amt
+      const cat = Array.isArray(row.expense_categories)
+        ? row.expense_categories[0]
+        : row.expense_categories
+      const catId = row.category_id || cat?.id
+      const catName = cat?.name || 'Uncategorised'
+      if (catId) byCategoryId[catId] = (byCategoryId[catId] || 0) + amt
+      byCategoryName[catName] = (byCategoryName[catName] || 0) + amt
+    }
+
+    const catalog = sortExpenseCategories(catRes.data || [])
+    const seenNames = new Set()
+    const categoryTotals = catalog.map((c) => {
+      seenNames.add(c.name)
+      const amount = Math.round((byCategoryId[c.id] || byCategoryName[c.name] || 0) * 100) / 100
+      return {
+        category: c.name,
+        amount,
+        active: Boolean(c.active),
+      }
+    })
+    for (const [name, amount] of Object.entries(byCategoryName)) {
+      if (seenNames.has(name)) continue
+      categoryTotals.push({
+        category: name,
+        amount: Math.round(amount * 100) / 100,
+        active: true,
+      })
+    }
+
+    return {
+      data: {
+        from: from || null,
+        to: to || null,
+        total: Math.round(total * 100) / 100,
+        expenseCount: rows.length,
         byMethod: Object.entries(byMethod).map(([method, amount]) => ({
           method,
           amount: Math.round(amount * 100) / 100,
         })),
-        paymentCount: rows.length,
+        categoryTotals,
+        byCategory: categoryTotals.filter((row) => row.amount > 0),
+        expenses: rows.map((row) => {
+          const cat = Array.isArray(row.expense_categories)
+            ? row.expense_categories[0]
+            : row.expense_categories
+          return {
+            id: row.id,
+            expense_date: row.expense_date,
+            amount: Number(row.amount) || 0,
+            vendor: row.vendor || null,
+            method: row.method || 'other',
+            reference: row.reference || null,
+            notes: row.notes || null,
+            category_name: cat?.name || '—',
+          }
+        }),
       },
       error: null,
     }
