@@ -28,17 +28,85 @@ export function localTodayIso(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-/** Issued + past due date → overdue (derived; not stored). */
+/**
+ * Add calendar months, clamping to the last day of the target month so
+ * 31 Jan + 1 month lands on 28/29 Feb rather than spilling into March.
+ */
+export function addMonthsIso(isoDate, months = 1) {
+  const [y, m, d] = String(isoDate || '')
+    .slice(0, 10)
+    .split('-')
+    .map(Number)
+  if (!y || !m || !d) return ''
+  const shifted = m - 1 + months
+  const year = y + Math.floor(shifted / 12)
+  const month = ((shifted % 12) + 12) % 12 + 1
+  const lastDay = new Date(year, month, 0).getDate()
+  const day = Math.min(d, lastDay)
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/**
+ * When payment is expected. Uses the stored due date, falling back to one
+ * calendar month after issue so month length is respected.
+ */
+export function invoiceEffectiveDueDate(invoice) {
+  const due = invoice?.due_date ? String(invoice.due_date).slice(0, 10) : ''
+  if (due) return due
+  const issued = invoice?.issue_date ? String(invoice.issue_date).slice(0, 10) : ''
+  return issued ? addMonthsIso(issued, 1) : ''
+}
+
+/** Unpaid and past its due date (derived; not stored). Partial payments excluded. */
 export function invoiceIsOverdue(invoice, today = localTodayIso()) {
   if (invoice?.status !== 'issued') return false
-  const due = invoice?.due_date ? String(invoice.due_date).slice(0, 10) : ''
+  const due = invoiceEffectiveDueDate(invoice)
   return Boolean(due && due < today)
 }
 
-/** Status label for UI: overdue replaces issued when past due. */
+/** Status label for UI: issued reads as "due" until it tips over into "overdue". */
 export function invoiceDisplayStatus(invoice, today = localTodayIso()) {
   if (invoiceIsOverdue(invoice, today)) return 'overdue'
+  if (invoice?.status === 'issued') return 'due'
   return invoice?.status || ''
+}
+
+/**
+ * Split outstanding money into overdue vs not-yet-due buckets.
+ * Buckets by due date rather than status so partially paid invoices count too.
+ */
+export function summarizeReceivables(invoices, today = localTodayIso()) {
+  const summary = {
+    overdue: 0,
+    overdueCount: 0,
+    due: 0,
+    dueCount: 0,
+    total: 0,
+    nextDueDate: '',
+  }
+
+  for (const inv of invoices || []) {
+    if (!invoiceAffectsClientBalance(inv?.status)) continue
+    const balance = invoiceBalanceDue(inv)
+    if (balance <= 0.001) continue
+
+    const dueDate = invoiceEffectiveDueDate(inv)
+    if (dueDate && dueDate < today) {
+      summary.overdue += balance
+      summary.overdueCount += 1
+    } else {
+      summary.due += balance
+      summary.dueCount += 1
+      if (dueDate && (!summary.nextDueDate || dueDate < summary.nextDueDate)) {
+        summary.nextDueDate = dueDate
+      }
+    }
+  }
+
+  summary.overdue = Math.round(summary.overdue * 100) / 100
+  summary.due = Math.round(summary.due * 100) / 100
+  summary.total = Math.round((summary.overdue + summary.due) * 100) / 100
+  return summary
 }
 
 /**

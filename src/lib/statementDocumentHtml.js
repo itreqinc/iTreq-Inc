@@ -80,7 +80,7 @@ export function getStatementDocumentPrintPath(model) {
   return `/admin/print/statement/${slug || 'client'}/${period}`
 }
 
-const PRINT_STYLES = `
+export const PRINT_STYLES = `
   @page {
     size: A4 portrait;
     margin: 12mm 14mm;
@@ -319,7 +319,7 @@ function moneyOrDash(amount, currency) {
   return escapeHtml(formatDocMoney(n, currency))
 }
 
-function renderStatementBody(model) {
+export function renderStatementBody(model) {
   const addressLines = model.company.addressLines.map((l) => escapeHtml(l)).join('<br/>')
   const letterheadContact = [
     addressLines,

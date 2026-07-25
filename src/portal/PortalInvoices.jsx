@@ -27,7 +27,8 @@ function statusClass(status) {
       return 'bg-red-500/20 text-red-300'
     case 'paid':
       return 'bg-emerald-500/20 text-emerald-200'
-    case 'issued':
+    case 'due':
+      return 'bg-sky-500/20 text-sky-200'
     default:
       return 'bg-white/10 text-ink-300'
   }

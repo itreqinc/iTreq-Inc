@@ -6,13 +6,15 @@ import { useNavigate,
   useOutletContext } from 'react-router-dom'
 import { YearMonthDaySelect } from '../components/YearMonthDaySelect'
 import { opsApi } from '../lib/opsApi'
-import { paymentMethodLabel } from '../lib/payments'
+import { invoiceBalanceDue, paymentMethodLabel } from '../lib/payments'
 import {
   openStatementDocumentPrintWindow,
   closeStatementDocumentPrintWindow,
   fillStatementDocumentPrintWindow,
   prepareStatementDocument,
   } from '../lib/statementDocument'
+import { buildStatementDocumentModel } from '../lib/statementDocumentHtml'
+import { fillDocumentPackPrintWindow } from '../lib/documentPack'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   adminBtnPrimary,
@@ -51,6 +53,7 @@ export default function PortalStatement() {
   const [statement, setStatement] = useState(null)
   const [loading, setLoading] = useState(false)
   const [printing, setPrinting] = useState(false)
+  const [packing, setPacking] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -104,6 +107,58 @@ export default function PortalStatement() {
     if (!result.ok) showError(result.message)
   }, [clientId, from, to, showError])
 
+  /** Statement + every unpaid invoice as one printable file, for accountants and audits. */
+  const downloadPack = useCallback(async () => {
+    const opened = openStatementDocumentPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+    setPacking(true)
+
+    const [stmtRes, settingsRes, invRes] = await Promise.all([
+      opsApi.getClientStatement({ client_id: clientId, from, to }),
+      opsApi.getSettings(),
+      opsApi.listInvoices({ client_id: clientId, forPortal: true }),
+    ])
+    if (stmtRes.error || settingsRes.error || invRes.error) {
+      setPacking(false)
+      closeStatementDocumentPrintWindow(win)
+      showError(stmtRes.error?.message || settingsRes.error?.message || invRes.error?.message)
+      return
+    }
+
+    const openInvoices = (invRes.data || []).filter((inv) => invoiceBalanceDue(inv) > 0.001)
+    const bundles = await Promise.all(
+      openInvoices.map((inv) =>
+        opsApi.getBillingDocumentBundleForClient('invoice', inv.id, clientId),
+      ),
+    )
+    setPacking(false)
+
+    const failed = bundles.find((b) => b.error)
+    if (failed) {
+      closeStatementDocumentPrintWindow(win)
+      showError(failed.error.message)
+      return
+    }
+
+    const statementModel = buildStatementDocumentModel({
+      statement: {
+        ...stmtRes.data,
+        lines: (stmtRes.data.lines || []).filter((l) => !l.inactive),
+      },
+      settings: settingsRes.data,
+    })
+
+    const result = fillDocumentPackPrintWindow(win, {
+      statementModel,
+      invoiceModels: bundles.map((b) => b.data.model),
+    })
+    if (!result.ok) showError(result.message)
+  }, [clientId, from, to, showError])
+
   return (
     <div className="space-y-6">
       <div>
@@ -130,6 +185,19 @@ export default function PortalStatement() {
         >
           {printing ? 'Loading…' : 'Print / Save PDF'}
         </button>
+        <button
+          type="button"
+          onClick={downloadPack}
+          disabled={packing || loading}
+          className={adminBtnPrimary}
+          title="Statement plus every unpaid invoice in one printable file"
+        >
+          {packing ? 'Building…' : 'Download pack'}
+        </button>
+        <p className="w-full text-xs text-ink-400">
+          <span className="font-semibold text-ink-300">Download pack</span> puts this statement and
+          every unpaid invoice into one A4 file &mdash; handy for your accountant or an audit.
+        </p>
       </div>
 
       {statement ? (

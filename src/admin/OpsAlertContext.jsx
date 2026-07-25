@@ -10,6 +10,8 @@ const closedAlert = {
   message: '',
   confirmLabel: 'OK',
   cancelLabel: 'Cancel',
+  promptLabel: '',
+  promptPlaceholder: '',
   onConfirm: null,
   _resolveCancel: null,
 }
@@ -55,20 +57,40 @@ export function OpsAlertProvider({ children }) {
   const confirm = useCallback((options = {}) => {
     return new Promise((resolve) => {
       setAlert({
+        ...closedAlert,
         open: true,
         type: options.type || 'warning',
         title: options.title || 'Please confirm',
         message: options.message || '',
         confirmLabel: options.confirmLabel || 'Confirm',
         cancelLabel: options.cancelLabel || 'Cancel',
-        onConfirm: () => {
+        promptLabel: options.promptLabel || '',
+        promptPlaceholder: options.promptPlaceholder || '',
+        onConfirm: (result) => {
           setAlert({ ...closedAlert })
-          resolve(true)
+          resolve(result ?? true)
         },
         _resolveCancel: () => resolve(false),
       })
     })
   }, [])
+
+  /** Confirm dialog that also collects a short typed answer. Resolves '' if cancelled. */
+  const prompt = useCallback(
+    async (options = {}) => {
+      const result = await confirm({
+        type: options.type || 'warning',
+        title: options.title || 'Please confirm',
+        message: options.message || '',
+        confirmLabel: options.confirmLabel || 'Confirm',
+        cancelLabel: options.cancelLabel || 'Cancel',
+        promptLabel: options.promptLabel || 'Reason',
+        promptPlaceholder: options.promptPlaceholder || '',
+      })
+      return typeof result === 'string' ? result : ''
+    },
+    [confirm],
+  )
 
   const value = useMemo(
     () => ({
@@ -77,9 +99,10 @@ export function OpsAlertProvider({ children }) {
       showError,
       showWarning,
       confirm,
+      prompt,
       closeAlert: handleClose,
     }),
-    [showAlert, showSuccess, showError, showWarning, confirm, handleClose],
+    [showAlert, showSuccess, showError, showWarning, confirm, prompt, handleClose],
   )
 
   return (
@@ -92,6 +115,8 @@ export function OpsAlertProvider({ children }) {
         message={alert.message}
         confirmLabel={alert.confirmLabel}
         cancelLabel={alert.cancelLabel}
+        promptLabel={alert.promptLabel}
+        promptPlaceholder={alert.promptPlaceholder}
         onConfirm={alert.onConfirm || undefined}
         onClose={handleClose}
       />

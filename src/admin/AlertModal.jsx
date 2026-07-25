@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef } from 'react'
-import { adminBtnPrimary, adminBtnSecondary } from './ui'
+import { useEffect, useId, useRef, useState } from 'react'
+import { adminBtnPrimary, adminBtnSecondary, adminFieldClass } from './ui'
 
 const VARIANTS = {
   success: {
@@ -74,7 +74,8 @@ function VariantIcon({ type }) {
 }
 
 /**
- * Reusable Ops modal for success / error / warning / info (and optional confirm).
+ * Reusable Ops modal for success / error / warning / info.
+ * Pass onConfirm for a confirm dialog, plus promptLabel to collect a short answer.
  */
 export function AlertModal({
   open,
@@ -83,20 +84,29 @@ export function AlertModal({
   message,
   confirmLabel = 'OK',
   cancelLabel = 'Cancel',
+  promptLabel = '',
+  promptPlaceholder = '',
   onConfirm,
   onClose,
 }) {
   const titleId = useId()
   const descId = useId()
   const confirmRef = useRef(null)
+  const inputRef = useRef(null)
+  const [value, setValue] = useState('')
   const variant = VARIANTS[type] || VARIANTS.info
   const isConfirm = typeof onConfirm === 'function'
+  const isPrompt = isConfirm && Boolean(promptLabel)
 
   useEffect(() => {
     if (!open) return undefined
+    setValue('')
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const t = window.setTimeout(() => confirmRef.current?.focus(), 0)
+    const t = window.setTimeout(
+      () => (inputRef.current || confirmRef.current)?.focus(),
+      0,
+    )
     function onKey(e) {
       if (e.key === 'Escape') onClose?.()
     }
@@ -143,6 +153,22 @@ export function AlertModal({
           </div>
         </div>
 
+        {isPrompt ? (
+          <label className="mt-4 block">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              {promptLabel}
+            </span>
+            <textarea
+              ref={inputRef}
+              rows={3}
+              className={adminFieldClass}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={promptPlaceholder}
+            />
+          </label>
+        ) : null}
+
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           {isConfirm ? (
             <button type="button" className={adminBtnSecondary} onClick={onClose}>
@@ -152,9 +178,10 @@ export function AlertModal({
           <button
             ref={confirmRef}
             type="button"
+            disabled={isPrompt && !value.trim()}
             className={adminBtnPrimary}
             onClick={() => {
-              if (isConfirm) onConfirm()
+              if (isConfirm) onConfirm(isPrompt ? value.trim() : true)
               else onClose?.()
             }}
           >

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
-import { paymentMethodLabel } from '../lib/payments'
+import { paymentMethodLabel, summarizeReceivables } from '../lib/payments'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
@@ -22,24 +22,46 @@ function balanceClass(balance) {
   return 'text-ink-300'
 }
 
+/** Plain-language reading of the closing balance. */
+function balanceCaption(balance) {
+  const n = Number(balance) || 0
+  if (n > 0.001) return 'Amount you owe'
+  if (n < -0.001) return 'In your favour'
+  return 'Your account is settled'
+}
+
 export default function PortalHome() {
   const navigate = useNavigate()
   const { clientId, client } = useOutletContext()
   const { showError } = useOpsAlert()
   const [statement, setStatement] = useState(null)
+  const [receivables, setReceivables] = useState(null)
+  const [credit, setCredit] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    opsApi.getClientStatement({ client_id: clientId }).then(({ data, error }) => {
+    Promise.all([
+      opsApi.getClientStatement({ client_id: clientId }),
+      opsApi.listInvoices({ client_id: clientId, forPortal: true }),
+      opsApi.getClientCreditBalance(clientId),
+    ]).then(([stmtRes, invRes, creditRes]) => {
       if (cancelled) return
       setLoading(false)
-      if (error) {
-        showError(error.message)
-        return
+      if (stmtRes.error) {
+        showError(stmtRes.error.message)
+      } else {
+        setStatement(stmtRes.data)
       }
-      setStatement(data)
+      if (invRes.error) {
+        showError(invRes.error.message)
+      } else {
+        setReceivables(summarizeReceivables(invRes.data || []))
+      }
+      if (!creditRes.error) {
+        setCredit(creditRes.data?.balance || 0)
+      }
     })
     return () => {
       cancelled = true
@@ -63,15 +85,65 @@ export default function PortalHome() {
           {loading ? (
             <span className="text-ink-400">Loading…</span>
           ) : (
-            <span className={`font-semibold ${balanceClass(statement?.closingBalance)}`}>
-              {formatPula(statement?.closingBalance)}
-            </span>
+            <>
+              <span className={`font-semibold ${balanceClass(statement?.closingBalance)}`}>
+                {formatPula(statement?.closingBalance)}
+              </span>
+              <span className="text-ink-400"> · {balanceCaption(statement?.closingBalance)}</span>
+            </>
           )}
         </p>
       </div>
 
+      <section className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-red-400/25 bg-red-500/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-red-300">Overdue</p>
+          <p className="mt-2 text-xl font-bold tabular-nums text-white">
+            {loading ? '—' : formatPula(receivables?.overdue)}
+          </p>
+          <p className="mt-1 text-xs text-ink-400">
+            {loading
+              ? 'Checking…'
+              : receivables?.overdueCount
+                ? `${receivables.overdueCount} invoice${receivables.overdueCount === 1 ? '' : 's'} past the due date`
+                : 'Nothing past due. Thank you.'}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-sky-400/25 bg-sky-500/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-sky-300">Due</p>
+          <p className="mt-2 text-xl font-bold tabular-nums text-white">
+            {loading ? '—' : formatPula(receivables?.due)}
+          </p>
+          <p className="mt-1 text-xs text-ink-400">
+            {loading
+              ? 'Checking…'
+              : receivables?.nextDueDate
+                ? `Next payment due ${receivables.nextDueDate}`
+                : 'Nothing due right now'}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
+            Account credit
+          </p>
+          <p className="mt-2 text-xl font-bold tabular-nums text-white">
+            {loading ? '—' : formatPula(credit)}
+          </p>
+          <p className="mt-1 text-xs text-ink-400">
+            {credit > 0.001
+              ? 'Paid in advance. We apply this to your next invoice.'
+              : 'No unapplied payments on your account'}
+          </p>
+        </div>
+      </section>
+
       <div className="flex flex-wrap gap-2">
-        <Link to="/portal/quotes/new" className={adminBtnPrimary}>
+        <Link to="/portal/payments/notify" className={adminBtnPrimary}>
+          I&rsquo;ve paid
+        </Link>
+        <Link to="/portal/quotes/new" className={adminBtnSecondary}>
           Request quote
         </Link>
         <Link to="/portal/invoices" className={adminBtnSecondary}>

@@ -5,7 +5,26 @@ import { buildClientDisplayName, formToClientRow } from './clientRegistration'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
 import { preparePaymentDocumentBundle } from './paymentDocument'
-import { BALANCE_INVOICE_STATUSES, invoiceAffectsClientBalance, PAYMENT_METHODS } from './payments'
+import {
+  BALANCE_INVOICE_STATUSES,
+  invoiceAffectsClientBalance,
+  invoiceEffectiveDueDate,
+  localTodayIso,
+  PAYMENT_METHODS,
+  summarizeReceivables,
+} from './payments'
+
+/** Private bucket holding client-uploaded proof of payment and query attachments. */
+export const PROOF_BUCKET = 'client-proofs'
+const PROOF_MAX_BYTES = 10 * 1024 * 1024
+const PROOF_ALLOWED_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+]
 
 /** A–Z by name; "Other" always last. */
 export function sortExpenseCategories(rows) {
@@ -2372,5 +2391,390 @@ export const opsApi = {
     const { error } = await supabase.from('expenses').delete().eq('id', id)
     if (error) return mapError(error)
     return { data: true, error: null }
+  },
+
+  // --- Client proof uploads (private Storage bucket) ---
+
+  /** Upload a bank slip / screenshot. Returns the storage path to save on the row. */
+  async uploadClientProof(file, { clientId } = {}) {
+    if (!supabase) return dbUnavailable()
+    if (!file) return { data: null, error: { message: 'Choose a file to upload.' } }
+    if (file.size > PROOF_MAX_BYTES) {
+      return { data: null, error: { message: 'That file is larger than 10 MB. Please upload a smaller image or PDF.' } }
+    }
+    if (file.type && !PROOF_ALLOWED_TYPES.includes(file.type)) {
+      return { data: null, error: { message: 'Please upload an image (JPG, PNG, WebP, HEIC) or a PDF.' } }
+    }
+
+    const safeName = String(file.name || 'proof')
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .slice(-60)
+    const path = `${clientId || 'unknown'}/${Date.now()}-${safeName}`
+
+    const { error } = await supabase.storage
+      .from(PROOF_BUCKET)
+      .upload(path, file, { cacheControl: '3600', upsert: false })
+    if (error) return mapError(error)
+    return { data: { path }, error: null }
+  },
+
+  /** Short-lived link so staff can view a client's uploaded proof. */
+  async getProofSignedUrl(path, expiresIn = 3600) {
+    if (!supabase) return dbUnavailable()
+    if (!path) return { data: null, error: { message: 'No attachment on this record.' } }
+    const { data, error } = await supabase.storage
+      .from(PROOF_BUCKET)
+      .createSignedUrl(path, expiresIn)
+    if (error) return mapError(error)
+    return { data: data?.signedUrl || null, error: null }
+  },
+
+  // --- Payments seen by the client ---
+
+  /** Portal payments list with allocated / unallocated split per payment. */
+  async listPaymentsForClient(clientId) {
+    if (!supabase) return dbUnavailable()
+    if (!clientId) return { data: null, error: { message: 'No client selected.' } }
+
+    const { data: payments, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('payment_date', { ascending: false })
+      .order('created_at', { ascending: false })
+    if (error) return mapError(error)
+
+    const ids = (payments || []).map((p) => p.id)
+    if (ids.length === 0) return { data: [], error: null }
+
+    const { data: allocs, error: allocErr } = await supabase
+      .from('payment_allocations')
+      .select('payment_id, amount')
+      .in('payment_id', ids)
+    if (allocErr) return mapError(allocErr)
+
+    const allocated = {}
+    for (const a of allocs || []) {
+      allocated[a.payment_id] = (allocated[a.payment_id] || 0) + (Number(a.amount) || 0)
+    }
+
+    const data = (payments || []).map((p) => {
+      const used = Math.round((allocated[p.id] || 0) * 100) / 100
+      const unallocated = Math.round(((Number(p.amount) || 0) - used) * 100) / 100
+      return { ...p, allocated_amount: used, unallocated_amount: unallocated }
+    })
+    return { data, error: null }
+  },
+
+  // --- Payment notifications ("I've paid") ---
+
+  async createPaymentNotification({
+    client_id,
+    invoice_id,
+    amount,
+    payment_date,
+    method,
+    reference,
+    note,
+    proof_path,
+  }) {
+    if (!supabase) return dbUnavailable()
+    if (!client_id) return { data: null, error: { message: 'No client selected.' } }
+
+    const amt = Number(amount)
+    if (!(amt > 0)) {
+      return { data: null, error: { message: 'Enter an amount greater than zero.' } }
+    }
+    if (!payment_date) {
+      return { data: null, error: { message: 'Choose the date you paid.' } }
+    }
+    const allowed = PAYMENT_METHODS.map((m) => m.value)
+    const payMethod = allowed.includes(method) ? method : 'eft'
+
+    const { data, error } = await supabase
+      .from('payment_notifications')
+      .insert({
+        client_id,
+        invoice_id: invoice_id || null,
+        amount: Math.round(amt * 100) / 100,
+        payment_date,
+        method: payMethod,
+        reference: reference?.trim() || null,
+        note: note?.trim() || null,
+        proof_path: proof_path || null,
+      })
+      .select('*, invoices(id, number)')
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  /** Client's own submissions, so the portal can show "we're checking this". */
+  async listPaymentNotificationsForClient(clientId) {
+    if (!supabase) return dbUnavailable()
+    if (!clientId) return { data: null, error: { message: 'No client selected.' } }
+    const { data, error } = await supabase
+      .from('payment_notifications')
+      .select('*, invoices(id, number)')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+    if (error) return mapError(error)
+    return { data: data || [], error: null }
+  },
+
+  async listPaymentNotifications({ status = 'pending' } = {}) {
+    if (!supabase) return dbUnavailable()
+    let query = supabase
+      .from('payment_notifications')
+      .select('*, clients(id, name), invoices(id, number)')
+      .order('created_at', { ascending: false })
+    if (status) query = query.eq('status', status)
+    const { data, error } = await query
+    if (error) return mapError(error)
+    return { data: data || [], error: null }
+  },
+
+  async getPaymentNotification(id) {
+    if (!supabase) return dbUnavailable()
+    const { data, error } = await supabase
+      .from('payment_notifications')
+      .select('*, clients(id, name), invoices(id, number)')
+      .eq('id', id)
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  /** Staff outcome: accepted (a payment was recorded) or dismissed. */
+  async resolvePaymentNotification(id, { status, payment_id = null } = {}) {
+    if (!supabase) return dbUnavailable()
+    if (!['accepted', 'dismissed', 'pending'].includes(status)) {
+      return { data: null, error: { message: 'Unknown notification outcome.' } }
+    }
+    const { data, error } = await supabase
+      .from('payment_notifications')
+      .update({
+        status,
+        resolved_at: status === 'pending' ? null : new Date().toISOString(),
+        resolved_payment_id: payment_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select('*, clients(id, name), invoices(id, number)')
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  // --- Invoice disputes / queries ---
+
+  /** Latest thread for an invoice (open one wins), with its messages. */
+  async getInvoiceDispute(invoiceId) {
+    if (!supabase) return dbUnavailable()
+    const { data: threads, error } = await supabase
+      .from('invoice_disputes')
+      .select('*, invoices(id, number), clients(id, name)')
+      .eq('invoice_id', invoiceId)
+      .order('status', { ascending: true })
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (error) return mapError(error)
+
+    const dispute = (threads || [])[0]
+    if (!dispute) return { data: null, error: null }
+
+    const { data: messages, error: msgErr } = await supabase
+      .from('invoice_dispute_messages')
+      .select('*')
+      .eq('dispute_id', dispute.id)
+      .order('created_at', { ascending: true })
+    if (msgErr) return mapError(msgErr)
+
+    return { data: { ...dispute, messages: messages || [] }, error: null }
+  },
+
+  async getInvoiceDisputeForClient(invoiceId, clientId) {
+    if (!clientId) return { data: null, error: { message: 'No client selected.' } }
+    const res = await this.getInvoiceDispute(invoiceId)
+    if (res.error) return res
+    if (res.data && res.data.client_id !== clientId) {
+      return { data: null, error: { message: 'Query not found.' } }
+    }
+    return res
+  },
+
+  /**
+   * Post a message, opening a thread when there isn't an open one.
+   * A reply after resolution starts a fresh thread.
+   */
+  async postDisputeMessage({ invoice_id, client_id, author_role, body, attachment_path }) {
+    if (!supabase) return dbUnavailable()
+    if (!invoice_id) return { data: null, error: { message: 'No invoice selected.' } }
+    if (!client_id) return { data: null, error: { message: 'No client selected.' } }
+    if (!String(body || '').trim()) {
+      return { data: null, error: { message: 'Type a message before sending.' } }
+    }
+    const role = author_role === 'staff' ? 'staff' : 'client'
+
+    const { data: open, error: openErr } = await supabase
+      .from('invoice_disputes')
+      .select('*')
+      .eq('invoice_id', invoice_id)
+      .eq('status', 'open')
+      .maybeSingle()
+    if (openErr) return mapError(openErr)
+
+    let disputeId = open?.id
+    if (!disputeId) {
+      const { data: created, error: createErr } = await supabase
+        .from('invoice_disputes')
+        .insert({ invoice_id, client_id })
+        .select('id')
+        .single()
+      if (createErr) return mapError(createErr)
+      disputeId = created.id
+    }
+
+    const { error: msgErr } = await supabase.from('invoice_dispute_messages').insert({
+      dispute_id: disputeId,
+      author_role: role,
+      body: String(body).trim(),
+      attachment_path: attachment_path || null,
+    })
+    if (msgErr) return mapError(msgErr)
+
+    await supabase
+      .from('invoice_disputes')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', disputeId)
+
+    return this.getInvoiceDispute(invoice_id)
+  },
+
+  async listOpenDisputes() {
+    if (!supabase) return dbUnavailable()
+    const { data, error } = await supabase
+      .from('invoice_disputes')
+      .select('*, invoices(id, number, total), clients(id, name)')
+      .eq('status', 'open')
+      .order('updated_at', { ascending: false })
+    if (error) return mapError(error)
+    return { data: data || [], error: null }
+  },
+
+  async setDisputeStatus(id, status) {
+    if (!supabase) return dbUnavailable()
+    if (!['open', 'resolved'].includes(status)) {
+      return { data: null, error: { message: 'Unknown query status.' } }
+    }
+    const { data, error } = await supabase
+      .from('invoice_disputes')
+      .update({
+        status,
+        resolved_at: status === 'resolved' ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  // --- Quotation decline ---
+
+  async declineQuotation(id, reason) {
+    if (!supabase) return dbUnavailable()
+    const trimmed = String(reason || '').trim()
+    if (!trimmed) {
+      return { data: null, error: { message: 'Give the client a short reason for declining.' } }
+    }
+    const existing = await this.getQuotation(id)
+    if (existing.error) return existing
+    if (existing.data.status === 'converted') {
+      return { data: null, error: { message: 'This quotation was already converted to an invoice.' } }
+    }
+
+    const { data, error } = await supabase
+      .from('quotations')
+      .update({
+        status: 'declined',
+        decline_reason: trimmed,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  // --- Staff dashboard ---
+
+  /** Everything the dashboard needs to show real work waiting for staff. */
+  async getOpsDashboardSummary() {
+    if (!supabase) return dbUnavailable()
+    const today = localTodayIso()
+    const monthStart = `${today.slice(0, 7)}-01`
+
+    const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes] = await Promise.all([
+      supabase
+        .from('payment_notifications')
+        .select('*, clients(id, name), invoices(id, number)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('invoice_disputes')
+        .select('*, invoices(id, number), clients(id, name)')
+        .eq('status', 'open')
+        .order('updated_at', { ascending: false }),
+      supabase
+        .from('quotations')
+        .select('id, number, total, issue_date, created_at, clients(id, name)')
+        .eq('source', 'portal')
+        .eq('status', 'draft')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('invoices')
+        .select('id, number, status, total, amount_paid, issue_date, due_date, client_id, clients(id, name)')
+        .in('status', BALANCE_INVOICE_STATUSES),
+      supabase.from('payments').select('amount, payment_date').gte('payment_date', monthStart),
+    ])
+
+    if (notifRes.error) return mapError(notifRes.error)
+    if (disputeRes.error) return mapError(disputeRes.error)
+    if (quoteRes.error) return mapError(quoteRes.error)
+    if (invoiceRes.error) return mapError(invoiceRes.error)
+    if (paymentRes.error) return mapError(paymentRes.error)
+
+    const invoices = invoiceRes.data || []
+    const receivables = summarizeReceivables(invoices, today)
+
+    const overdueInvoices = invoices
+      .filter((inv) => {
+        const balance = Math.round((Number(inv.total) - Number(inv.amount_paid || 0)) * 100) / 100
+        if (balance <= 0.001) return false
+        const due = invoiceEffectiveDueDate(inv)
+        return Boolean(due && due < today)
+      })
+      .sort((a, b) => invoiceEffectiveDueDate(a).localeCompare(invoiceEffectiveDueDate(b)))
+
+    const collectedThisMonth =
+      Math.round(
+        (paymentRes.data || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0) * 100,
+      ) / 100
+
+    return {
+      data: {
+        today,
+        paymentNotifications: notifRes.data || [],
+        disputes: disputeRes.data || [],
+        quoteRequests: quoteRes.data || [],
+        overdueInvoices,
+        receivables,
+        collectedThisMonth,
+      },
+      error: null,
+    }
   },
 }

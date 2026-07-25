@@ -146,7 +146,7 @@ export function buildBillingDocumentModel({ type, doc, client, settings, product
   }
 }
 
-const PRINT_STYLES = `
+export const PRINT_STYLES = `
   @page {
     size: A4 portrait;
     margin: 10mm 11mm;
@@ -634,7 +634,7 @@ export function getBillingDocumentPrintPath(model) {
   return `/admin/print/${kind}/${slug || 'draft'}`
 }
 
-function renderDocumentBody(model) {
+export function renderDocumentBody(model) {
   const lineRows = model.lines
     .map(
       (line) => `

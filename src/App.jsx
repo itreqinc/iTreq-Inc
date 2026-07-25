@@ -18,7 +18,9 @@ import PortalHome from './portal/PortalHome'
 import { PortalLayout } from './portal/PortalLayout'
 import PortalInvoices from './portal/PortalInvoices'
 import PortalInvoiceDetail from './portal/PortalInvoiceDetail'
+import PortalPayments from './portal/PortalPayments'
 import PortalPaymentDetail from './portal/PortalPaymentDetail'
+import PortalPayNotify from './portal/PortalPayNotify'
 import PortalStatement from './portal/PortalStatement'
 import PortalQuotes from './portal/PortalQuotes'
 import PortalQuoteNew from './portal/PortalQuoteNew'
@@ -87,6 +89,8 @@ export default function App() {
         <Route path="quotes/:id" element={<PortalQuoteDetail />} />
         <Route path="invoices" element={<PortalInvoices />} />
         <Route path="invoices/:id" element={<PortalInvoiceDetail />} />
+        <Route path="payments" element={<PortalPayments />} />
+        <Route path="payments/notify" element={<PortalPayNotify />} />
         <Route path="payments/:id" element={<PortalPaymentDetail />} />
         <Route path="statement" element={<PortalStatement />} />
       </Route>

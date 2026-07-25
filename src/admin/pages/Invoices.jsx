@@ -12,6 +12,7 @@ import { invoiceBalanceDue,
   invoiceDisplayStatus } from '../../lib/payments'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
+import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
 import { adminBtnDanger,
   adminBtnPrimary,
@@ -38,7 +39,7 @@ function invoiceRowClass(status) {
       return 'bg-emerald-500/10'
     case 'void':
       return 'bg-red-500/10 opacity-80'
-    case 'issued':
+    case 'due':
     default:
       return 'bg-ink-900/20'
   }
@@ -56,7 +57,7 @@ function invoiceStatusClass(status) {
       return 'bg-emerald-500/20 text-emerald-200'
     case 'void':
       return 'bg-red-500/20 text-red-300 line-through'
-    case 'issued':
+    case 'due':
     default:
       return 'bg-white/10 text-ink-300'
   }
@@ -583,6 +584,14 @@ export default function InvoicesPage() {
             </button>
           </div>
         </form>
+      ) : null}
+
+      {showForm && editingId && form.client_id ? (
+        <InvoiceQueryThread
+          invoiceId={editingId}
+          clientId={form.client_id}
+          authorRole="staff"
+        />
       ) : null}
 
       <div className={adminTableShellClass}>

@@ -14,6 +14,10 @@ export function quotationDisplayStatus(quote) {
   return quote?.status || ''
 }
 
+export function quotationWasDeclined(quote) {
+  return quote?.status === 'declined'
+}
+
 /**
  * Rebuild catalog quantities from saved quote lines (uses trackable_item_id).
  */

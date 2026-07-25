@@ -47,7 +47,7 @@ function snapshotQuotationForm(form) {
 export default function QuotationsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const { showError, showSuccess, confirm } = useOpsAlert()
+  const { showError, showSuccess, confirm, prompt } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [clients, setClients] = useState([])
   const [products, setProducts] = useState([])
@@ -135,6 +135,7 @@ export default function QuotationsPage() {
       notes: data.notes || '',
       status: data.status,
       source: data.source || 'staff',
+      decline_reason: data.decline_reason || '',
       discount_amount: Number(data.discount_amount) || 0,
       lines: mapDocLinesForEditor(data.lines, catalog),
     }
@@ -158,7 +159,7 @@ export default function QuotationsPage() {
     [form, baseline],
   )
 
-  const readOnly = ['converted', 'cancelled'].includes(form.status)
+  const readOnly = ['converted', 'cancelled', 'declined'].includes(form.status)
   /** New quotes always; existing only after a change. */
   const canSave = !readOnly && (!editingId || isDirty)
   const canApprove =
@@ -171,12 +172,13 @@ export default function QuotationsPage() {
     Boolean(editingId) &&
     !isDirty &&
     !saving &&
-    !['converted', 'cancelled'].includes(form.status)
+    !['converted', 'cancelled', 'declined'].includes(form.status)
   const canCancel =
     Boolean(editingId) &&
     ['draft', 'sent', 'accepted'].includes(form.status) &&
     !saving &&
     !isDirty
+  const canDecline = canCancel
 
   function statusLabel(quoteOrStatus) {
     if (quoteOrStatus && typeof quoteOrStatus === 'object') {
@@ -287,6 +289,31 @@ export default function QuotationsPage() {
     await load()
   }
 
+  async function handleDeclineQuotation() {
+    if (!canDecline) return
+    const reason = await prompt({
+      title: 'Decline this quotation?',
+      message:
+        'The client sees this reason in their portal. Declined quotations can no longer be edited or converted.',
+      confirmLabel: 'Decline quotation',
+      promptLabel: 'Reason for the client',
+      promptPlaceholder: 'For example: the vehicles listed are outside our coverage area.',
+    })
+    if (!reason) return
+
+    setSaving(true)
+    const { error: err } = await opsApi.declineQuotation(editingId, reason)
+    setSaving(false)
+    if (err) {
+      showError(err.message)
+      return
+    }
+    showSuccess('Quotation declined. The client can see your reason.')
+    setShowForm(false)
+    setBaseline('')
+    await load()
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -344,6 +371,12 @@ export default function QuotationsPage() {
               Close
             </button>
           </div>
+
+          {form.status === 'declined' && form.decline_reason ? (
+            <p className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              <span className="font-semibold">Declined:</span> {form.decline_reason}
+            </p>
+          ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
@@ -470,6 +503,21 @@ export default function QuotationsPage() {
               className={adminBtnDanger}
             >
               Cancel quotation
+            </button>
+            <button
+              type="button"
+              disabled={!canDecline}
+              title={
+                !editingId
+                  ? 'Save this quotation first'
+                  : isDirty
+                    ? 'Save or discard changes before declining'
+                    : 'Turn this down with a reason the client can see'
+              }
+              onClick={handleDeclineQuotation}
+              className={adminBtnDanger}
+            >
+              Decline
             </button>
           </div>
         </form>

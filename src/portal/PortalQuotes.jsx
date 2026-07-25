@@ -32,6 +32,7 @@ function statusClass(status, awaiting) {
     case 'converted':
       return 'bg-brand-500/20 text-brand-200'
     case 'cancelled':
+    case 'declined':
       return 'bg-red-500/20 text-red-300'
     case 'draft':
     default:

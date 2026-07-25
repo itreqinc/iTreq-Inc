@@ -125,7 +125,7 @@ export default function PortalQuoteDetail() {
   if (!quote) return null
 
   const lines = quote.lines || []
-  const canPrint = quote.status !== 'cancelled'
+  const canPrint = !['cancelled', 'declined'].includes(quote.status)
   const canEdit = clientCanEditPortalQuote(quote)
   const awaiting = portalQuoteAwaitingApproval(quote)
   const statusText =
@@ -152,6 +152,12 @@ export default function PortalQuoteDetail() {
               <span className="capitalize">{statusText}</span>
             )}
           </p>
+          {quote.status === 'declined' ? (
+            <p className="mt-3 max-w-xl rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              <span className="font-semibold">We could not take this on.</span>{' '}
+              {quote.decline_reason || 'Please contact us and we will explain.'}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {canEdit ? (

@@ -82,6 +82,9 @@ function PortalShell() {
               <NavLink to="/portal/invoices" className={navClass}>
                 Invoices
               </NavLink>
+              <NavLink to="/portal/payments" className={navClass}>
+                Payments
+              </NavLink>
               <NavLink to="/portal/statement" className={navClass}>
                 Statement
               </NavLink>

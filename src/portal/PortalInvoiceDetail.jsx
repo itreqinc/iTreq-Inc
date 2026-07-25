@@ -9,7 +9,7 @@ import { Link,
 import { opsApi } from '../lib/opsApi'
 import { invoiceBalanceDue,
   invoiceDisplayStatus } from '../lib/payments'
-import { clientInvoiceBillingDisplay } from '../lib/invoiceDates'
+import { clientInvoiceBillingDisplay, nextBillingSummary } from '../lib/invoiceDates'
 import {
   openBillingDocumentPrintWindow,
   fillBillingDocumentPrintWindow,
@@ -24,6 +24,7 @@ import { adminBtnPrimary,
   adminColSecondary,
 } from '../admin/ui'
 import { BillingDocumentScreenFooter } from './BillingDocumentScreenFooter'
+import { InvoiceQueryThread } from '../components/InvoiceQueryThread'
 
 export default function PortalInvoiceDetail() {
   const { id } = useParams()
@@ -105,6 +106,8 @@ export default function PortalInvoiceDetail() {
   const lines = invoice.lines || []
   const billing = clientInvoiceBillingDisplay(invoice)
   const displayStatus = invoiceDisplayStatus(invoice)
+  const balanceDue = invoiceBalanceDue(invoice)
+  const nextBilling = nextBillingSummary(invoice)
 
   return (
     <div className="space-y-6">
@@ -130,15 +133,26 @@ export default function PortalInvoiceDetail() {
             <span className="capitalize">{displayStatus}</span>
             {' · '}
             Balance due{' '}
-            <span className="font-semibold text-white">{formatPula(invoiceBalanceDue(invoice))}</span>
+            <span className="font-semibold text-white">{formatPula(balanceDue)}</span>
           </p>
+          {nextBilling ? (
+            <p className="mt-1 text-xs text-ink-400">
+              This is a recurring monthly fee. Your next invoice covers {nextBilling.periodLabel} and
+              falls due {nextBilling.dueDate}.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          {balanceDue > 0.001 ? (
+            <Link to={`/portal/payments/notify?invoice=${invoice.id}`} className={adminBtnPrimary}>
+              I&rsquo;ve paid this
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={printInvoice}
             disabled={printing}
-            className={adminBtnPrimary}
+            className={balanceDue > 0.001 ? adminBtnSecondary : adminBtnPrimary}
           >
             {printing ? 'Loading…' : 'Print / Save PDF'}
           </button>
@@ -213,6 +227,8 @@ export default function PortalInvoiceDetail() {
           {invoice.notes}
         </p>
       ) : null}
+
+      <InvoiceQueryThread invoiceId={invoice.id} clientId={clientId} authorRole="client" />
 
       <BillingDocumentScreenFooter model={printModel} />
     </div>

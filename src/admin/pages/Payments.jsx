@@ -71,6 +71,8 @@ export default function PaymentsPage() {
   const [openInvoices, setOpenInvoices] = useState([])
   const [accountCredit, setAccountCredit] = useState(0)
   const [form, setForm] = useState(emptyPaymentForm)
+  /** Set when staff arrive from a client's "I've paid" report; closed off on save. */
+  const [fromNotification, setFromNotification] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -154,11 +156,48 @@ export default function PaymentsPage() {
     load()
   }, [load])
 
+  /** Open a blank payment pre-filled from what the client told us they paid. */
+  const startFromNotification = useCallback(
+    async (notificationId) => {
+      const { data, error } = await opsApi.getPaymentNotification(notificationId)
+      if (error) {
+        showError(error.message)
+        return
+      }
+      setEditingId(null)
+      setFromNotification(data)
+      setForm({
+        ...emptyPaymentForm(),
+        client_id: data.client_id,
+        payment_date: data.payment_date || todayIso(),
+        method: data.method || 'eft',
+        reference: data.reference || '',
+        notes: data.note || '',
+        amount: String(data.amount ?? ''),
+      })
+      setShowForm(true)
+      await loadOpenInvoices(
+        data.client_id,
+        null,
+        data.invoice_id ? [data.invoice_id] : null,
+      )
+    },
+    [showError, loadOpenInvoices],
+  )
+
   useEffect(() => {
     const openId = params.get('open')
     if (openId) {
       startEdit(openId).then(() => {
         params.delete('open')
+        setParams(params, { replace: true })
+      })
+      return
+    }
+    const notificationId = params.get('notification')
+    if (notificationId) {
+      startFromNotification(notificationId).then(() => {
+        params.delete('notification')
         setParams(params, { replace: true })
       })
       return
@@ -172,7 +211,7 @@ export default function PaymentsPage() {
       params.delete('client')
       setParams(params, { replace: true })
     }
-  }, [params, setParams, startEdit, loadOpenInvoices])
+  }, [params, setParams, startEdit, startFromNotification, loadOpenInvoices])
 
   function closeForm() {
     setShowForm(false)
@@ -181,6 +220,7 @@ export default function PaymentsPage() {
     setOpenInvoices([])
     setAccountCredit(0)
     setForm(emptyPaymentForm())
+    setFromNotification(null)
   }
 
   function startNew() {
@@ -189,6 +229,7 @@ export default function PaymentsPage() {
     setForm(emptyPaymentForm())
     setOpenInvoices([])
     setAccountCredit(0)
+    setFromNotification(null)
     setShowForm(true)
   }
 
@@ -301,7 +342,20 @@ export default function PaymentsPage() {
       showError(result.error.message)
       return
     }
-    showSuccess(editingId ? 'Payment updated.' : 'Payment recorded.')
+    if (fromNotification?.id) {
+      await opsApi.resolvePaymentNotification(fromNotification.id, {
+        status: 'accepted',
+        payment_id: result.data?.id || null,
+      })
+    }
+
+    showSuccess(
+      fromNotification
+        ? 'Payment recorded and the client\u2019s report marked as confirmed.'
+        : editingId
+          ? 'Payment updated.'
+          : 'Payment recorded.',
+    )
     closeForm()
     await load()
   }
@@ -355,6 +409,50 @@ export default function PaymentsPage() {
               Close
             </button>
           </div>
+
+          {fromNotification ? (
+            <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              <p className="font-semibold">
+                Reported by {fromNotification.clients?.name || 'the client'}
+              </p>
+              <p className="mt-1 text-amber-200/90">
+                {formatPula(fromNotification.amount)} on {fromNotification.payment_date} via{' '}
+                {paymentMethodLabel(fromNotification.method)}
+                {fromNotification.reference ? ` · ref ${fromNotification.reference}` : ''}
+                {fromNotification.invoices?.number
+                  ? ` · for ${fromNotification.invoices.number}`
+                  : ''}
+              </p>
+              {fromNotification.note ? (
+                <p className="mt-1 text-amber-200/90">&ldquo;{fromNotification.note}&rdquo;</p>
+              ) : null}
+              <div className="mt-2 flex flex-wrap gap-3">
+                {fromNotification.proof_path ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const { data, error } = await opsApi.getProofSignedUrl(
+                        fromNotification.proof_path,
+                      )
+                      if (error) {
+                        showError(error.message)
+                        return
+                      }
+                      window.open(data, '_blank', 'noopener')
+                    }}
+                    className="text-xs font-semibold text-brand-400 hover:text-brand-300"
+                  >
+                    View proof of payment
+                  </button>
+                ) : (
+                  <span className="text-xs text-amber-200/70">No proof attached</span>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-amber-200/70">
+                Check this against the bank before saving. Saving marks the report confirmed.
+              </p>
+            </div>
+          ) : null}
 
           <label className="block">
             <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Client *</span>
