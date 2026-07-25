@@ -15,7 +15,9 @@ function Kpi({ label, value, hint, tone = 'default' }) {
       ? 'border-red-400/25 bg-red-500/5'
       : tone === 'good'
         ? 'border-emerald-400/25 bg-emerald-500/5'
-        : 'border-white/10 bg-ink-900/50'
+        : tone === 'attention'
+          ? 'border-azure-400/25 bg-azure-500/5'
+          : 'border-white/10 bg-ink-900/50'
   return (
     <div className={`rounded-2xl border p-4 ${toneClass}`}>
       <p className="text-xs uppercase tracking-wider text-ink-400">{label}</p>
@@ -25,25 +27,46 @@ function Kpi({ label, value, hint, tone = 'default' }) {
   )
 }
 
-function ActionCard({ title, count, description, children, emptyText }) {
+function ActionCard({ title, count, description, children, emptyText, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+
   return (
     <section className="rounded-2xl border border-white/10 bg-ink-900/40">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
-        <div>
-          <h2 className="text-sm font-semibold text-white">{title}</h2>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-white/[0.03] ${
+          open ? 'border-b border-white/10' : ''
+        }`}
+      >
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold text-white">
+            {title}{' '}
+            <span className="font-semibold tabular-nums text-ink-300">({count})</span>
+          </h2>
           <p className="mt-0.5 text-xs text-ink-400">{description}</p>
         </div>
-        {count > 0 ? (
-          <span className="inline-flex min-w-6 justify-center rounded-full bg-brand-500 px-2 py-0.5 text-xs font-bold text-ink-950">
-            {count}
-          </span>
-        ) : null}
-      </div>
-      {count === 0 ? (
-        <p className="px-4 py-6 text-sm text-ink-400">{emptyText}</p>
-      ) : (
-        <ul className="divide-y divide-white/5">{children}</ul>
-      )}
+        <span
+          className={`shrink-0 text-ink-400 transition ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </span>
+      </button>
+      {open ? (
+        count === 0 ? (
+          <p className="px-4 py-6 text-sm text-ink-400">{emptyText}</p>
+        ) : (
+          <ul className="divide-y divide-white/5">{children}</ul>
+        )
+      ) : null}
     </section>
   )
 }
@@ -110,7 +133,7 @@ export default function AdminDashboard() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">Ops</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">Operations</p>
           <h1 className="mt-1 font-display text-3xl font-bold text-white">Dashboard</h1>
           <p className="mt-2 max-w-2xl text-sm text-ink-300">
             {loading
@@ -139,7 +162,7 @@ export default function AdminDashboard() {
               ? ''
               : `${receivables?.overdueCount || 0} invoice${receivables?.overdueCount === 1 ? '' : 's'} past due`
           }
-          tone={receivables?.overdue > 0 ? 'danger' : 'default'}
+          tone="attention"
         />
         <Kpi
           label="Collected this month"

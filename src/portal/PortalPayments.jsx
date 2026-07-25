@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
 import { paymentMethodLabel } from '../lib/payments'
+import { currentMonthStartIso, filterByDateRange, todayIso } from '../lib/dateRange'
+import { DateRangeFilter } from '../components/DateRangeFilter'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
   clickableDocClass,
   clickableRowClass,
   formatPula,
-  adminTableShellClass,
   adminTableClass,
   adminColSecondary,
 } from '../admin/ui'
@@ -19,6 +20,8 @@ export default function PortalPayments() {
   const { showError } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [from, setFrom] = useState(currentMonthStartIso)
+  const [to, setTo] = useState(todayIso)
 
   useEffect(() => {
     let cancelled = false
@@ -37,6 +40,11 @@ export default function PortalPayments() {
     }
   }, [clientId, showError])
 
+  const visibleRows = useMemo(
+    () => filterByDateRange(rows, from, to, (pay) => pay.payment_date),
+    [rows, from, to],
+  )
+
   return (
     <div className="space-y-6">
       <div>
@@ -47,7 +55,15 @@ export default function PortalPayments() {
         </p>
       </div>
 
-      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+      <DateRangeFilter
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        dateLabel="payment date"
+        shown={visibleRows.length}
+        total={rows.length}
+      >
         <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -67,14 +83,16 @@ export default function PortalPayments() {
                   Loading…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-ink-400">
-                  No payments recorded yet.
+                  {rows.length === 0
+                    ? 'No payments recorded yet.'
+                    : 'No payments in the selected date range.'}
                 </td>
               </tr>
             ) : (
-              rows.map((pay) => {
+              visibleRows.map((pay) => {
                 const open = () => navigate(`/portal/payments/${pay.id}`)
                 const credit = Number(pay.unallocated_amount) || 0
                 return (
@@ -122,7 +140,7 @@ export default function PortalPayments() {
             )}
           </tbody>
         </table>
-      </div>
+      </DateRangeFilter>
 
       <p className="text-xs text-ink-400">
         &ldquo;On account&rdquo; is the part of a payment not yet applied to an invoice. It stays as

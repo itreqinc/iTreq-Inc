@@ -5,6 +5,13 @@ import {
   useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
+import { DateRangeFilter } from '../../components/DateRangeFilter'
+import {
+  currentMonthStartIso,
+  documentFilterDate,
+  filterByDateRange,
+  todayIso,
+} from '../../lib/dateRange'
 import { opsApi } from '../../lib/opsApi'
 import { emptyLine,
   mapDocLinesForEditor } from '../../lib/billing'
@@ -22,7 +29,6 @@ import { adminBtnDanger,
   clickableDocClass,
   clickableRowClass,
   formatPula,
-  adminTableShellClass,
   adminTableClass,
   adminColSecondary,
 } from '../ui'
@@ -94,6 +100,8 @@ export default function InvoicesPage() {
   const [baseline, setBaseline] = useState('')
   const [accountCredit, setAccountCredit] = useState(0)
   const [taxRate, setTaxRate] = useState(0)
+  const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
+  const [dateTo, setDateTo] = useState(todayIso)
   const [form, setForm] = useState({
     client_id: '',
     issue_date: '',
@@ -279,6 +287,11 @@ export default function InvoicesPage() {
   const isDirty = useMemo(
     () => snapshotInvoiceForm(form) !== baseline,
     [form, baseline],
+  )
+
+  const visibleRows = useMemo(
+    () => filterByDateRange(rows, dateFrom, dateTo, documentFilterDate),
+    [rows, dateFrom, dateTo],
   )
 
   const readOnly = form.status !== 'draft'
@@ -594,7 +607,15 @@ export default function InvoicesPage() {
         />
       ) : null}
 
-      <div className={adminTableShellClass}>
+      <DateRangeFilter
+        from={dateFrom}
+        to={dateTo}
+        onFromChange={setDateFrom}
+        onToChange={setDateTo}
+        dateLabel="issue date"
+        shown={visibleRows.length}
+        total={rows.length}
+      >
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -614,14 +635,16 @@ export default function InvoicesPage() {
                   Loading…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-ink-400">
-                  No invoices yet.
+                  {rows.length === 0
+                    ? 'No invoices yet.'
+                    : 'No invoices in the selected date range.'}
                 </td>
               </tr>
             ) : (
-              rows.map((row) => {
+              visibleRows.map((row) => {
                 const displayStatus = invoiceDisplayStatus(row)
                 const open = () => openRow(row.id)
                 return (
@@ -664,7 +687,7 @@ export default function InvoicesPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </DateRangeFilter>
     </div>
   )
 }

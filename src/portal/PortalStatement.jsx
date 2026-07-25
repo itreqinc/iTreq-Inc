@@ -13,7 +13,6 @@ import {
   fillStatementDocumentPrintWindow,
   prepareStatementDocument,
   } from '../lib/statementDocument'
-import { buildStatementDocumentModel } from '../lib/statementDocumentHtml'
 import { fillDocumentPackPrintWindow } from '../lib/documentPack'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
@@ -144,7 +143,7 @@ export default function PortalStatement() {
       return
     }
 
-    const statementModel = buildStatementDocumentModel({
+    const { model: statementModel } = prepareStatementDocument({
       statement: {
         ...stmtRes.data,
         lines: (stmtRes.data.lines || []).filter((l) => !l.inactive),

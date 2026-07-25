@@ -28,8 +28,14 @@ export function YearMonthDaySelect({
   className = '',
 }) {
   const now = new Date().getFullYear()
-  const yMin = minYear ?? now - 5
-  const yMax = maxYear ?? now + 2
+  // min/maxYmd narrow the dropdown options themselves, not just clamp the result.
+  const minParts = useMemo(() => parseYmd(minYmd || ''), [minYmd])
+  const maxParts = useMemo(() => parseYmd(maxYmd || ''), [maxYmd])
+
+  let yMin = minYear ?? now - 5
+  if (minParts.year) yMin = Math.max(yMin, Number(minParts.year))
+  let yMax = maxYear ?? now + 2
+  if (maxParts.year) yMax = Math.min(yMax, Number(maxParts.year))
 
   const parsed = useMemo(() => parseYmd(value), [value])
   const [year, setYear] = useState(parsed.year)
@@ -43,8 +49,34 @@ export function YearMonthDaySelect({
   }, [parsed.year, parsed.month, parsed.day])
 
   const years = useMemo(() => yearOptions(yMin, yMax), [yMin, yMax])
-  const months = useMemo(() => monthOptions(), [])
-  const days = useMemo(() => dayOptions(year, month), [year, month])
+  const months = useMemo(() => {
+    let list = monthOptions()
+    if (year && maxParts.year && Number(year) === Number(maxParts.year)) {
+      list = list.filter((m) => m.value <= Number(maxParts.month))
+    }
+    if (year && minParts.year && Number(year) === Number(minParts.year)) {
+      list = list.filter((m) => m.value >= Number(minParts.month))
+    }
+    return list
+  }, [year, minParts, maxParts])
+  const days = useMemo(() => {
+    let list = dayOptions(year, month)
+    const atMax =
+      year &&
+      month &&
+      maxParts.year &&
+      Number(year) === Number(maxParts.year) &&
+      Number(month) === Number(maxParts.month)
+    if (atMax) list = list.filter((d) => d <= Number(maxParts.day))
+    const atMin =
+      year &&
+      month &&
+      minParts.year &&
+      Number(year) === Number(minParts.year) &&
+      Number(month) === Number(minParts.month)
+    if (atMin) list = list.filter((d) => d >= Number(minParts.day))
+    return list
+  }, [year, month, minParts, maxParts])
 
   function emit(y, m, d) {
     const clamped = clampYmdParts(y, m, d, minYmd, maxYmd)

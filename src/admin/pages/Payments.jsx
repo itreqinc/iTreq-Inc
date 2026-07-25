@@ -15,6 +15,12 @@ import {
   closePaymentDocumentPrintWindow,
 } from '../../lib/paymentDocument'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
+import { DateRangeFilter } from '../../components/DateRangeFilter'
+import {
+  currentMonthStartIso,
+  filterByDateRange,
+  todayIso as rangeTodayIso,
+} from '../../lib/dateRange'
 import { AdminIconAction } from '../AdminIconAction'
 import {
   adminBtnDanger,
@@ -22,7 +28,6 @@ import {
   adminBtnSecondary,
   adminFieldClass,
   adminTableClass,
-  adminTableShellClass,
   adminColSecondary,
   activateRowKey,
   clickableDocClass,
@@ -73,6 +78,8 @@ export default function PaymentsPage() {
   const [form, setForm] = useState(emptyPaymentForm)
   /** Set when staff arrive from a client's "I've paid" report; closed off on save. */
   const [fromNotification, setFromNotification] = useState(null)
+  const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
+  const [dateTo, setDateTo] = useState(rangeTodayIso)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -236,6 +243,11 @@ export default function PaymentsPage() {
   const isDirty = useMemo(
     () => Boolean(editingId) && snapshotPaymentForm(form) !== baseline,
     [editingId, form, baseline],
+  )
+
+  const visibleRows = useMemo(
+    () => filterByDateRange(rows, dateFrom, dateTo, (row) => row.payment_date),
+    [rows, dateFrom, dateTo],
   )
 
   const paymentAmount = Number(form.amount) || 0
@@ -652,7 +664,15 @@ export default function PaymentsPage() {
         </form>
       ) : null}
 
-      <div className={adminTableShellClass}>
+      <DateRangeFilter
+        from={dateFrom}
+        to={dateTo}
+        onFromChange={setDateFrom}
+        onToChange={setDateTo}
+        dateLabel="payment date"
+        shown={visibleRows.length}
+        total={rows.length}
+      >
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -671,14 +691,16 @@ export default function PaymentsPage() {
                   Loading…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-ink-400">
-                  No payments recorded yet.
+                  {rows.length === 0
+                    ? 'No payments recorded yet.'
+                    : 'No payments in the selected date range.'}
                 </td>
               </tr>
             ) : (
-              rows.map((row) => {
+              visibleRows.map((row) => {
                 const open = () => startEdit(row)
                 return (
                 <tr
@@ -733,7 +755,7 @@ export default function PaymentsPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </DateRangeFilter>
     </div>
   )
 }

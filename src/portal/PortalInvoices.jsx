@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState } from 'react'
 import { Link,
   useNavigate,
@@ -8,13 +9,19 @@ import { opsApi } from '../lib/opsApi'
 import { invoiceBalanceDue,
   invoiceDisplayStatus } from '../lib/payments'
 import { clientInvoiceBillingDisplay } from '../lib/invoiceDates'
+import {
+  currentMonthStartIso,
+  documentFilterDate,
+  filterByDateRange,
+  todayIso,
+} from '../lib/dateRange'
+import { DateRangeFilter } from '../components/DateRangeFilter'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
   clickableDocClass,
   clickableRowClass,
   formatPula,
-  adminTableShellClass,
   adminTableClass,
   adminColSecondary,
 } from '../admin/ui'
@@ -34,12 +41,19 @@ function statusClass(status) {
   }
 }
 
+/** Match the Billing column clients actually see, not the internal issue date. */
+function invoiceFilterDate(inv) {
+  return inv?.billing_period || documentFilterDate(inv)
+}
+
 export default function PortalInvoices() {
   const navigate = useNavigate()
   const { clientId } = useOutletContext()
   const { showError } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [from, setFrom] = useState(currentMonthStartIso)
+  const [to, setTo] = useState(todayIso)
 
   useEffect(() => {
     let cancelled = false
@@ -58,6 +72,11 @@ export default function PortalInvoices() {
     }
   }, [clientId, showError])
 
+  const visibleRows = useMemo(
+    () => filterByDateRange(rows, from, to, invoiceFilterDate),
+    [rows, from, to],
+  )
+
   return (
     <div className="space-y-6">
       <div>
@@ -66,7 +85,15 @@ export default function PortalInvoices() {
         <p className="mt-1 text-sm text-ink-300">Issued, partially paid, and paid invoices only.</p>
       </div>
 
-      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+      <DateRangeFilter
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        dateLabel="billing date"
+        shown={visibleRows.length}
+        total={rows.length}
+      >
         <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -86,14 +113,16 @@ export default function PortalInvoices() {
                   Loading…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-ink-400">
-                  No invoices yet.
+                  {rows.length === 0
+                    ? 'No invoices yet.'
+                    : 'No invoices in the selected date range.'}
                 </td>
               </tr>
             ) : (
-              rows.map((inv) => {
+              visibleRows.map((inv) => {
                 const billing = clientInvoiceBillingDisplay(inv)
                 const displayStatus = invoiceDisplayStatus(inv)
                 const open = () => navigate(`/portal/invoices/${inv.id}`)
@@ -139,7 +168,7 @@ export default function PortalInvoices() {
             )}
           </tbody>
         </table>
-      </div>
+      </DateRangeFilter>
     </div>
   )
 }

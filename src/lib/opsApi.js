@@ -2626,9 +2626,16 @@ export const opsApi = {
 
     let disputeId = open?.id
     if (!disputeId) {
+      const now = new Date().toISOString()
       const { data: created, error: createErr } = await supabase
         .from('invoice_disputes')
-        .insert({ invoice_id, client_id })
+        .insert({
+          invoice_id,
+          client_id,
+          ...(role === 'staff'
+            ? { staff_last_read_at: now }
+            : { client_last_read_at: now }),
+        })
         .select('id')
         .single()
       if (createErr) return mapError(createErr)
@@ -2643,9 +2650,13 @@ export const opsApi = {
     })
     if (msgErr) return mapError(msgErr)
 
+    const now = new Date().toISOString()
     await supabase
       .from('invoice_disputes')
-      .update({ updated_at: new Date().toISOString() })
+      .update({
+        updated_at: now,
+        ...(role === 'staff' ? { staff_last_read_at: now } : { client_last_read_at: now }),
+      })
       .eq('id', disputeId)
 
     return this.getInvoiceDispute(invoice_id)
@@ -2676,6 +2687,25 @@ export const opsApi = {
       })
       .eq('id', id)
       .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  /**
+   * Mark the thread as read for a role (called when they expand the section).
+   * Returns the new cursor timestamp so the UI can clear the unread badge.
+   */
+  async markDisputeRead(disputeId, role) {
+    if (!supabase) return dbUnavailable()
+    if (!disputeId) return { data: null, error: { message: 'No query selected.' } }
+    const col = role === 'staff' ? 'staff_last_read_at' : 'client_last_read_at'
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('invoice_disputes')
+      .update({ [col]: now })
+      .eq('id', disputeId)
+      .select('id, client_last_read_at, staff_last_read_at')
       .single()
     if (error) return mapError(error)
     return { data, error: null }

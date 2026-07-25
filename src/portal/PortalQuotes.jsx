@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState } from 'react'
 import { Link,
   useNavigate,
@@ -10,6 +11,13 @@ import {
   portalQuoteAwaitingApproval,
   quotationDisplayStatus,
   } from '../lib/portalQuote'
+import {
+  currentMonthStartIso,
+  documentFilterDate,
+  filterByDateRange,
+  todayIso,
+} from '../lib/dateRange'
+import { DateRangeFilter } from '../components/DateRangeFilter'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   adminBtnPrimary,
@@ -17,7 +25,6 @@ import {
   clickableDocClass,
   clickableRowClass,
   formatPula,
-  adminTableShellClass,
   adminTableClass,
   adminColSecondary,
 } from '../admin/ui'
@@ -47,6 +54,8 @@ export default function PortalQuotes() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState(null)
+  const [from, setFrom] = useState(currentMonthStartIso)
+  const [to, setTo] = useState(todayIso)
 
   useEffect(() => {
     let cancelled = false
@@ -84,6 +93,11 @@ export default function PortalQuotes() {
     showSuccess('Quotation deleted.', 'Deleted')
   }
 
+  const visibleRows = useMemo(
+    () => filterByDateRange(rows, from, to, documentFilterDate),
+    [rows, from, to],
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -99,7 +113,15 @@ export default function PortalQuotes() {
         </Link>
       </div>
 
-      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+      <DateRangeFilter
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        dateLabel="quote date"
+        shown={visibleRows.length}
+        total={rows.length}
+      >
         <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -117,17 +139,23 @@ export default function PortalQuotes() {
                   Loading…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-ink-400">
-                  No quotations yet.{' '}
-                  <Link to="/portal/quotes/new" className="font-semibold text-brand-400">
-                    Request one
-                  </Link>
+                  {rows.length === 0 ? (
+                    <>
+                      No quotations yet.{' '}
+                      <Link to="/portal/quotes/new" className="font-semibold text-brand-400">
+                        Request one
+                      </Link>
+                    </>
+                  ) : (
+                    'No quotations in the selected date range.'
+                  )}
                 </td>
               </tr>
             ) : (
-              rows.map((q) => {
+              visibleRows.map((q) => {
                 const canEdit = clientCanEditPortalQuote(q)
                 const awaiting = portalQuoteAwaitingApproval(q)
                 const open = () => navigate(`/portal/quotes/${q.id}`)
@@ -191,7 +219,7 @@ export default function PortalQuotes() {
             )}
           </tbody>
         </table>
-      </div>
+      </DateRangeFilter>
     </div>
   )
 }

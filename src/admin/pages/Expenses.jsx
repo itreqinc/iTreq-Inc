@@ -4,13 +4,18 @@ import { opsApi } from '../../lib/opsApi'
 import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
+import { DateRangeFilter } from '../../components/DateRangeFilter'
+import {
+  currentMonthStartIso,
+  filterByDateRange,
+  todayIso as rangeTodayIso,
+} from '../../lib/dateRange'
 import {
   adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
   adminFieldClass,
   adminTableClass,
-  adminTableShellClass,
   adminColSecondary,
   adminCellPad,
   activateRowKey,
@@ -65,6 +70,8 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState(null)
   const [baseline, setBaseline] = useState('')
   const [form, setForm] = useState(emptyExpenseForm)
+  const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
+  const [dateTo, setDateTo] = useState(rangeTodayIso)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -89,6 +96,11 @@ export default function ExpensesPage() {
   const activeCategories = useMemo(
     () => (categories || []).filter((c) => c.active || c.id === form.category_id),
     [categories, form.category_id],
+  )
+
+  const visibleRows = useMemo(
+    () => filterByDateRange(rows, dateFrom, dateTo, (row) => row.expense_date),
+    [rows, dateFrom, dateTo],
   )
 
   const isDirty = useMemo(
@@ -345,7 +357,15 @@ export default function ExpensesPage() {
         </form>
       ) : null}
 
-      <div className={adminTableShellClass}>
+      <DateRangeFilter
+        from={dateFrom}
+        to={dateTo}
+        onFromChange={setDateFrom}
+        onToChange={setDateTo}
+        dateLabel="expense date"
+        shown={visibleRows.length}
+        total={rows.length}
+      >
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -365,14 +385,16 @@ export default function ExpensesPage() {
                   Loading…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={7} className={`${adminCellPad} text-ink-400`}>
-                  No expenses recorded yet.
+                  {rows.length === 0
+                    ? 'No expenses recorded yet.'
+                    : 'No expenses in the selected date range.'}
                 </td>
               </tr>
             ) : (
-              rows.map((row) => {
+              visibleRows.map((row) => {
                 const open = () => openRow(row)
                 return (
                   <tr
@@ -426,7 +448,7 @@ export default function ExpensesPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </DateRangeFilter>
     </div>
   )
 }

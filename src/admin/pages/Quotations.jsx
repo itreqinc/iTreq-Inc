@@ -15,6 +15,13 @@ import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import { ClientSelect } from '../ClientSelect'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
+import { DateRangeFilter } from '../../components/DateRangeFilter'
+import {
+  currentMonthStartIso,
+  documentFilterDate,
+  filterByDateRange,
+  todayIso,
+} from '../../lib/dateRange'
 import { adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
@@ -23,7 +30,6 @@ import { adminBtnDanger,
   clickableDocClass,
   clickableRowClass,
   formatPula,
-  adminTableShellClass,
   adminTableClass,
   adminColSecondary,
 } from '../ui'
@@ -49,6 +55,8 @@ export default function QuotationsPage() {
   const [params, setParams] = useSearchParams()
   const { showError, showSuccess, confirm, prompt } = useOpsAlert()
   const [rows, setRows] = useState([])
+  const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
+  const [dateTo, setDateTo] = useState(todayIso)
   const [clients, setClients] = useState([])
   const [products, setProducts] = useState([])
   const [trackableItems, setTrackableItems] = useState([])
@@ -157,6 +165,11 @@ export default function QuotationsPage() {
   const isDirty = useMemo(
     () => snapshotQuotationForm(form) !== baseline,
     [form, baseline],
+  )
+
+  const visibleRows = useMemo(
+    () => filterByDateRange(rows, dateFrom, dateTo, documentFilterDate),
+    [rows, dateFrom, dateTo],
   )
 
   const readOnly = ['converted', 'cancelled', 'declined'].includes(form.status)
@@ -523,7 +536,15 @@ export default function QuotationsPage() {
         </form>
       ) : null}
 
-      <div className={adminTableShellClass}>
+      <DateRangeFilter
+        from={dateFrom}
+        to={dateTo}
+        onFromChange={setDateFrom}
+        onToChange={setDateTo}
+        dateLabel="quote date"
+        shown={visibleRows.length}
+        total={rows.length}
+      >
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -542,14 +563,16 @@ export default function QuotationsPage() {
                   Loading…
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-ink-400">
-                  No quotations yet.
+                  {rows.length === 0
+                    ? 'No quotations yet.'
+                    : 'No quotations in the selected date range.'}
                 </td>
               </tr>
             ) : (
-              rows.map((row) => {
+              visibleRows.map((row) => {
                 const awaiting = portalQuoteAwaitingApproval(row)
                 const open = () => openRow(row.id)
                 return (
@@ -594,7 +617,7 @@ export default function QuotationsPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </DateRangeFilter>
     </div>
   )
 }
