@@ -477,14 +477,12 @@ export default function InvoicesPage() {
               disabled={readOnly}
               value={form.issue_date}
               onChange={(issue_date) => setForm((f) => ({ ...f, issue_date }))}
-              showHint={!readOnly}
             />
             <YearMonthDaySelect
               label="Due date"
               disabled={readOnly}
               value={form.due_date}
               onChange={(due_date) => setForm((f) => ({ ...f, due_date }))}
-              showHint={!readOnly}
             />
             <label className="block sm:col-span-2 lg:col-span-3">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Notes</span>

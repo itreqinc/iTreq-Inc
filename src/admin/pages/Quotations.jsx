@@ -363,7 +363,6 @@ export default function QuotationsPage() {
               disabled={readOnly}
               value={form.issue_date}
               onChange={(issue_date) => setForm((f) => ({ ...f, issue_date }))}
-              showHint={!readOnly}
             />
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">

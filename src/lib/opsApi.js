@@ -2007,6 +2007,65 @@ export const opsApi = {
     }
   },
 
+  /**
+   * Cash-basis profit & loss for a date range.
+   * Revenue = payments received. Costs = stock purchases (purchase orders)
+   * + operating expenses. Net profit = revenue − costs.
+   */
+  async getProfitAndLossReport({ from, to }) {
+    if (!supabase) return dbUnavailable()
+
+    let poQ = supabase
+      .from('purchase_orders')
+      .select('amount, purchase_date, status')
+      .neq('status', 'cancelled')
+      .order('purchase_date', { ascending: true })
+    if (from) poQ = poQ.gte('purchase_date', from)
+    if (to) poQ = poQ.lte('purchase_date', to)
+
+    const [incomeRes, expenseRes, poRes] = await Promise.all([
+      this.getIncomeReport({ from, to }),
+      this.getExpensesReport({ from, to }),
+      poQ,
+    ])
+    if (incomeRes.error) return incomeRes
+    if (expenseRes.error) return expenseRes
+    if (poRes.error) return mapError(poRes.error)
+
+    const round = (n) => Math.round((Number(n) || 0) * 100) / 100
+
+    const poRows = poRes.data || []
+    let stockPurchases = 0
+    for (const row of poRows) stockPurchases += Number(row.amount) || 0
+    stockPurchases = round(stockPurchases)
+
+    const revenue = incomeRes.data.total
+    const operatingExpenses = expenseRes.data.total
+    const grossProfit = round(revenue - stockPurchases)
+    const totalCosts = round(stockPurchases + operatingExpenses)
+    const netProfit = round(revenue - totalCosts)
+    const margin = revenue > 0 ? Math.round((netProfit / revenue) * 1000) / 10 : null
+
+    return {
+      data: {
+        from: from || null,
+        to: to || null,
+        revenue,
+        paymentCount: incomeRes.data.paymentCount,
+        stockPurchases,
+        purchaseOrderCount: poRows.length,
+        operatingExpenses,
+        expenseCount: expenseRes.data.expenseCount,
+        grossProfit,
+        totalCosts,
+        netProfit,
+        margin,
+        expensesByCategory: expenseRes.data.byCategory,
+      },
+      error: null,
+    }
+  },
+
   async getClientStatement({ client_id, from, to }) {
     if (!supabase) return dbUnavailable()
     if (!client_id) {

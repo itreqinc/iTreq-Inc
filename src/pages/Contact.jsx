@@ -151,7 +151,7 @@ export default function Contact() {
                   <Button href={`mailto:${COMPANY.email}`}>Email us</Button>
                   <Button
                     href={`https://wa.me/${COMPANY.whatsapp.replace('+', '')}`}
-                    variant="secondary"
+                    variant="special"
                   >
                     WhatsApp
                   </Button>

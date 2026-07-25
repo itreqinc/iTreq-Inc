@@ -19,6 +19,7 @@ import {
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import { adminBtnPrimary,
   adminBtnSecondary,
+  adminBtnDanger,
   formatPula,
   adminTableShellClass,
   adminTableClass,
@@ -162,7 +163,7 @@ export default function PortalQuoteDetail() {
                 type="button"
                 onClick={handleDelete}
                 disabled={deleting}
-                className={adminBtnSecondary}
+                className={adminBtnDanger}
               >
                 {deleting ? 'Deleting…' : 'Delete'}
               </button>

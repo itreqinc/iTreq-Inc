@@ -875,13 +875,11 @@ export default function ClientsPage() {
                 label="From"
                 value={stmtFrom}
                 onChange={setStmtFrom}
-                showHint={false}
               />
               <YearMonthDaySelect
                 label="To"
                 value={stmtTo}
                 onChange={setStmtTo}
-                showHint={false}
               />
             </div>
             <div className="mt-5 flex flex-wrap justify-end gap-2">

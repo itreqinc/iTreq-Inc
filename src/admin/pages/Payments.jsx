@@ -530,7 +530,7 @@ export default function PaymentsPage() {
               isDirty={isDirty}
               disabled={saving}
               alwaysShow
-              variant="secondary"
+              variant="primary"
             />
             {editingId ? (
               <button

@@ -8,9 +8,11 @@ import {
   yearOptions,
 } from '../lib/yearMonthDay'
 import { adminFieldClass } from '../admin/ui'
+import { FieldBox } from './FieldBox'
 
 /**
  * Date picker: year → month → day, combined as YYYY-MM-DD (same pattern as iRegistry).
+ * When `label` is set, wraps in the shared FieldBox (Reports-style bordered legend).
  */
 export function YearMonthDaySelect({
   label,
@@ -23,7 +25,7 @@ export function YearMonthDaySelect({
   minYmd,
   maxYmd,
   selectClassName = adminFieldClass,
-  showHint = true,
+  className = '',
 }) {
   const now = new Date().getFullYear()
   const yMin = minYear ?? now - 5
@@ -92,70 +94,69 @@ export function YearMonthDaySelect({
     emit(year, month, d)
   }
 
-  return (
-    <div className="min-w-0">
-      {label ? (
-        <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-          {label}
-          {required ? <span className="text-red-300"> *</span> : null}
-        </span>
-      ) : null}
-      <div className="grid grid-cols-3 gap-2">
-        <div className="min-w-0">
-          <span className="sr-only">Year</span>
-          <select
-            value={year}
-            onChange={onYearChange}
-            disabled={disabled}
-            aria-label={label ? `${label} year` : 'Year'}
-            className={selectClassName}
-          >
-            <option value="">Year</option>
-            {years.map((y) => (
-              <option key={y} value={String(y)}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="min-w-0">
-          <span className="sr-only">Month</span>
-          <select
-            value={month}
-            onChange={onMonthChange}
-            disabled={disabled || !year}
-            aria-label={label ? `${label} month` : 'Month'}
-            className={selectClassName}
-          >
-            <option value="">Month</option>
-            {months.map((m) => (
-              <option key={m.value} value={String(m.value)}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="min-w-0">
-          <span className="sr-only">Day</span>
-          <select
-            value={day}
-            onChange={onDayChange}
-            disabled={disabled || !year || !month}
-            aria-label={label ? `${label} day` : 'Day'}
-            className={selectClassName}
-          >
-            <option value="">Day</option>
-            {days.map((d) => (
-              <option key={d} value={String(d)}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
+  const selects = (
+    <div className="grid grid-cols-3 gap-2">
+      <div className="min-w-0">
+        <span className="sr-only">Year</span>
+        <select
+          value={year}
+          onChange={onYearChange}
+          disabled={disabled}
+          aria-label={label ? `${label} year` : 'Year'}
+          className={selectClassName}
+        >
+          <option value="">Year</option>
+          {years.map((y) => (
+            <option key={y} value={String(y)}>
+              {y}
+            </option>
+          ))}
+        </select>
       </div>
-      {showHint ? (
-        <p className="mt-1 text-xs text-ink-500">Choose year, then month, then day.</p>
-      ) : null}
+      <div className="min-w-0">
+        <span className="sr-only">Month</span>
+        <select
+          value={month}
+          onChange={onMonthChange}
+          disabled={disabled || !year}
+          aria-label={label ? `${label} month` : 'Month'}
+          className={selectClassName}
+        >
+          <option value="">Month</option>
+          {months.map((m) => (
+            <option key={m.value} value={String(m.value)}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="min-w-0">
+        <span className="sr-only">Day</span>
+        <select
+          value={day}
+          onChange={onDayChange}
+          disabled={disabled || !year || !month}
+          aria-label={label ? `${label} day` : 'Day'}
+          className={selectClassName}
+        >
+          <option value="">Day</option>
+          {days.map((d) => (
+            <option key={d} value={String(d)}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   )
+
+  if (label) {
+    return (
+      <FieldBox label={label} align="center" required={required} className={className}>
+        {selects}
+      </FieldBox>
+    )
+  }
+
+  return <div className={`min-w-0 ${className}`.trim()}>{selects}</div>
 }

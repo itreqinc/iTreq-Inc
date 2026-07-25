@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { ROLES } from '../lib/authConfig'
+import { adminBtnPrimary, adminBtnSecondary } from '../admin/ui'
 
 export default function Unauthorized() {
   const navigate = useNavigate()
@@ -29,7 +30,7 @@ export default function Unauthorized() {
               setBypassRole(ROLES.staff)
               navigate('/admin', { replace: true })
             }}
-            className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-950 hover:bg-brand-400"
+            className={adminBtnPrimary}
           >
             Continue as staff
           </button>
@@ -39,7 +40,7 @@ export default function Unauthorized() {
               setBypassRole(ROLES.client)
               navigate('/portal', { replace: true })
             }}
-            className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-ink-200 hover:bg-white/5"
+            className={adminBtnSecondary}
           >
             Continue as client
           </button>

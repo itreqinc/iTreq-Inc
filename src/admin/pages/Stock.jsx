@@ -10,6 +10,7 @@ import { PAYMENT_METHODS,
   paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
 import { AdminIconAction } from '../AdminIconAction'
+import { FieldBox } from '../../components/FieldBox'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import {
   adminBtnPrimary,
@@ -160,6 +161,9 @@ export default function StockPage() {
   const [poSectionOpen, setPoSectionOpen] = useState(false)
   const [adjSectionOpen, setAdjSectionOpen] = useState(false)
   const [manualAdjOpen, setManualAdjOpen] = useState(false)
+  const [detailLinesOpen, setDetailLinesOpen] = useState(false)
+  const [detailReceiveOpen, setDetailReceiveOpen] = useState(false)
+  const [detailHistoryOpen, setDetailHistoryOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -205,6 +209,9 @@ export default function StockPage() {
     setDetail(data)
     setSelectedId(id)
     setView('detail')
+    setDetailLinesOpen(false)
+    setDetailReceiveOpen(false)
+    setDetailHistoryOpen(false)
     setReceiveDate(todayIso())
     setReceiveNotes('')
     const qty = {}
@@ -663,15 +670,12 @@ export default function StockPage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Paid date
-              </span>
-              <YearMonthDaySelect
-                value={poForm.purchase_date}
-                onChange={(v) => setPoForm((f) => ({ ...f, purchase_date: v }))}
-              />
-            </label>
+            <YearMonthDaySelect
+              className="sm:col-span-2"
+              label="Paid date"
+              value={poForm.purchase_date}
+              onChange={(v) => setPoForm((f) => ({ ...f, purchase_date: v }))}
+            />
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
                 Supplier
@@ -822,10 +826,13 @@ export default function StockPage() {
       {view === 'detail' && detail ? (
         <div className="max-w-2xl space-y-5">
           <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
-            <p className="font-mono text-xs text-ink-400">{detail.po_number}</p>
-            <h2 className="mt-1 font-display text-xl font-bold text-white">
+            <h2 className="text-base font-semibold text-white">Purchase Order</h2>
+            <p className="mt-0.5 font-mono text-xs font-normal text-ink-400">
+              {detail.po_number}
+            </p>
+            <p className="mt-3 font-display text-xl font-bold text-white">
               {formatPula(detail.amount)}
-            </h2>
+            </p>
             <p className="mt-1 text-sm text-ink-300">
               Paid {detail.purchase_date}
               {detail.supplier ? ` · ${detail.supplier}` : ''}
@@ -841,233 +848,238 @@ export default function StockPage() {
               <p className="mt-2 text-sm text-ink-400">{detail.notes}</p>
             ) : null}
 
-            <div className={`mt-4 ${adminTableShellSmClass}`}>
-              <table className={adminTableClass}>
-                <thead className="border-b border-white/10 text-xs uppercase tracking-wider text-ink-400">
-                  <tr>
-                    <th className="px-3 py-2">Product</th>
-                    <th className="px-3 py-2 text-right">Ordered</th>
-                    <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Received</th>
-                    <th className="px-3 py-2 text-right">Left</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {(detail.purchase_order_lines || []).map((line) => (
-                    <tr key={line.id}>
-                      <td className="min-w-0 break-words px-3 py-2 text-ink-200">
-                        {productLabel(line)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-ink-300">
-                        {line.quantity_ordered}
-                      </td>
-                      <td className={`px-3 py-2 text-right text-ink-300 ${adminColSecondary}`}>
-                        {line.quantity_received}
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium text-ink-100">
-                        {lineRemaining(line)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-4 border-t border-white/10 pt-4">
+              <CollapsiblePanel
+                open={detailLinesOpen}
+                onToggle={() => setDetailLinesOpen((v) => !v)}
+                title="Ordered items"
+                description="Products on this purchase order and what’s still outstanding."
+              >
+                <div className={adminTableShellSmClass}>
+                  <table className={adminTableClass}>
+                    <thead className="border-b border-white/10 text-xs uppercase tracking-wider text-ink-400">
+                      <tr>
+                        <th className="px-3 py-2">Product</th>
+                        <th className="px-3 py-2 text-right">Ordered</th>
+                        <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Received</th>
+                        <th className="px-3 py-2 text-right">Left</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {(detail.purchase_order_lines || []).map((line) => (
+                        <tr key={line.id}>
+                          <td className="min-w-0 break-words px-3 py-2 text-ink-200">
+                            {productLabel(line)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-ink-300">
+                            {line.quantity_ordered}
+                          </td>
+                          <td className={`px-3 py-2 text-right text-ink-300 ${adminColSecondary}`}>
+                            {line.quantity_received}
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-ink-100">
+                            {lineRemaining(line)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CollapsiblePanel>
             </div>
           </div>
 
           {detail.status === 'open' ? (
-            <form
-              onSubmit={handleReceive}
-              className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
-            >
-              <div>
-                <h3 className="text-sm font-semibold text-white">Receive delivery</h3>
-                <p className="mt-0.5 text-xs text-ink-400">
-                  Enter quantities arriving today (or pick the delivery date). Partial OK.
-                </p>
-              </div>
+            <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+              <CollapsiblePanel
+                open={detailReceiveOpen}
+                onToggle={() => setDetailReceiveOpen((v) => !v)}
+                title="Receive delivery"
+                description="Enter quantities arriving today (or pick the delivery date). Partial OK."
+              >
+                <form onSubmit={handleReceive} className="space-y-4">
+                  <YearMonthDaySelect
+                    label="Received date"
+                    value={receiveDate}
+                    onChange={setReceiveDate}
+                  />
 
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Received date
-                </span>
-                <YearMonthDaySelect value={receiveDate} onChange={setReceiveDate} />
-              </label>
+                  <div className="space-y-3">
+                    {(detail.purchase_order_lines || []).map((line) => {
+                      const left = lineRemaining(line)
+                      if (left <= 0) return null
+                      return (
+                        <FieldBox key={line.id} label={productLabel(line)}>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pl-2">
+                            <p className="text-xs text-ink-500">{left} outstanding</p>
+                            <input
+                              type="number"
+                              min="0"
+                              max={left}
+                              step="1"
+                              className={`${adminFieldClass} w-24`}
+                              value={receiveQty[line.id] ?? ''}
+                              onChange={(e) =>
+                                setReceiveQty((q) => ({ ...q, [line.id]: e.target.value }))
+                              }
+                              placeholder="0"
+                            />
+                          </div>
+                        </FieldBox>
+                      )
+                    })}
+                  </div>
 
-              <div className="space-y-2">
-                {(detail.purchase_order_lines || []).map((line) => {
-                  const left = lineRemaining(line)
-                  if (left <= 0) return null
-                  return (
-                    <div
-                      key={line.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 px-3 py-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-ink-200">{productLabel(line)}</p>
-                        <p className="text-xs text-ink-500">{left} outstanding</p>
-                      </div>
-                      <input
-                        type="number"
-                        min="0"
-                        max={left}
-                        step="1"
-                        className={`${adminFieldClass} w-24`}
-                        value={receiveQty[line.id] ?? ''}
-                        onChange={(e) =>
-                          setReceiveQty((q) => ({ ...q, [line.id]: e.target.value }))
-                        }
-                        placeholder="0"
-                      />
-                    </div>
-                  )
-                })}
-              </div>
+                  <label className="block">
+                    <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                      Delivery notes
+                    </span>
+                    <input
+                      className={adminFieldClass}
+                      value={receiveNotes}
+                      onChange={(e) => setReceiveNotes(e.target.value)}
+                      placeholder="Optional"
+                    />
+                  </label>
 
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Delivery notes
-                </span>
-                <input
-                  className={adminFieldClass}
-                  value={receiveNotes}
-                  onChange={(e) => setReceiveNotes(e.target.value)}
-                  placeholder="Optional"
-                />
-              </label>
-
-              <button type="submit" disabled={saving} className={adminBtnPrimary}>
-                {saving ? 'Saving…' : 'Record delivery'}
-              </button>
-            </form>
+                  <button type="submit" disabled={saving} className={adminBtnPrimary}>
+                    {saving ? 'Saving…' : 'Record delivery'}
+                  </button>
+                </form>
+              </CollapsiblePanel>
+            </div>
           ) : null}
 
           {(detail.purchase_receipts || []).length > 0 ? (
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold text-white">Delivery history</h3>
-              <ul className="divide-y divide-white/10 rounded-2xl border border-white/10">
-                {detail.purchase_receipts.map((r) => {
-                  const lines = r.purchase_receipt_lines || []
-                  const editing = editingReceiptId === r.id
+            <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+              <CollapsiblePanel
+                open={detailHistoryOpen}
+                onToggle={() => setDetailHistoryOpen((v) => !v)}
+                title="Delivery history"
+                description="Past receipts against this purchase order."
+              >
+                <ul className="divide-y divide-white/10 rounded-xl border border-white/10">
+                  {detail.purchase_receipts.map((r) => {
+                    const lines = r.purchase_receipt_lines || []
+                    const editing = editingReceiptId === r.id
 
-                  if (editing) {
-                    return (
-                      <li key={r.id} className="px-4 py-3">
-                        <form onSubmit={handleSaveReceiptEdit} className="space-y-3">
-                          <label className="block">
-                            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                              Received date
-                            </span>
-                            <YearMonthDaySelect value={editDate} onChange={setEditDate} />
-                          </label>
-                          <div className="space-y-2">
-                            {lines.map((line) => {
-                              const max = maxEditableQty(line, detail.purchase_order_lines)
-                              return (
-                                <div
-                                  key={line.id}
-                                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 px-3 py-2"
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm text-ink-200">
-                                      {receiptLineLabel(line, detail.purchase_order_lines)}
-                                    </p>
-                                    <p className="text-xs text-ink-500">Max {max}</p>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={max}
-                                    step="1"
-                                    className={`${adminFieldClass} w-24`}
-                                    value={editQty[line.id] ?? ''}
-                                    onChange={(e) =>
-                                      setEditQty((q) => ({ ...q, [line.id]: e.target.value }))
-                                    }
-                                  />
-                                </div>
-                              )
-                            })}
-                          </div>
-                          <label className="block">
-                            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                              Notes
-                            </span>
-                            <input
-                              className={adminFieldClass}
-                              value={editNotes}
-                              onChange={(e) => setEditNotes(e.target.value)}
+                    if (editing) {
+                      return (
+                        <li key={r.id} className="px-4 py-3">
+                          <form onSubmit={handleSaveReceiptEdit} className="space-y-3">
+                            <YearMonthDaySelect
+                              label="Received date"
+                              value={editDate}
+                              onChange={setEditDate}
                             />
-                          </label>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="submit"
-                              disabled={saving}
-                              className={adminBtnPrimary}
-                            >
-                              {saving ? 'Saving…' : 'Save delivery'}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={saving}
-                              onClick={cancelEditReceipt}
-                              className={adminBtnSecondary}
-                            >
-                              Cancel
-                            </button>
+                            <div className="space-y-3">
+                              {lines.map((line) => {
+                                const max = maxEditableQty(line, detail.purchase_order_lines)
+                                return (
+                                  <FieldBox
+                                    key={line.id}
+                                    label={receiptLineLabel(line, detail.purchase_order_lines)}
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2 pl-2">
+                                      <p className="text-xs text-ink-500">Max {max}</p>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max={max}
+                                        step="1"
+                                        className={`${adminFieldClass} w-24`}
+                                        value={editQty[line.id] ?? ''}
+                                        onChange={(e) =>
+                                          setEditQty((q) => ({ ...q, [line.id]: e.target.value }))
+                                        }
+                                      />
+                                    </div>
+                                  </FieldBox>
+                                )
+                              })}
+                            </div>
+                            <label className="block">
+                              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                                Notes
+                              </span>
+                              <input
+                                className={adminFieldClass}
+                                value={editNotes}
+                                onChange={(e) => setEditNotes(e.target.value)}
+                              />
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="submit"
+                                disabled={saving}
+                                className={adminBtnPrimary}
+                              >
+                                {saving ? 'Saving…' : 'Save delivery'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={cancelEditReceipt}
+                                className={adminBtnSecondary}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        </li>
+                      )
+                    }
+
+                    return (
+                      <li key={r.id} className="px-4 py-3 text-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-ink-200">{r.received_date}</p>
+                            {r.notes ? (
+                              <p className="mt-0.5 text-xs text-ink-500">{r.notes}</p>
+                            ) : null}
+                            <ul className="mt-2 space-y-1">
+                              {lines.length === 0 ? (
+                                <li className="text-xs text-ink-500">No line items</li>
+                              ) : (
+                                lines.map((line) => (
+                                  <li
+                                    key={line.id}
+                                    className="flex flex-wrap items-baseline justify-between gap-2 text-ink-300"
+                                  >
+                                    <span>
+                                      {receiptLineLabel(line, detail.purchase_order_lines)}
+                                    </span>
+                                    <span className="font-medium text-ink-100">
+                                      × {line.quantity}
+                                    </span>
+                                  </li>
+                                ))
+                              )}
+                            </ul>
                           </div>
-                        </form>
+                          <div className="flex items-center gap-0.5">
+                            <AdminIconAction
+                              label="Edit delivery"
+                              icon="pencil"
+                              disabled={saving || Boolean(editingReceiptId)}
+                              onClick={() => startEditReceipt(r)}
+                            />
+                            <AdminIconAction
+                              label="Cancel delivery"
+                              icon="x"
+                              tone="danger"
+                              disabled={saving || Boolean(editingReceiptId)}
+                              onClick={() => handleCancelReceipt(r)}
+                            />
+                          </div>
+                        </div>
                       </li>
                     )
-                  }
-
-                  return (
-                    <li key={r.id} className="px-4 py-3 text-sm">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-ink-200">{r.received_date}</p>
-                          {r.notes ? (
-                            <p className="mt-0.5 text-xs text-ink-500">{r.notes}</p>
-                          ) : null}
-                          <ul className="mt-2 space-y-1">
-                            {lines.length === 0 ? (
-                              <li className="text-xs text-ink-500">No line items</li>
-                            ) : (
-                              lines.map((line) => (
-                                <li
-                                  key={line.id}
-                                  className="flex flex-wrap items-baseline justify-between gap-2 text-ink-300"
-                                >
-                                  <span>
-                                    {receiptLineLabel(line, detail.purchase_order_lines)}
-                                  </span>
-                                  <span className="font-medium text-ink-100">
-                                    × {line.quantity}
-                                  </span>
-                                </li>
-                              ))
-                            )}
-                          </ul>
-                        </div>
-                        <div className="flex items-center gap-0.5">
-                          <AdminIconAction
-                            label="Edit delivery"
-                            icon="pencil"
-                            disabled={saving || Boolean(editingReceiptId)}
-                            onClick={() => startEditReceipt(r)}
-                          />
-                          <AdminIconAction
-                            label="Cancel delivery"
-                            icon="x"
-                            tone="danger"
-                            disabled={saving || Boolean(editingReceiptId)}
-                            onClick={() => handleCancelReceipt(r)}
-                          />
-                        </div>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
+                  })}
+                </ul>
+              </CollapsiblePanel>
+            </div>
           ) : null}
         </div>
       ) : null}

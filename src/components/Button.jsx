@@ -17,9 +17,12 @@ export function Button({
     primary:
       'bg-brand-500 text-ink-950 shadow-[0_0_24px_rgba(109,192,63,0.28)] hover:bg-brand-400 hover:shadow-[0_0_32px_rgba(109,192,63,0.45)] active:scale-[0.98]',
     secondary:
-      'border border-azure-500/45 bg-azure-500/10 text-azure-300 backdrop-blur hover:border-azure-400/60 hover:bg-azure-500/20 hover:text-azure-200',
+      'border border-white/25 bg-white/10 text-white backdrop-blur hover:border-white/40 hover:bg-white/15',
     ghost:
       'border border-white/15 bg-white/5 text-white hover:border-white/25 hover:bg-white/10',
+    /** Reserved for special actions (e.g. WhatsApp) — the only non-brand accent. */
+    special:
+      'border border-azure-500/45 bg-azure-500/10 text-azure-300 backdrop-blur hover:border-azure-400/60 hover:bg-azure-500/20 hover:text-azure-200',
   }
 
   const classes = `${base} ${variants[variant]} ${className}`

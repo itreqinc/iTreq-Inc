@@ -117,14 +117,8 @@ export default function PortalStatement() {
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4">
-        <label className="block">
-          <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">From</span>
-          <YearMonthDaySelect value={from} onChange={setFrom} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">To</span>
-          <YearMonthDaySelect value={to} onChange={setTo} />
-        </label>
+        <YearMonthDaySelect label="From" value={from} onChange={setFrom} />
+        <YearMonthDaySelect label="To" value={to} onChange={setTo} />
         <button type="button" onClick={load} disabled={loading} className={adminBtnSecondary}>
           {loading ? 'Loading…' : 'Refresh'}
         </button>

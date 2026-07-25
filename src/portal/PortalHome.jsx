@@ -5,6 +5,8 @@ import { paymentMethodLabel } from '../lib/payments'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
+  adminBtnPrimary,
+  adminBtnSecondary,
   adminTableShellClass,
   adminTableClass,
   adminColSecondary,
@@ -69,22 +71,13 @@ export default function PortalHome() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link
-          to="/portal/quotes/new"
-          className="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-950 hover:bg-brand-400"
-        >
+        <Link to="/portal/quotes/new" className={adminBtnPrimary}>
           Request quote
         </Link>
-        <Link
-          to="/portal/invoices"
-          className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-ink-200 hover:bg-white/5"
-        >
+        <Link to="/portal/invoices" className={adminBtnSecondary}>
           View invoices
         </Link>
-        <Link
-          to="/portal/statement"
-          className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-ink-200 hover:bg-white/5"
-        >
+        <Link to="/portal/statement" className={adminBtnSecondary}>
           View statement
         </Link>
       </div>

@@ -25,6 +25,12 @@ import {
   fillIncomeMethodReportPrintWindow,
   prepareIncomeMethodReportDocument,
 } from '../../lib/incomeMethodReportDocument'
+import {
+  openProfitAndLossReportPrintWindow,
+  closeProfitAndLossReportPrintWindow,
+  fillProfitAndLossReportPrintWindow,
+  prepareProfitAndLossReportDocument,
+} from '../../lib/profitAndLossReportDocument'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import {
@@ -109,26 +115,11 @@ function CollapsibleSection({ open, onToggle, title, description, className, chi
 const reportSectionClass =
   'w-full min-w-0 max-w-3xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5'
 
-function DateRangeBox({ label, children }) {
-  return (
-    <fieldset className="min-w-0 rounded-xl border border-white/10 bg-ink-950/60 px-3.5 pb-3.5 pt-1">
-      <legend className="mx-auto w-auto px-2 text-center text-xs font-medium uppercase tracking-wider text-ink-300">
-        {label}
-      </legend>
-      {children}
-    </fieldset>
-  )
-}
-
 function DateRangeFields({ from, to, onFromChange, onToChange }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <DateRangeBox label="From">
-        <YearMonthDaySelect value={from} onChange={onFromChange} showHint={false} />
-      </DateRangeBox>
-      <DateRangeBox label="To">
-        <YearMonthDaySelect value={to} onChange={onToChange} showHint={false} />
-      </DateRangeBox>
+      <YearMonthDaySelect label="From" value={from} onChange={onFromChange} />
+      <YearMonthDaySelect label="To" value={to} onChange={onToChange} />
     </div>
   )
 }
@@ -137,6 +128,12 @@ export default function ReportsPage() {
   const navigate = useNavigate()
   const { showError } = useOpsAlert()
   const [clients, setClients] = useState([])
+
+  const [plFrom, setPlFrom] = useState(monthStartIso())
+  const [plTo, setPlTo] = useState(todayIso())
+  const [pl, setPl] = useState(null)
+  const [plLoading, setPlLoading] = useState(false)
+  const [plPrinting, setPlPrinting] = useState(false)
 
   const [compareFrom, setCompareFrom] = useState(monthStartIso())
   const [compareTo, setCompareTo] = useState(todayIso())
@@ -175,6 +172,47 @@ export default function ReportsPage() {
       else setClients(data || [])
     })
   }, [showError])
+
+  const runProfitAndLoss = useCallback(async () => {
+    setPlLoading(true)
+    const { data, error } = await opsApi.getProfitAndLossReport({
+      from: plFrom,
+      to: plTo,
+    })
+    setPlLoading(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    setPl(data)
+  }, [plFrom, plTo, showError])
+
+  async function printProfitAndLoss() {
+    if (!pl) return
+
+    const opened = openProfitAndLossReportPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+
+    setPlPrinting(true)
+    const settingsRes = await opsApi.getSettings()
+    setPlPrinting(false)
+    if (settingsRes.error) {
+      closeProfitAndLossReportPrintWindow(win)
+      showError(settingsRes.error.message)
+      return
+    }
+
+    const { model } = prepareProfitAndLossReportDocument({
+      report: pl,
+      settings: settingsRes.data,
+    })
+    const result = fillProfitAndLossReportPrintWindow(win, model)
+    if (!result.ok) showError(result.message)
+  }
 
   const runCompare = useCallback(async () => {
     setCompareLoading(true)
@@ -328,8 +366,8 @@ export default function ReportsPage() {
       <div className="print:hidden">
         <h1 className="font-display text-2xl font-bold text-white">Reports</h1>
         <p className="mt-1 text-sm text-ink-300">
-          Compare invoices issued (expected) with payments collected, income and expense totals, and
-          client statements.
+          Compare invoices issued with payments collected, income and expense totals, profit &amp;
+          loss, and client statements.
         </p>
       </div>
 
@@ -753,6 +791,152 @@ export default function ReportsPage() {
                 className={`${adminBtnSecondary} shrink-0`}
               >
                 {expensePrinting ? 'Opening…' : 'Print / Save PDF'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        open={openSection === 'pl'}
+        onToggle={() => toggleSection('pl')}
+        className={`${reportSectionClass} print:hidden`}
+        title="Profit & loss"
+        description={
+          <>
+            Cash basis. <strong className="text-ink-300">Revenue</strong> = payments received in the
+            range. <strong className="text-ink-300">Costs</strong> = stock purchases (purchase
+            orders) plus operating expenses dated in the range.
+          </>
+        }
+      >
+        <DateRangeFields
+          from={plFrom}
+          to={plTo}
+          onFromChange={setPlFrom}
+          onToChange={setPlTo}
+        />
+        <button
+          type="button"
+          disabled={plLoading}
+          onClick={runProfitAndLoss}
+          className={adminBtnPrimary}
+        >
+          {plLoading ? 'Loading…' : 'Run report'}
+        </button>
+
+        {pl ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+                <p className="text-xs uppercase tracking-wider text-ink-400">Revenue</p>
+                <p className="mt-1 text-lg font-semibold text-brand-300">
+                  {formatPula(pl.revenue)}
+                </p>
+                <p className="text-xs text-ink-500">{pl.paymentCount} payment(s)</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+                <p className="text-xs uppercase tracking-wider text-ink-400">Stock purchases</p>
+                <p className="mt-1 text-lg font-semibold text-white">
+                  {formatPula(pl.stockPurchases)}
+                </p>
+                <p className="text-xs text-ink-500">{pl.purchaseOrderCount} purchase order(s)</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+                <p className="text-xs uppercase tracking-wider text-ink-400">Operating expenses</p>
+                <p className="mt-1 text-lg font-semibold text-white">
+                  {formatPula(pl.operatingExpenses)}
+                </p>
+                <p className="text-xs text-ink-500">{pl.expenseCount} expense(s)</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+                <p className="text-xs uppercase tracking-wider text-ink-400">Net profit</p>
+                <p
+                  className={`mt-1 text-lg font-semibold ${
+                    pl.netProfit > 0.001
+                      ? 'text-brand-300'
+                      : pl.netProfit < -0.001
+                        ? 'text-amber-200'
+                        : 'text-white'
+                  }`}
+                >
+                  {formatPula(pl.netProfit)}
+                </p>
+                <p className="text-xs text-ink-500">
+                  {pl.margin != null ? `${pl.margin}% of revenue` : 'No revenue in range'}
+                </p>
+              </div>
+            </div>
+
+            <div className={adminTableShellClass}>
+              <table className={adminTableClass}>
+                <tbody className="divide-y divide-white/5">
+                  <tr className="bg-ink-900/20">
+                    <td className={`${adminCellPad} text-ink-200`}>Revenue (payments received)</td>
+                    <td className={`${adminCellPad} text-right font-medium text-brand-300`}>
+                      {formatPula(pl.revenue)}
+                    </td>
+                  </tr>
+                  <tr className="bg-ink-900/20">
+                    <td className={`${adminCellPad} text-ink-300`}>Less: stock purchases</td>
+                    <td className={`${adminCellPad} text-right text-ink-200`}>
+                      −{formatPula(pl.stockPurchases)}
+                    </td>
+                  </tr>
+                  <tr className="bg-ink-900/40">
+                    <td className={`${adminCellPad} font-semibold text-ink-100`}>Gross profit</td>
+                    <td className={`${adminCellPad} text-right font-semibold text-ink-100`}>
+                      {formatPula(pl.grossProfit)}
+                    </td>
+                  </tr>
+                  <tr className="bg-ink-900/20">
+                    <td className={`${adminCellPad} text-ink-300`}>Less: operating expenses</td>
+                    <td className={`${adminCellPad} text-right text-ink-200`}>
+                      −{formatPula(pl.operatingExpenses)}
+                    </td>
+                  </tr>
+                  <tr className="border-t-2 border-white/20 bg-ink-900/60">
+                    <td className={`${adminCellPad} font-bold text-white`}>Net profit</td>
+                    <td
+                      className={`${adminCellPad} text-right font-bold ${
+                        pl.netProfit >= 0 ? 'text-brand-300' : 'text-amber-200'
+                      }`}
+                    >
+                      {formatPula(pl.netProfit)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {pl.expensesByCategory?.length ? (
+              <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wider text-ink-400">
+                  Operating expenses by category
+                </p>
+                <ul className="mt-2 space-y-1 text-ink-300">
+                  {pl.expensesByCategory.map((row) => (
+                    <li key={row.category} className="flex justify-between gap-4">
+                      <span className="min-w-0 break-words">{row.category}</span>
+                      <span className="shrink-0">{formatPula(row.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
+              <p className="min-w-0 text-xs text-ink-500">
+                {pl.from || '—'} → {pl.to || '—'}. Stock purchases are counted when paid (purchase
+                order date), not when sold.
+              </p>
+              <button
+                type="button"
+                disabled={plPrinting}
+                onClick={printProfitAndLoss}
+                className={`${adminBtnSecondary} shrink-0`}
+              >
+                {plPrinting ? 'Opening…' : 'Print / Save PDF'}
               </button>
             </div>
           </div>
