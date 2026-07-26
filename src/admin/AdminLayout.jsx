@@ -1,4 +1,4 @@
-import { NavLink, Outlet, Link } from 'react-router-dom'
+import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { ROLES } from '../lib/authConfig'
 import { Logo } from '../components/Logo'
@@ -20,7 +20,8 @@ const nav = [
 ]
 
 export function AdminLayout() {
-  const { user, authBypass, setBypassRole } = useAuth()
+  const navigate = useNavigate()
+  const { user, authBypass, setBypassRole, logout } = useAuth()
 
   return (
     <OpsAlertProvider>
@@ -50,12 +51,24 @@ export function AdminLayout() {
                     onChange={(e) => setBypassRole(e.target.value)}
                     className="rounded-md border border-white/10 bg-ink-950 px-2 py-1 text-white"
                   >
+                    <option value={ROLES.admin}>admin</option>
                     <option value={ROLES.staff}>staff</option>
                     <option value={ROLES.client}>client</option>
                   </select>
                 </label>
               </>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={async () => {
+                  await logout()
+                  navigate('/login', { replace: true })
+                }}
+                className="font-semibold text-ink-400 hover:text-ink-200"
+              >
+                Sign out
+              </button>
+            )}
             <span className="text-ink-400">
               {user?.name || 'User'} · <span className="text-ink-200">{user?.role}</span>
             </span>

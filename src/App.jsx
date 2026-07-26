@@ -34,7 +34,7 @@ import Contact from './pages/Contact'
 import Login from './pages/Login'
 import Unauthorized from './pages/Unauthorized'
 import RoleRedirect from './pages/RoleRedirect'
-import { ROLES } from './lib/authConfig'
+import { ROLES, STAFF_LIKE_ROLES } from './lib/authConfig'
 
 export default function App() {
   return (
@@ -55,7 +55,7 @@ export default function App() {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute allowedRoles={[ROLES.staff]}>
+          <ProtectedRoute allowedRoles={STAFF_LIKE_ROLES}>
             <AdminLayout />
           </ProtectedRoute>
         }

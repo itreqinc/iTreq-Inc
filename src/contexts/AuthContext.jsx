@@ -10,16 +10,20 @@ import {
   AUTH_BYPASS,
   BYPASS_ROLE_KEY,
   ROLES,
+  isStaffLike,
   normalizeRole,
 } from '../lib/authConfig'
-import { invokeFn } from '../lib/invokeFn'
+import { authAction } from '../lib/authApi'
 
 const AuthContext = createContext(null)
 
 function readBypassRole() {
   try {
     const stored = localStorage.getItem(BYPASS_ROLE_KEY)
-    if (stored === ROLES.client || stored === ROLES.staff) return stored
+    const role = normalizeRole(stored)
+    if (role === ROLES.client || role === ROLES.staff || role === ROLES.admin) {
+      return role
+    }
   } catch {
     /* ignore */
   }
@@ -27,10 +31,20 @@ function readBypassRole() {
 }
 
 function bypassUser(role) {
+  const r = normalizeRole(role)
+  const name =
+    r === ROLES.client
+      ? 'Dev Client'
+      : r === ROLES.admin
+        ? 'Dev Admin'
+        : 'Dev Staff'
   return {
-    id: `bypass-${role}`,
-    role: normalizeRole(role),
-    name: role === ROLES.client ? 'Dev Client' : 'Dev Staff',
+    id: `bypass-${r}`,
+    role: r,
+    name,
+    email: null,
+    phone: null,
+    client_id: null,
     bypass: true,
   }
 }
@@ -43,11 +57,7 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('session')
     try {
       if (token && !AUTH_BYPASS) {
-        await invokeFn(
-          'logout',
-          { body: { session_token: token } },
-          { withAuth: false },
-        )
+        await authAction('logout', { session_token: token }, { withAuth: false })
       }
     } catch {
       /* clear locally anyway */
@@ -66,9 +76,9 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const { data, error } = await invokeFn(
-        'validate-session',
-        { headers: { Authorization: `Bearer ${token}` } },
+      const { data, error } = await authAction(
+        'validate_session',
+        { session_token: token },
         { withAuth: false },
       )
 
@@ -92,15 +102,36 @@ export function AuthProvider({ children }) {
   }, [])
 
   const loginWithToken = useCallback(
-    async (token) => {
+    async (token, userFromLogin = null) => {
       localStorage.setItem('session', token)
+      if (userFromLogin) {
+        setUser(userFromLogin)
+        setLoading(false)
+        return
+      }
       await validateSession(token)
     },
     [validateSession],
   )
 
+  const applySession = useCallback(async (data) => {
+    if (!data?.session_token || !data?.user) {
+      throw new Error(data?.message || 'Login failed')
+    }
+    localStorage.setItem('session', data.session_token)
+    setUser(data.user)
+    setLoading(false)
+    return data.user
+  }, [])
+
   const setBypassRole = useCallback((role) => {
-    const next = normalizeRole(role) === ROLES.client ? ROLES.client : ROLES.staff
+    const raw = normalizeRole(role)
+    const next =
+      raw === ROLES.client
+        ? ROLES.client
+        : raw === ROLES.admin
+          ? ROLES.admin
+          : ROLES.staff
     try {
       localStorage.setItem(BYPASS_ROLE_KEY, next)
     } catch {
@@ -127,10 +158,12 @@ export function AuthProvider({ children }) {
       loading,
       authBypass: AUTH_BYPASS,
       loginWithToken,
+      applySession,
       logout,
       setBypassRole,
+      isStaffLike: user ? isStaffLike(user.role) : false,
     }),
-    [user, loading, loginWithToken, logout, setBypassRole],
+    [user, loading, loginWithToken, applySession, logout, setBypassRole],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

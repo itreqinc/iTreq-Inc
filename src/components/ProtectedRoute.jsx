@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { normalizeRole, ROLES } from '../lib/authConfig'
+import { isStaffLike, normalizeRole, ROLES } from '../lib/authConfig'
 
 export function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth()
@@ -29,9 +29,8 @@ export function ProtectedRoute({ children, allowedRoles }) {
     const ur = normalizeRole(user.role)
     const ok = allowedRoles.some((r) => normalizeRole(r) === ur)
     if (!ok) {
-      // Send each role to its own home instead of a dead-end unauthorized page.
       if (ur === ROLES.client) return <Navigate to="/portal" replace />
-      if (ur === ROLES.staff) return <Navigate to="/admin" replace />
+      if (isStaffLike(ur)) return <Navigate to="/admin" replace />
       return <Navigate to="/unauthorized" replace />
     }
   }

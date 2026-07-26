@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
 import { paymentMethodLabel, summarizeReceivables } from '../lib/payments'
@@ -35,6 +35,8 @@ export default function PortalHome() {
   const { clientId, client } = useOutletContext()
   const { showError } = useOpsAlert()
   const [statement, setStatement] = useState(null)
+  const [invoices, setInvoices] = useState([])
+  const [unreadByInvoice, setUnreadByInvoice] = useState({})
   const [receivables, setReceivables] = useState(null)
   const [credit, setCredit] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -46,7 +48,8 @@ export default function PortalHome() {
       opsApi.getClientStatement({ client_id: clientId }),
       opsApi.listInvoices({ client_id: clientId, forPortal: true }),
       opsApi.getClientCreditBalance(clientId),
-    ]).then(([stmtRes, invRes, creditRes]) => {
+      opsApi.listInvoiceUnreadCounts({ role: 'client', client_id: clientId }),
+    ]).then(([stmtRes, invRes, creditRes, unreadRes]) => {
       if (cancelled) return
       setLoading(false)
       if (stmtRes.error) {
@@ -57,16 +60,32 @@ export default function PortalHome() {
       if (invRes.error) {
         showError(invRes.error.message)
       } else {
-        setReceivables(summarizeReceivables(invRes.data || []))
+        const list = invRes.data || []
+        setInvoices(list)
+        setReceivables(summarizeReceivables(list))
       }
       if (!creditRes.error) {
         setCredit(creditRes.data?.balance || 0)
+      }
+      if (unreadRes.error) {
+        showError(unreadRes.error.message)
+      } else {
+        setUnreadByInvoice(unreadRes.data || {})
       }
     })
     return () => {
       cancelled = true
     }
   }, [clientId, showError])
+
+  const unreadInvoices = useMemo(() => {
+    return invoices
+      .filter((inv) => (unreadByInvoice[inv.id] || 0) > 0)
+      .map((inv) => ({
+        ...inv,
+        unread: unreadByInvoice[inv.id] || 0,
+      }))
+  }, [invoices, unreadByInvoice])
 
   const recent = (statement?.lines || [])
     .filter((l) => !l.inactive)
@@ -154,6 +173,46 @@ export default function PortalHome() {
         </Link>
       </div>
 
+      {!loading && unreadInvoices.length > 0 ? (
+        <section className={`${adminTableShellClass} bg-ink-900/40`}>
+          <div className="border-b border-white/10 px-4 py-3">
+            <h2 className="text-sm font-semibold text-white">
+              New replies{' '}
+              <span className="font-semibold tabular-nums text-ink-300">
+                ({unreadInvoices.length})
+              </span>
+            </h2>
+            <p className="mt-0.5 text-xs text-ink-400">
+              Open an invoice to read the message from iTreq Inc.
+            </p>
+          </div>
+          <ul className="divide-y divide-white/5">
+            {unreadInvoices.map((inv) => (
+              <li key={inv.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/portal/invoices/${inv.id}`)}
+                  className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.03]"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white">
+                      <span className={clickableDocClass}>{inv.number || 'Invoice'}</span>
+                      <span className="ml-2 inline-flex rounded-md bg-amber-500/25 px-2 py-0.5 text-xs font-semibold text-amber-100">
+                        {inv.unread === 1 ? '1 new' : `${inv.unread} new`}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-400">
+                      Balance due {formatPula(inv.total - (inv.amount_paid || 0))}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold text-brand-400">View</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className={`${adminTableShellClass} bg-ink-900/40`}>
         <div className="border-b border-white/10 px-4 py-3">
           <h2 className="text-sm font-semibold text-white">Recent activity</h2>
@@ -181,6 +240,8 @@ export default function PortalHome() {
                       ? `/portal/payments/${line.id}`
                       : `/portal/invoices/${line.id}`,
                   )
+                const unread =
+                  line.type === 'invoice' ? unreadByInvoice[line.id] || 0 : 0
                 const label =
                   line.type === 'invoice'
                     ? `Invoice ${line.label}`
@@ -199,6 +260,11 @@ export default function PortalHome() {
                     <td className="whitespace-nowrap px-3 py-2 text-ink-300 sm:px-4">{line.sortDate}</td>
                     <td className="min-w-0 break-words px-3 py-2 text-ink-200 sm:px-4">
                       {openable ? <span className={clickableDocClass}>{label}</span> : label}
+                      {unread > 0 ? (
+                        <span className="ml-2 inline-flex rounded-md bg-amber-500/25 px-2 py-0.5 text-xs font-semibold text-amber-100">
+                          {unread === 1 ? '1 new' : `${unread} new`}
+                        </span>
+                      ) : null}
                       <span className="mt-0.5 block tabular-nums text-xs text-ink-400 sm:hidden">
                         {line.debit
                           ? formatPula(line.debit)

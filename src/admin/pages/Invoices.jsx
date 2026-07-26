@@ -12,6 +12,7 @@ import {
   filterByDateRange,
   todayIso,
 } from '../../lib/dateRange'
+import { withUnreadRows } from '../../lib/invoiceDisputes'
 import { opsApi } from '../../lib/opsApi'
 import { emptyLine,
   mapDocLinesForEditor } from '../../lib/billing'
@@ -102,6 +103,7 @@ export default function InvoicesPage() {
   const [taxRate, setTaxRate] = useState(0)
   const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
   const [dateTo, setDateTo] = useState(todayIso)
+  const [unreadByInvoice, setUnreadByInvoice] = useState({})
   const [form, setForm] = useState({
     client_id: '',
     issue_date: '',
@@ -117,12 +119,13 @@ export default function InvoicesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inv, c, p, s, t] = await Promise.all([
+    const [inv, c, p, s, t, unread] = await Promise.all([
       opsApi.listInvoices(),
       opsApi.listClients(),
       opsApi.listProducts({ activeOnly: true }),
       opsApi.getSettings(),
       opsApi.listTrackableItems({ withComponents: true }),
+      opsApi.listInvoiceUnreadCounts({ role: 'staff' }),
     ])
     setLoading(false)
     if (inv.error) {
@@ -135,6 +138,8 @@ export default function InvoicesPage() {
     setTaxRate(Number(s.data?.default_tax_rate) || 0)
     if (t.error) showError(t.error.message)
     else setTrackableItems(t.data || [])
+    if (unread.error) showError(unread.error.message)
+    else setUnreadByInvoice(unread.data || {})
   }, [showError])
 
   useEffect(() => {
@@ -289,10 +294,10 @@ export default function InvoicesPage() {
     [form, baseline],
   )
 
-  const visibleRows = useMemo(
-    () => filterByDateRange(rows, dateFrom, dateTo, documentFilterDate),
-    [rows, dateFrom, dateTo],
-  )
+  const visibleRows = useMemo(() => {
+    const filtered = filterByDateRange(rows, dateFrom, dateTo, documentFilterDate)
+    return withUnreadRows(filtered, rows, unreadByInvoice)
+  }, [rows, dateFrom, dateTo, unreadByInvoice])
 
   const readOnly = form.status !== 'draft'
   /** New invoices always; existing drafts only after a change. */
@@ -646,6 +651,7 @@ export default function InvoicesPage() {
             ) : (
               visibleRows.map((row) => {
                 const displayStatus = invoiceDisplayStatus(row)
+                const unread = unreadByInvoice[row.id] || 0
                 const open = () => openRow(row.id)
                 return (
                   <tr
@@ -658,6 +664,11 @@ export default function InvoicesPage() {
                   >
                     <td className="px-4 py-3">
                       <span className={clickableDocClass}>{row.number || 'Draft'}</span>
+                      {unread > 0 ? (
+                        <span className="ml-2 inline-flex rounded-md bg-amber-500/25 px-2 py-0.5 text-xs font-semibold text-amber-100">
+                          {unread === 1 ? '1 new' : `${unread} new`}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="min-w-0 break-words px-4 py-3 text-ink-300">
                       {row.clients?.name || '—'}

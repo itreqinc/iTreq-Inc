@@ -9,11 +9,20 @@ import { OpsAlertProvider, useOpsAlert } from '../admin/OpsAlertContext'
 
 function PortalShell() {
   const navigate = useNavigate()
-  const { user, authBypass, setBypassRole } = useAuth()
+  const { user, authBypass, setBypassRole, logout } = useAuth()
   const { showError } = useOpsAlert()
   const [clients, setClients] = useState([])
-  const [clientId, setClientId] = useState(() => getPortalClientId())
+  const linkedClientId = user?.client_id && !user?.bypass ? user.client_id : null
+  const [clientId, setClientId] = useState(() => getPortalClientId(user))
   const [loadingClients, setLoadingClients] = useState(true)
+
+  useEffect(() => {
+    if (linkedClientId) {
+      setClientId(linkedClientId)
+      return
+    }
+    setClientId(getPortalClientId(user))
+  }, [linkedClientId, user])
 
   useEffect(() => {
     let cancelled = false
@@ -27,7 +36,15 @@ function PortalShell() {
       }
       const list = data || []
       setClients(list)
-      const stored = getPortalClientId()
+
+      if (linkedClientId) {
+        setClientId(linkedClientId)
+        return
+      }
+
+      if (!(AUTH_BYPASS || authBypass)) return
+
+      const stored = getPortalClientId(user)
       if (stored && list.some((c) => c.id === stored)) {
         setClientId(stored)
       } else if (list.length === 1) {
@@ -41,21 +58,31 @@ function PortalShell() {
     return () => {
       cancelled = true
     }
-  }, [showError])
+  }, [showError, linkedClientId, authBypass, user])
 
   const selectClient = useCallback((id) => {
+    if (!(AUTH_BYPASS || authBypass)) return
     setPortalClientId(id || null)
     setClientId(id || null)
-  }, [])
+  }, [authBypass])
 
-  const client = useMemo(
-    () => clients.find((c) => c.id === clientId) || null,
-    [clients, clientId],
-  )
+  const client = useMemo(() => {
+    if (linkedClientId) {
+      return clients.find((c) => c.id === linkedClientId) || { id: linkedClientId, name: user?.name }
+    }
+    return clients.find((c) => c.id === clientId) || null
+  }, [clients, clientId, linkedClientId, user?.name])
+
+  const effectiveClientId = linkedClientId || clientId
 
   const outletContext = useMemo(
-    () => ({ clientId, client, clients, selectClient }),
-    [clientId, client, clients, selectClient],
+    () => ({
+      clientId: effectiveClientId,
+      client,
+      clients,
+      selectClient,
+    }),
+    [effectiveClientId, client, clients, selectClient],
   )
 
   const navClass = ({ isActive }) =>
@@ -130,7 +157,18 @@ function PortalShell() {
               >
                 Staff →
               </button>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={async () => {
+                  await logout()
+                  navigate('/login', { replace: true })
+                }}
+                className="font-semibold text-ink-400 hover:text-ink-200"
+              >
+                Sign out
+              </button>
+            )}
             <Link to="/" className="text-ink-400 hover:text-ink-200">
               Public site
             </Link>
@@ -139,12 +177,12 @@ function PortalShell() {
       </header>
 
       <main className="mx-auto min-w-0 max-w-5xl px-4 py-6 sm:px-6">
-        {!clientId ? (
+        {!effectiveClientId ? (
           <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-8 text-center">
             <h1 className="font-display text-xl font-bold text-white">Select your account</h1>
             <p className="mt-2 text-sm text-ink-300">
               {AUTH_BYPASS || authBypass
-                ? 'Choose a client in the header to preview the portal (auth bypass). Phase 6 will link your login to one client automatically.'
+                ? 'Choose a client in the header to preview the portal (auth bypass).'
                 : 'Your account is not linked to a client yet. Please contact iTreq Inc.'}
             </p>
           </div>

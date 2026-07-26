@@ -2,7 +2,7 @@ import {
   useEffect,
   useMemo,
   useState } from 'react'
-import { Link,
+import {
   useNavigate,
   useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
@@ -15,6 +15,7 @@ import {
   filterByDateRange,
   todayIso,
 } from '../lib/dateRange'
+import { withUnreadRows } from '../lib/invoiceDisputes'
 import { DateRangeFilter } from '../components/DateRangeFilter'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
@@ -51,6 +52,7 @@ export default function PortalInvoices() {
   const { clientId } = useOutletContext()
   const { showError } = useOpsAlert()
   const [rows, setRows] = useState([])
+  const [unreadByInvoice, setUnreadByInvoice] = useState({})
   const [loading, setLoading] = useState(true)
   const [from, setFrom] = useState(currentMonthStartIso)
   const [to, setTo] = useState(todayIso)
@@ -58,24 +60,29 @@ export default function PortalInvoices() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    opsApi.listInvoices({ client_id: clientId, forPortal: true }).then(({ data, error }) => {
+    Promise.all([
+      opsApi.listInvoices({ client_id: clientId, forPortal: true }),
+      opsApi.listInvoiceUnreadCounts({ role: 'client', client_id: clientId }),
+    ]).then(([invRes, unreadRes]) => {
       if (cancelled) return
       setLoading(false)
-      if (error) {
-        showError(error.message)
+      if (invRes.error) {
+        showError(invRes.error.message)
         return
       }
-      setRows(data || [])
+      if (unreadRes.error) showError(unreadRes.error.message)
+      setRows(invRes.data || [])
+      setUnreadByInvoice(unreadRes.data || {})
     })
     return () => {
       cancelled = true
     }
   }, [clientId, showError])
 
-  const visibleRows = useMemo(
-    () => filterByDateRange(rows, from, to, invoiceFilterDate),
-    [rows, from, to],
-  )
+  const visibleRows = useMemo(() => {
+    const filtered = filterByDateRange(rows, from, to, invoiceFilterDate)
+    return withUnreadRows(filtered, rows, unreadByInvoice)
+  }, [rows, from, to, unreadByInvoice])
 
   return (
     <div className="space-y-6">
@@ -125,6 +132,7 @@ export default function PortalInvoices() {
               visibleRows.map((inv) => {
                 const billing = clientInvoiceBillingDisplay(inv)
                 const displayStatus = invoiceDisplayStatus(inv)
+                const unread = unreadByInvoice[inv.id] || 0
                 const open = () => navigate(`/portal/invoices/${inv.id}`)
                 return (
                   <tr
@@ -143,6 +151,11 @@ export default function PortalInvoices() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={clickableDocClass}>{inv.number || '—'}</span>
+                      {unread > 0 ? (
+                        <span className="ml-2 inline-flex rounded-md bg-amber-500/25 px-2 py-0.5 text-xs font-semibold text-amber-100">
+                          {unread === 1 ? '1 new' : `${unread} new`}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3">
                       <span

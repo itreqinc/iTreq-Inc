@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { opsApi } from '../lib/opsApi'
+import { disputeUnreadCount } from '../lib/invoiceDisputes'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import { adminBtnPrimary, adminBtnSecondary, adminFieldClass } from '../admin/ui'
 
@@ -14,18 +15,6 @@ function formatWhen(iso) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-/** Messages from the other side after this role last opened the thread. */
-export function disputeUnreadCount(dispute, role) {
-  if (!dispute) return 0
-  const lastRead =
-    role === 'staff' ? dispute.staff_last_read_at : dispute.client_last_read_at
-  return (dispute.messages || []).filter((msg) => {
-    if (msg.author_role === role) return false
-    if (!lastRead) return true
-    return String(msg.created_at) > String(lastRead)
-  }).length
 }
 
 /**

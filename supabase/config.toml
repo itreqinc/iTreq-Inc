@@ -10,3 +10,7 @@ major_version = 15
 
 [db.migrations]
 enabled = true
+
+# Custom session tokens — login/OTP must be callable without a Supabase Auth JWT.
+[functions.auth]
+verify_jwt = false

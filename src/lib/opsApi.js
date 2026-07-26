@@ -13,6 +13,7 @@ import {
   PAYMENT_METHODS,
   summarizeReceivables,
 } from './payments'
+import { disputeUnreadCount } from './invoiceDisputes'
 
 /** Private bucket holding client-uploaded proof of payment and query attachments. */
 export const PROOF_BUCKET = 'client-proofs'
@@ -2671,6 +2672,37 @@ export const opsApi = {
       .order('updated_at', { ascending: false })
     if (error) return mapError(error)
     return { data: data || [], error: null }
+  },
+
+  /**
+   * Unread message counts keyed by invoice_id for a viewer role.
+   * Optional client_id scopes the portal to one account.
+   */
+  async listInvoiceUnreadCounts({ role = 'client', client_id } = {}) {
+    if (!supabase) return dbUnavailable()
+    const viewer = role === 'staff' ? 'staff' : 'client'
+    let q = supabase
+      .from('invoice_disputes')
+      .select(
+        'id, invoice_id, client_id, client_last_read_at, staff_last_read_at, invoice_dispute_messages(id, author_role, created_at)',
+      )
+    if (client_id) q = q.eq('client_id', client_id)
+    const { data, error } = await q
+    if (error) return mapError(error)
+
+    const byInvoice = {}
+    for (const row of data || []) {
+      const unread = disputeUnreadCount(
+        {
+          ...row,
+          messages: row.invoice_dispute_messages || [],
+        },
+        viewer,
+      )
+      if (unread < 1) continue
+      byInvoice[row.invoice_id] = (byInvoice[row.invoice_id] || 0) + unread
+    }
+    return { data: byInvoice, error: null }
   },
 
   async setDisputeStatus(id, status) {

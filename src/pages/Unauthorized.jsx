@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { ROLES } from '../lib/authConfig'
+import { isStaffLike, ROLES } from '../lib/authConfig'
 import { adminBtnPrimary, adminBtnSecondary } from '../admin/ui'
 
 export default function Unauthorized() {
@@ -27,10 +27,20 @@ export default function Unauthorized() {
           <button
             type="button"
             onClick={() => {
-              setBypassRole(ROLES.staff)
+              setBypassRole(ROLES.admin)
               navigate('/admin', { replace: true })
             }}
             className={adminBtnPrimary}
+          >
+            Continue as admin
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBypassRole(ROLES.staff)
+              navigate('/admin', { replace: true })
+            }}
+            className={adminBtnSecondary}
           >
             Continue as staff
           </button>
@@ -48,10 +58,20 @@ export default function Unauthorized() {
       ) : (
         <div className="mt-6 flex gap-4">
           <Link
-            to={role === ROLES.client ? '/portal' : '/admin'}
+            to={
+              role === ROLES.client
+                ? '/portal'
+                : isStaffLike(role)
+                  ? '/admin'
+                  : '/login'
+            }
             className="text-sm font-semibold text-brand-400"
           >
-            {role === ROLES.client ? 'Client portal' : 'Ops home'}
+            {role === ROLES.client
+              ? 'Client portal'
+              : isStaffLike(role)
+                ? 'Ops home'
+                : 'Sign in'}
           </Link>
           <Link to="/" className="text-sm font-semibold text-ink-400">
             Public site

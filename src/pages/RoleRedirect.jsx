@@ -1,8 +1,8 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { normalizeRole, ROLES } from '../lib/authConfig'
+import { isStaffLike, normalizeRole, ROLES } from '../lib/authConfig'
 
-/** Post-login role router (Phase 6). Works with bypass roles today. */
+/** Post-login role router. */
 export default function RoleRedirect() {
   const { user, loading } = useAuth()
 
@@ -18,5 +18,6 @@ export default function RoleRedirect() {
 
   const role = normalizeRole(user.role)
   if (role === ROLES.client) return <Navigate to="/portal" replace />
-  return <Navigate to="/admin" replace />
+  if (isStaffLike(role)) return <Navigate to="/admin" replace />
+  return <Navigate to="/unauthorized" replace />
 }
