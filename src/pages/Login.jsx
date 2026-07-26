@@ -157,8 +157,8 @@ export default function Login() {
             <>
               <h1 className="font-display text-2xl font-bold text-white">Sign in</h1>
               <p className="mt-2 text-sm text-ink-300">
-                Use the email from your invite, or OTP / password. Invited clients should change the
-                temporary password on first login.
+                Select the login route that you are comfortable with. Email and password are free to
+                use. SMS may be paid.
               </p>
             </>
           )}
@@ -296,10 +296,7 @@ export default function Login() {
             </>
           ) : null}
 
-          <p className="mt-6 text-center text-xs text-ink-500">
-            Seed accounts: admin@itreq.local · staff@itreq.local · client@demo.local
-          </p>
-          <Link to="/" className="mt-4 block text-center text-sm font-semibold text-brand-400">
+          <Link to="/" className="mt-6 block text-center text-sm font-semibold text-brand-400">
             ← Back to site
           </Link>
         </div>
