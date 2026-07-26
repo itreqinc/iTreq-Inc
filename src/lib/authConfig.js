@@ -13,6 +13,10 @@ export const DEV_AUTH_SWITCHER =
 export const BYPASS_ROLE_KEY = 'itreq_ops_bypass_role'
 /** Cached signed-in role for client-side admin checks (opsApi). */
 export const SESSION_ROLE_KEY = 'itreq_ops_role'
+/** Client clock for last successful validate_session / login (idle logout). */
+export const SESSION_LAST_VALIDATE_KEY = 'itreq_session_last_validate'
+/** Max idle time without validate_session before auto logout (must match auth Edge). */
+export const SESSION_IDLE_MS = 8 * 60 * 60 * 1000
 export const VIEW_MODE_KEY = 'itreq_view_mode'
 
 export const ROLES = {
@@ -75,6 +79,37 @@ export function clearSessionRole() {
   } catch {
     /* ignore */
   }
+}
+
+export function markSessionValidated(at = Date.now()) {
+  try {
+    localStorage.setItem(SESSION_LAST_VALIDATE_KEY, String(at))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearSessionValidated() {
+  try {
+    localStorage.removeItem(SESSION_LAST_VALIDATE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readLastSessionValidatedAt() {
+  try {
+    const n = Number(localStorage.getItem(SESSION_LAST_VALIDATE_KEY) || '')
+    return Number.isFinite(n) && n > 0 ? n : null
+  } catch {
+    return null
+  }
+}
+
+export function isSessionIdleLocally(now = Date.now()) {
+  const last = readLastSessionValidatedAt()
+  if (!last) return false
+  return now - last > SESSION_IDLE_MS
 }
 
 export function isDualRole(user) {

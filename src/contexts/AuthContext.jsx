@@ -10,15 +10,20 @@ import {
   AUTH_BYPASS,
   BYPASS_ROLE_KEY,
   ROLES,
+  SESSION_IDLE_MS,
   VIEW_MODES,
   canAccessOps,
-  isDualRole,
-  isStaffLike,
-  normalizeRole,
-  readViewMode,
-  writeViewMode,
-  writeSessionRole,
   clearSessionRole,
+  clearSessionValidated,
+  isDualRole,
+  isSessionIdleLocally,
+  isStaffLike,
+  markSessionValidated,
+  normalizeRole,
+  readLastSessionValidatedAt,
+  readViewMode,
+  writeSessionRole,
+  writeViewMode,
 } from '../lib/authConfig'
 import { authAction } from '../lib/authApi'
 
@@ -63,11 +68,17 @@ export function AuthProvider({ children }) {
   const [opsAccess, setOpsAccess] = useState(null)
   const [viewMode, setViewModeState] = useState(() => readViewMode())
   const [loading, setLoading] = useState(true)
+  const [idleEpoch, setIdleEpoch] = useState(0)
 
   const setViewMode = useCallback((mode) => {
     const next = mode === VIEW_MODES.client ? VIEW_MODES.client : VIEW_MODES.staff
     writeViewMode(next)
     setViewModeState(next)
+  }, [])
+
+  const noteActivity = useCallback(() => {
+    markSessionValidated()
+    setIdleEpoch((n) => n + 1)
   }, [])
 
   const logout = useCallback(async () => {
@@ -81,6 +92,7 @@ export function AuthProvider({ children }) {
     } finally {
       localStorage.removeItem('session')
       clearSessionRole()
+      clearSessionValidated()
       setOpsAccess(null)
       if (!AUTH_BYPASS) setUser(null)
       else setUser(bypassUser(readBypassRole()))
@@ -94,6 +106,14 @@ export function AuthProvider({ children }) {
     }
     if (data?.ops_access) setOpsAccess(data.ops_access)
     else if (data?.user) setOpsAccess(null)
+  }, [])
+
+  const clearLocalSession = useCallback(() => {
+    localStorage.removeItem('session')
+    clearSessionRole()
+    clearSessionValidated()
+    setUser(null)
+    setOpsAccess(null)
   }, [])
 
   const validateSession = useCallback(async (token) => {
@@ -115,10 +135,7 @@ export function AuthProvider({ children }) {
 
       const status = error?.context?.status
       if (status === 401 || status === 403 || data?.success === false) {
-        localStorage.removeItem('session')
-        clearSessionRole()
-        setUser(null)
-        setOpsAccess(null)
+        clearLocalSession()
       } else if (error || !data?.user) {
         console.warn('Session validation skipped:', error?.message || data?.message)
       } else {
@@ -126,17 +143,19 @@ export function AuthProvider({ children }) {
         if (data.session_token) {
           localStorage.setItem('session', data.session_token)
         }
+        noteActivity()
       }
     } catch (err) {
       console.error('Session validation failed:', err)
     } finally {
       setLoading(false)
     }
-  }, [ingestAuthPayload])
+  }, [clearLocalSession, ingestAuthPayload, noteActivity])
 
   const loginWithToken = useCallback(
     async (token, userFromLogin = null) => {
       localStorage.setItem('session', token)
+      noteActivity()
       if (userFromLogin) {
         setUser(userFromLogin)
         writeSessionRole(userFromLogin.role)
@@ -145,7 +164,7 @@ export function AuthProvider({ children }) {
       }
       await validateSession(token)
     },
-    [validateSession],
+    [noteActivity, validateSession],
   )
 
   const applySession = useCallback(async (data) => {
@@ -154,9 +173,10 @@ export function AuthProvider({ children }) {
     }
     localStorage.setItem('session', data.session_token)
     ingestAuthPayload(data)
+    noteActivity()
     setLoading(false)
     return data.user
-  }, [ingestAuthPayload])
+  }, [ingestAuthPayload, noteActivity])
 
   const changePassword = useCallback(async (currentPassword, newPassword) => {
     const { data, error } = await authAction(
@@ -211,12 +231,54 @@ export function AuthProvider({ children }) {
     }
 
     const token = localStorage.getItem('session')
-    if (token) validateSession(token)
-    else {
+    if (!token) {
       clearSessionRole()
+      clearSessionValidated()
       setLoading(false)
+      return
     }
-  }, [validateSession])
+
+    if (isSessionIdleLocally()) {
+      clearLocalSession()
+      setLoading(false)
+      return
+    }
+
+    validateSession(token)
+  }, [clearLocalSession, validateSession])
+
+  // Re-check on tab focus so sessions can slide / reset idle via validate_session.
+  useEffect(() => {
+    if (AUTH_BYPASS) return undefined
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      const token = localStorage.getItem('session')
+      if (!token) return
+      if (isSessionIdleLocally()) {
+        clearLocalSession()
+        return
+      }
+      validateSession(token)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [clearLocalSession, validateSession])
+
+  // Auto logout after 8h with no validate_session / login activity.
+  useEffect(() => {
+    if (AUTH_BYPASS || !user || user.bypass) return undefined
+    const last = readLastSessionValidatedAt()
+    if (!last) return undefined
+    const remaining = SESSION_IDLE_MS - (Date.now() - last)
+    if (remaining <= 0) {
+      void logout()
+      return undefined
+    }
+    const id = window.setTimeout(() => {
+      void logout()
+    }, remaining)
+    return () => window.clearTimeout(id)
+  }, [user, idleEpoch, logout])
 
   const dualRole = isDualRole(user)
   const effectiveViewMode = dualRole ? viewMode : isStaffLike(user?.role) ? VIEW_MODES.staff : VIEW_MODES.client

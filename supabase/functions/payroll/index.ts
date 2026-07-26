@@ -9,6 +9,9 @@ const corsHeaders = {
 const PBKDF2_ITERATIONS = 100_000
 const DEFAULT_PASSWORD = 'password123'
 const OPS_TZ = 'Africa/Gaborone'
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000
+const SESSION_SLIDE_REMAINING_MS = 2 * 60 * 60 * 1000
+const SESSION_IDLE_MS = 8 * 60 * 60 * 1000
 
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
@@ -59,6 +62,26 @@ function bearerToken(req: Request) {
   return m?.[1]?.trim() || ''
 }
 
+async function maybeSlideSession(
+  supabase: ReturnType<typeof adminClient>,
+  session: { id: string; expires_at: string },
+) {
+  const remainingMs = new Date(session.expires_at).getTime() - Date.now()
+  if (remainingMs >= SESSION_SLIDE_REMAINING_MS) return
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  await supabase
+    .from('auth_sessions')
+    .update({ expires_at: expiresAt })
+    .eq('id', session.id)
+    .is('revoked_at', null)
+}
+
+function isSessionIdle(lastActivityAt: string | null | undefined) {
+  const t = lastActivityAt ? new Date(lastActivityAt).getTime() : NaN
+  if (!Number.isFinite(t)) return true
+  return Date.now() - t > SESSION_IDLE_MS
+}
+
 async function loadSessionUser(
   supabase: ReturnType<typeof adminClient>,
   token: string,
@@ -68,11 +91,15 @@ async function loadSessionUser(
   const now = new Date().toISOString()
   const { data: session, error } = await supabase
     .from('auth_sessions')
-    .select('user_id, expires_at, revoked_at')
+    .select('id, user_id, expires_at, revoked_at, last_activity_at')
     .eq('token_hash', tokenHash)
     .maybeSingle()
   if (error) throw error
   if (!session || session.revoked_at || session.expires_at < now) return null
+  if (isSessionIdle(session.last_activity_at)) return null
+
+  await maybeSlideSession(supabase, session)
+
   const { data: user, error: uErr } = await supabase
     .from('users')
     .select('*')

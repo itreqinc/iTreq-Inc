@@ -7,7 +7,11 @@ const corsHeaders = {
 }
 
 const OTP_TTL_MS = 10 * 60 * 1000
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000
+/** When remaining lifetime is below this, push expires_at out by a full SESSION_TTL. */
+const SESSION_SLIDE_REMAINING_MS = 2 * 60 * 60 * 1000
+/** Hard idle cutoff: no validate_session activity for this long → session dead. */
+const SESSION_IDLE_MS = 8 * 60 * 60 * 1000
 const OTP_LENGTH = 6
 const PBKDF2_ITERATIONS = 100_000
 const DEFAULT_INVITE_PASSWORD = 'password123'
@@ -303,11 +307,13 @@ async function createSession(
 ) {
   const token = randomToken()
   const tokenHash = await sha256Hex(token)
+  const nowIso = new Date().toISOString()
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
   const { error } = await supabase.from('auth_sessions').insert({
     user_id: userId,
     token_hash: tokenHash,
     expires_at: expiresAt,
+    last_activity_at: nowIso,
   })
   if (error) throw error
   return token
@@ -326,20 +332,59 @@ async function revokeSessionToken(
     .is('revoked_at', null)
 }
 
+async function maybeSlideSession(
+  supabase: ReturnType<typeof adminClient>,
+  session: { id: string; expires_at: string },
+) {
+  const remainingMs = new Date(session.expires_at).getTime() - Date.now()
+  if (remainingMs >= SESSION_SLIDE_REMAINING_MS) return
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  await supabase
+    .from('auth_sessions')
+    .update({ expires_at: expiresAt })
+    .eq('id', session.id)
+    .is('revoked_at', null)
+}
+
+function isSessionIdle(lastActivityAt: string | null | undefined) {
+  const t = lastActivityAt ? new Date(lastActivityAt).getTime() : NaN
+  if (!Number.isFinite(t)) return true
+  return Date.now() - t > SESSION_IDLE_MS
+}
+
+async function touchSessionActivity(
+  supabase: ReturnType<typeof adminClient>,
+  sessionId: string,
+) {
+  await supabase
+    .from('auth_sessions')
+    .update({ last_activity_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .is('revoked_at', null)
+}
+
 async function loadSessionUser(
   supabase: ReturnType<typeof adminClient>,
   token: string,
+  opts: { recordActivity?: boolean } = {},
 ) {
   if (!token) return null
   const tokenHash = await sha256Hex(token)
-  const now = new Date().toISOString()
+  const nowIso = new Date().toISOString()
   const { data: session, error } = await supabase
     .from('auth_sessions')
-    .select('id, user_id, expires_at, revoked_at')
+    .select('id, user_id, expires_at, revoked_at, last_activity_at')
     .eq('token_hash', tokenHash)
     .maybeSingle()
   if (error) throw error
-  if (!session || session.revoked_at || session.expires_at < now) return null
+  if (!session || session.revoked_at || session.expires_at < nowIso) return null
+  if (isSessionIdle(session.last_activity_at)) return null
+
+  if (opts.recordActivity) {
+    await touchSessionActivity(supabase, session.id)
+  }
+
+  await maybeSlideSession(supabase, session)
 
   const { data: user, error: userErr } = await supabase
     .from('users')
@@ -589,7 +634,7 @@ async function handleValidateSession(
 ) {
   const token =
     bearerToken(req) || String(body.session_token || '').trim()
-  const user = await loadSessionUser(supabase, token)
+  const user = await loadSessionUser(supabase, token, { recordActivity: true })
   if (!user) {
     return json(401, { success: false, message: 'Session expired. Please sign in again.' })
   }
