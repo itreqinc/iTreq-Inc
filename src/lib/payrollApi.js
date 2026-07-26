@@ -62,10 +62,18 @@ export const payrollApi = {
   upsertStaff: (payload) => payrollAction('upsert_staff', payload),
   setStaffActive: (userId, isActive) =>
     payrollAction('set_staff_active', { user_id: userId, is_active: isActive }),
+  deleteStaff: (userId) => payrollAction('delete_staff', { user_id: userId }),
+  resetStaffPassword: (userId) =>
+    payrollAction('reset_staff_password', { user_id: userId }),
   listBenefits: (userId) =>
     payrollAction('list_benefits', userId ? { user_id: userId } : {}),
   assignBenefit: (payload) => payrollAction('assign_benefit', payload),
+  removeBenefit: (assignmentId) =>
+    payrollAction('remove_benefit', { assignment_id: assignmentId }),
   createAdvance: (payload) => payrollAction('create_advance', payload),
+  updateAdvance: (payload) => payrollAction('update_advance', payload),
+  deleteAdvance: (advanceId) =>
+    payrollAction('delete_advance', { advance_id: advanceId }),
   listAdvances: (userId, openOnly = false) =>
     payrollAction('list_advances', {
       ...(userId ? { user_id: userId } : {}),

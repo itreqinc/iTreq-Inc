@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { canAccessOps, isStaffLike, ROLES, normalizeRole } from '../lib/authConfig'
-import { adminBtnPrimary, adminFieldClass } from '../admin/ui'
+import { PasswordField } from '../components/PasswordField'
+import { adminBtnPrimary } from '../admin/ui'
 
 export default function ChangePassword() {
   const { user, loading, changePassword, opsAccess } = useAuth()
@@ -91,36 +92,30 @@ export default function ChangePassword() {
           {!user.must_change_password ? (
             <label className="block text-sm text-ink-300">
               Current password
-              <input
-                type="password"
+              <PasswordField
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className={`${adminFieldClass} mt-1`}
                 required
               />
             </label>
           ) : null}
           <label className="block text-sm text-ink-300">
             New password
-            <input
-              type="password"
+            <PasswordField
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className={`${adminFieldClass} mt-1`}
               required
               minLength={8}
             />
           </label>
           <label className="block text-sm text-ink-300">
             Confirm new password
-            <input
-              type="password"
+            <PasswordField
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className={`${adminFieldClass} mt-1`}
               required
               minLength={8}
             />

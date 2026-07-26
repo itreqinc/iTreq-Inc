@@ -172,16 +172,34 @@ function PortalShell() {
               </button>
             ) : null}
             {!authBypass ? (
-              <button
-                type="button"
-                onClick={async () => {
-                  await logout()
-                  navigate('/login', { replace: true })
-                }}
-                className="font-semibold text-ink-400 hover:text-ink-200"
-              >
-                Sign out
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout()
+                    navigate('/login', { replace: true })
+                  }}
+                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-semibold text-amber-100"
+                >
+                  Switch user
+                </button>
+                <Link
+                  to="/profile"
+                  className="font-semibold text-ink-400 hover:text-ink-200"
+                >
+                  Profile
+                </Link>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout()
+                    navigate('/login', { replace: true })
+                  }}
+                  className="font-semibold text-ink-400 hover:text-ink-200"
+                >
+                  Sign out
+                </button>
+              </>
             ) : null}
             <Link to="/" className="text-ink-400 hover:text-ink-200">
               Public site

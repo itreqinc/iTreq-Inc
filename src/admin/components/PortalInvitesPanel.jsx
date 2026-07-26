@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { authAction } from '../../lib/authApi'
+import { AUTH_BYPASS } from '../../lib/authConfig'
+import { AdminIconAction } from '../AdminIconAction'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, adminTableShellClass } from '../ui'
+import { adminTableShellClass } from '../ui'
 
 function formatWhen(iso) {
   if (!iso) return '—'
@@ -16,10 +18,14 @@ export function PortalInvitesPanel() {
   const { showError, showSuccess } = useOpsAlert()
   const [pending, setPending] = useState([])
   const [notified, setNotified] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!AUTH_BYPASS)
   const [busyId, setBusyId] = useState(null)
 
   const load = useCallback(async () => {
+    if (AUTH_BYPASS) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     const { data, error } = await authAction('list_portal_invites', {}, { withAuth: true })
     setLoading(false)
@@ -68,7 +74,12 @@ export function PortalInvitesPanel() {
         </p>
       </div>
 
-      {loading ? (
+      {AUTH_BYPASS ? (
+        <p className="text-sm text-ink-400">
+          Portal invites need a real session. Set <code className="text-ink-300">VITE_AUTH_BYPASS=false</code>{' '}
+          and sign in to list or send invites.
+        </p>
+      ) : loading ? (
         <p className="text-sm text-ink-400">Loading invite status…</p>
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -89,14 +100,12 @@ export function PortalInvitesPanel() {
                       <td className="px-3 py-2 text-white">{row.client_name}</td>
                       <td className="px-3 py-2 text-ink-300">{row.email}</td>
                       <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
+                        <AdminIconAction
+                          label="Invite"
+                          icon="mail"
                           disabled={busyId === row.client_id}
                           onClick={() => invite(row.client_id)}
-                          className={adminBtnPrimary}
-                        >
-                          {busyId === row.client_id ? '…' : 'Invite'}
-                        </button>
+                        />
                       </td>
                     </tr>
                   ))}
@@ -129,14 +138,13 @@ export function PortalInvitesPanel() {
                       <td className="px-3 py-2 text-white">{row.client_name}</td>
                       <td className="px-3 py-2 text-ink-300">{formatWhen(row.invited_at)}</td>
                       <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
+                        <AdminIconAction
+                          label="Resend invite"
+                          icon="mail"
+                          tone="muted"
                           disabled={busyId === row.client_id}
                           onClick={() => invite(row.client_id)}
-                          className={adminBtnSecondary}
-                        >
-                          {busyId === row.client_id ? '…' : 'Resend'}
-                        </button>
+                        />
                       </td>
                     </tr>
                   ))}

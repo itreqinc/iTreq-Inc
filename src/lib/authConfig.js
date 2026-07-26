@@ -11,6 +11,8 @@ export const DEV_AUTH_SWITCHER =
     .toLowerCase() === 'true'
 
 export const BYPASS_ROLE_KEY = 'itreq_ops_bypass_role'
+/** Cached signed-in role for client-side admin checks (opsApi). */
+export const SESSION_ROLE_KEY = 'itreq_ops_role'
 export const VIEW_MODE_KEY = 'itreq_view_mode'
 
 export const ROLES = {
@@ -43,6 +45,36 @@ export function isStaffLike(role) {
 
 export function isAdmin(role) {
   return normalizeRole(role) === ROLES.admin
+}
+
+/** Role currently signed in (session or auth bypass). Used by opsApi admin gates. */
+export function readSessionRole() {
+  try {
+    if (AUTH_BYPASS) {
+      return normalizeRole(localStorage.getItem(BYPASS_ROLE_KEY) || ROLES.staff)
+    }
+    return normalizeRole(localStorage.getItem(SESSION_ROLE_KEY) || '')
+  } catch {
+    return ''
+  }
+}
+
+export function writeSessionRole(role) {
+  try {
+    const r = normalizeRole(role)
+    if (r) localStorage.setItem(SESSION_ROLE_KEY, r)
+    else localStorage.removeItem(SESSION_ROLE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearSessionRole() {
+  try {
+    localStorage.removeItem(SESSION_ROLE_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function isDualRole(user) {
@@ -88,11 +120,15 @@ export function canAccessOps(user, opsAccess = null) {
   if (AUTH_BYPASS || user.bypass) return true
   if (opsAccess && typeof opsAccess.allowed === 'boolean') return opsAccess.allowed
   if (isAdmin(user.role)) return true
-  if (user.after_hours_until) {
-    const until = new Date(user.after_hours_until).getTime()
-    if (!Number.isNaN(until) && Date.now() < until) return true
-  }
+  if (isAfterHoursActive(user.after_hours_until)) return true
   return isWithinOpsHours()
+}
+
+/** True when after_hours_until is set and still in the future. */
+export function isAfterHoursActive(until) {
+  if (!until) return false
+  const t = new Date(until).getTime()
+  return Number.isFinite(t) && t > Date.now()
 }
 
 export function truncateEmail(email) {

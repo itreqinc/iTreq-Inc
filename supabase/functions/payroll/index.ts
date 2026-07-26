@@ -226,7 +226,9 @@ async function handleListStaffHr(
 
   const { data: users, error } = await supabase
     .from('users')
-    .select('id, name, email, phone, role, is_active, after_hours_until, client_id, created_at')
+    .select(
+      'id, name, first_name, middle_name, surname, gender, email, phone, role, is_active, after_hours_until, client_id, created_at',
+    )
     .eq('role', 'staff')
     .order('name')
   if (error) throw error
@@ -253,16 +255,59 @@ async function handleUpsertStaff(
   const gate = await requireAdmin(supabase, req, body)
   if (gate.error) return gate.error
 
-  const name = String(body.name || '').trim()
+  const first_name = String(body.first_name || '').trim()
+  const middle_name = String(body.middle_name || '').trim() || null
+  const surname = String(body.surname || '').trim()
   const email = String(body.email || '').trim().toLowerCase()
   const phone = String(body.phone || '').trim() || null
+  const genderRaw = String(body.gender || '').trim().toUpperCase()
+  const gender = genderRaw === 'M' || genderRaw === 'F' ? genderRaw : null
+  const nameFromParts = [first_name, middle_name, surname].filter(Boolean).join(' ')
+  const name = nameFromParts || String(body.name || '').trim()
   const jobTitle = String(body.job_title || 'Staff').trim() || 'Staff'
   const baseSalary = Number(body.base_salary) || 0
   const startDate = String(body.start_date || ymdInTz()).slice(0, 10)
+  const employmentStatusRaw = String(body.employment_status || 'active').trim().toLowerCase()
+  const employmentStatus = ['active', 'on_leave', 'terminated'].includes(employmentStatusRaw)
+    ? employmentStatusRaw
+    : 'active'
+  const bankName = String(body.bank_name || '').trim() || null
+  const bankAccount = String(body.bank_account || '').trim() || null
+  const notes = String(body.notes || '').trim() || null
   const userId = body.user_id ? String(body.user_id) : ''
 
-  if (!name || !email) {
-    return json(400, { success: false, message: 'name and email are required' })
+  if (!first_name || !surname) {
+    return json(400, { success: false, message: 'first name and last name are required' })
+  }
+  if (!email) {
+    return json(400, { success: false, message: 'email is required' })
+  }
+  if (!phone) {
+    return json(400, { success: false, message: 'phone is required for staff login' })
+  }
+  if (!name) {
+    return json(400, { success: false, message: 'name is required' })
+  }
+
+  const profileFields = {
+    name,
+    first_name,
+    middle_name,
+    surname,
+    gender,
+    email,
+    phone,
+  }
+
+  const employmentPayload = {
+    job_title: jobTitle,
+    base_salary: baseSalary,
+    start_date: startDate,
+    employment_status: employmentStatus,
+    bank_name: bankName,
+    bank_account: bankAccount,
+    notes,
+    updated_at: new Date().toISOString(),
   }
 
   let user
@@ -270,9 +315,7 @@ async function handleUpsertStaff(
     const { data, error } = await supabase
       .from('users')
       .update({
-        name,
-        email,
-        phone,
+        ...profileFields,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId)
@@ -285,10 +328,7 @@ async function handleUpsertStaff(
     const { error: eErr } = await supabase.from('staff_employment').upsert(
       {
         user_id: user.id,
-        job_title: jobTitle,
-        base_salary: baseSalary,
-        start_date: startDate,
-        updated_at: new Date().toISOString(),
+        ...employmentPayload,
       },
       { onConflict: 'user_id' },
     )
@@ -298,9 +338,7 @@ async function handleUpsertStaff(
     const { data, error } = await supabase
       .from('users')
       .insert({
-        name,
-        email,
-        phone,
+        ...profileFields,
         role: 'staff',
         password_hash,
         must_change_password: true,
@@ -316,6 +354,10 @@ async function handleUpsertStaff(
       job_title: jobTitle,
       base_salary: baseSalary,
       start_date: startDate,
+      employment_status: employmentStatus,
+      bank_name: bankName,
+      bank_account: bankAccount,
+      notes,
     })
     if (eErr) throw eErr
   }
@@ -368,6 +410,101 @@ async function handleSetStaffActive(
   return json(200, { success: true, user: data })
 }
 
+async function handleDeleteStaff(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+
+  const userId = String(body.user_id || '')
+  if (!userId) return json(400, { success: false, message: 'user_id required' })
+  if (userId === gate.user!.id) {
+    return json(400, { success: false, message: 'You cannot delete your own account.' })
+  }
+
+  const { data: target, error: tErr } = await supabase
+    .from('users')
+    .select('id, name, role')
+    .eq('id', userId)
+    .eq('role', 'staff')
+    .maybeSingle()
+  if (tErr) throw tErr
+  if (!target) return json(404, { success: false, message: 'Staff member not found.' })
+
+  // Payslips are financial records: keep them and require disabling instead.
+  const { count, error: cErr } = await supabase
+    .from('payslips')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+  if (cErr) throw cErr
+  if ((count || 0) > 0) {
+    return json(400, {
+      success: false,
+      message: `${target.name} has ${count} payslip(s) on record and cannot be deleted. Disable the account instead to block sign-in while keeping payroll history.`,
+    })
+  }
+
+  const { error } = await supabase.from('users').delete().eq('id', userId).eq('role', 'staff')
+  if (error) throw error
+
+  return json(200, { success: true, deleted_id: userId, name: target.name })
+}
+
+async function handleResetStaffPassword(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+
+  const userId = String(body.user_id || '')
+  if (!userId) return json(400, { success: false, message: 'user_id required' })
+  if (userId === gate.user!.id) {
+    return json(400, {
+      success: false,
+      message: 'Use Change password on your profile instead of resetting your own account here.',
+    })
+  }
+
+  const { data: target, error: tErr } = await supabase
+    .from('users')
+    .select('id, name, role')
+    .eq('id', userId)
+    .eq('role', 'staff')
+    .maybeSingle()
+  if (tErr) throw tErr
+  if (!target) return json(404, { success: false, message: 'Staff member not found.' })
+
+  const password_hash = await hashPassword(DEFAULT_PASSWORD)
+  const { error } = await supabase
+    .from('users')
+    .update({
+      password_hash,
+      must_change_password: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .eq('role', 'staff')
+  if (error) throw error
+
+  // Force re-login with the temporary password.
+  await supabase
+    .from('auth_sessions')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .is('revoked_at', null)
+
+  return json(200, {
+    success: true,
+    user_id: userId,
+    name: target.name,
+    temporary_password: DEFAULT_PASSWORD,
+  })
+}
+
 async function handleListBenefits(
   supabase: ReturnType<typeof adminClient>,
   req: Request,
@@ -404,8 +541,14 @@ async function handleAssignBenefit(
   const benefitTypeId = String(body.benefit_type_id || '')
   const amount = Number(body.amount)
   const active = body.active === false ? false : true
-  if (!userId || !benefitTypeId || Number.isNaN(amount) || amount < 0) {
-    return json(400, { success: false, message: 'user_id, benefit_type_id, amount required' })
+  if (!userId || !benefitTypeId) {
+    return json(400, { success: false, message: 'user_id and benefit_type_id required' })
+  }
+  if (active && (!(amount > 0) || Number.isNaN(amount))) {
+    return json(400, { success: false, message: 'Benefit amount must be greater than zero' })
+  }
+  if (!active && (Number.isNaN(amount) || amount < 0)) {
+    return json(400, { success: false, message: 'Invalid amount' })
   }
   const { data, error } = await supabase
     .from('staff_benefit_assignments')
@@ -413,7 +556,7 @@ async function handleAssignBenefit(
       {
         user_id: userId,
         benefit_type_id: benefitTypeId,
-        amount,
+        amount: active ? amount : Math.max(0, amount || 0),
         active,
         updated_at: new Date().toISOString(),
       },
@@ -423,6 +566,28 @@ async function handleAssignBenefit(
     .single()
   if (error) throw error
   return json(200, { success: true, assignment: data })
+}
+
+async function handleRemoveBenefit(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+  const assignmentId = String(body.assignment_id || '')
+  if (!assignmentId) {
+    return json(400, { success: false, message: 'assignment_id required' })
+  }
+  const { data, error } = await supabase
+    .from('staff_benefit_assignments')
+    .delete()
+    .eq('id', assignmentId)
+    .select('id, user_id, benefit_type_id')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return json(404, { success: false, message: 'Benefit assignment not found' })
+  return json(200, { success: true, deleted: data })
 }
 
 async function handleCreateAdvance(
@@ -453,6 +618,98 @@ async function handleCreateAdvance(
     .single()
   if (error) throw error
   return json(200, { success: true, advance: data })
+}
+
+async function handleUpdateAdvance(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+  const advanceId = String(body.advance_id || '')
+  const amount = Number(body.amount)
+  const advanceDate = body.advance_date
+    ? String(body.advance_date).slice(0, 10)
+    : undefined
+  const notes =
+    body.notes === undefined ? undefined : String(body.notes || '').trim() || null
+  if (!advanceId) return json(400, { success: false, message: 'advance_id required' })
+  if (!(amount > 0)) {
+    return json(400, { success: false, message: 'Advance amount must be greater than zero' })
+  }
+
+  const { data: existing, error: eErr } = await supabase
+    .from('salary_advances')
+    .select('*')
+    .eq('id', advanceId)
+    .maybeSingle()
+  if (eErr) throw eErr
+  if (!existing) return json(404, { success: false, message: 'Advance not found' })
+  if (!(Number(existing.remaining) > 0)) {
+    return json(400, {
+      success: false,
+      message: 'Recovered advances cannot be edited. Record a new advance instead.',
+    })
+  }
+
+  // Keep recovered portion: recovered = amount - remaining; new remaining = max(0, newAmount - recovered)
+  const prevAmount = Number(existing.amount) || 0
+  const prevRemaining = Number(existing.remaining) || 0
+  const recovered = Math.max(0, prevAmount - prevRemaining)
+  const nextRemaining = Math.max(0, amount - recovered)
+  if (nextRemaining <= 0 && recovered > 0) {
+    return json(400, {
+      success: false,
+      message: `Amount must be greater than already recovered (${recovered}).`,
+    })
+  }
+
+  const patch: Record<string, unknown> = {
+    amount,
+    remaining: nextRemaining > 0 ? nextRemaining : amount,
+    updated_at: new Date().toISOString(),
+  }
+  if (advanceDate) patch.advance_date = advanceDate
+  if (notes !== undefined) patch.notes = notes
+
+  const { data, error } = await supabase
+    .from('salary_advances')
+    .update(patch)
+    .eq('id', advanceId)
+    .select('*')
+    .single()
+  if (error) throw error
+  return json(200, { success: true, advance: data })
+}
+
+async function handleDeleteAdvance(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+  const advanceId = String(body.advance_id || '')
+  if (!advanceId) return json(400, { success: false, message: 'advance_id required' })
+
+  const { data: existing, error: eErr } = await supabase
+    .from('salary_advances')
+    .select('id, remaining, amount')
+    .eq('id', advanceId)
+    .maybeSingle()
+  if (eErr) throw eErr
+  if (!existing) return json(404, { success: false, message: 'Advance not found' })
+  if (!(Number(existing.remaining) > 0)) {
+    return json(400, {
+      success: false,
+      message: 'Fully recovered advances cannot be deleted.',
+    })
+  }
+
+  const { error } = await supabase.from('salary_advances').delete().eq('id', advanceId)
+  if (error) throw error
+  return json(200, { success: true, deleted_id: advanceId })
 }
 
 async function handleListAdvances(
@@ -519,10 +776,15 @@ async function handlePostPayRun(
 
   const { data: staffUsers, error: sErr } = await supabase
     .from('users')
-    .select('id, name, email')
+    .select('id, name, email, phone')
     .eq('role', 'staff')
     .eq('is_active', true)
   if (sErr) throw sErr
+
+  const company = {
+    name: String(settings.company_name || 'iTreq Inc'),
+    currency: String(settings.currency || 'BWP'),
+  }
 
   const slips = []
   for (const staff of staffUsers || []) {
@@ -572,9 +834,17 @@ async function handlePostPayRun(
 
     const net = Math.max(0, gross - advancesRecovered)
     const snapshot = {
+      company_name: company.name,
+      currency: company.currency,
       staff_name: staff.name,
       email: staff.email,
+      phone: staff.phone || null,
+      employee_ref: String(staff.id).slice(0, 8).toUpperCase(),
       job_title: emp.job_title,
+      start_date: emp.start_date || null,
+      employment_status: emp.employment_status || 'active',
+      bank_name: emp.bank_name || null,
+      bank_account: emp.bank_account || null,
       period_year: periodYear,
       period_month: periodMonth,
       payday,
@@ -735,12 +1005,22 @@ serve(async (req) => {
         return await handleUpsertStaff(supabase, req, body)
       case 'set_staff_active':
         return await handleSetStaffActive(supabase, req, body)
+      case 'delete_staff':
+        return await handleDeleteStaff(supabase, req, body)
+      case 'reset_staff_password':
+        return await handleResetStaffPassword(supabase, req, body)
       case 'list_benefits':
         return await handleListBenefits(supabase, req, body)
       case 'assign_benefit':
         return await handleAssignBenefit(supabase, req, body)
+      case 'remove_benefit':
+        return await handleRemoveBenefit(supabase, req, body)
       case 'create_advance':
         return await handleCreateAdvance(supabase, req, body)
+      case 'update_advance':
+        return await handleUpdateAdvance(supabase, req, body)
+      case 'delete_advance':
+        return await handleDeleteAdvance(supabase, req, body)
       case 'list_advances':
         return await handleListAdvances(supabase, req, body)
       case 'post_pay_run':

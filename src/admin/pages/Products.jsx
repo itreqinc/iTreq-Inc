@@ -3,6 +3,8 @@ import {
   useEffect,
   useState } from 'react'
 import { opsApi } from '../../lib/opsApi'
+import { useAuth } from '../../contexts/AuthContext'
+import { isAdmin } from '../../lib/authConfig'
 import { useOpsAlert } from '../OpsAlertContext'
 import { adminBtnPrimary,
   adminBtnSecondary,
@@ -82,6 +84,8 @@ function IconAction({ label, onClick, disabled, tone = 'default', children }) {
 }
 
 export default function ProductsPage() {
+  const { user } = useAuth()
+  const canManage = isAdmin(user?.role)
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -194,17 +198,19 @@ export default function ProductsPage() {
         <div>
           <h1 className="font-display text-2xl font-bold text-white">Products</h1>
           <p className="mt-1 text-sm text-ink-300">
-            Trackers, fees, and other catalog items. Staff can add products and change prices.
+            {canManage
+              ? 'Trackers, fees, and other catalog items. Add products and change prices here.'
+              : 'Trackers, fees, and other catalog items. View only — ask an admin to make changes.'}
           </p>
         </div>
-        {!showNew ? (
+        {canManage && !showNew ? (
           <button type="button" onClick={startNew} className={adminBtnPrimary}>
             New product
           </button>
         ) : null}
       </div>
 
-      {showNew ? (
+      {canManage && showNew ? (
         <form
           onSubmit={handleCreate}
           className="max-w-xl space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
@@ -285,25 +291,25 @@ export default function ProductsPage() {
               <th className="px-4 py-3">Price</th>
               <th className={`px-4 py-3 ${adminColSecondary}`}>Stocked</th>
               <th className={`px-4 py-3 ${adminColSecondary}`}>Active</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              {canManage ? <th className="px-4 py-3 text-right">Actions</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-ink-400">
+                <td colSpan={canManage ? 6 : 5} className="px-4 py-6 text-ink-400">
                   Loading…
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-ink-400">
+                <td colSpan={canManage ? 6 : 5} className="px-4 py-6 text-ink-400">
                   No products yet.
                 </td>
               </tr>
             ) : (
               products.map((p) => {
-                const editing = editingId === p.id
+                const editing = canManage && editingId === p.id
                 const busy = busyId === p.id
 
                 if (editing && draft) {
@@ -386,25 +392,27 @@ export default function ProductsPage() {
                     <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                       {p.active ? 'Yes' : 'No'}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex items-center justify-end gap-0.5">
-                        <IconAction
-                          label="Edit"
-                          disabled={busy || Boolean(editingId)}
-                          onClick={() => startEdit(p)}
-                        >
-                          <ActionIcon d={ICONS.pencil} />
-                        </IconAction>
-                        <IconAction
-                          label="Delete"
-                          tone="danger"
-                          disabled={busy || Boolean(editingId)}
-                          onClick={() => handleDelete(p)}
-                        >
-                          <ActionIcon d={ICONS.trash} />
-                        </IconAction>
-                      </div>
-                    </td>
+                    {canManage ? (
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center justify-end gap-0.5">
+                          <IconAction
+                            label="Edit"
+                            disabled={busy || Boolean(editingId)}
+                            onClick={() => startEdit(p)}
+                          >
+                            <ActionIcon d={ICONS.pencil} />
+                          </IconAction>
+                          <IconAction
+                            label="Delete"
+                            tone="danger"
+                            disabled={busy || Boolean(editingId)}
+                            onClick={() => handleDelete(p)}
+                          >
+                            <ActionIcon d={ICONS.trash} />
+                          </IconAction>
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 )
               })

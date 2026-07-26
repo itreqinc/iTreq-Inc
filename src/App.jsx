@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { AdminOnlyRoute } from './components/AdminOnlyRoute'
 import { AdminLayout } from './admin/AdminLayout'
 import AdminDashboard from './admin/pages/Dashboard'
 import ClientsPage from './admin/pages/Clients'
@@ -37,6 +38,7 @@ import Login from './pages/Login'
 import Unauthorized from './pages/Unauthorized'
 import RoleRedirect from './pages/RoleRedirect'
 import ChangePassword from './pages/ChangePassword'
+import Profile from './pages/Profile'
 import OpsClosed from './pages/OpsClosed'
 import { ROLES, STAFF_LIKE_ROLES } from './lib/authConfig'
 
@@ -54,6 +56,7 @@ export default function App() {
 
       <Route path="/login" element={<Login />} />
       <Route path="/change-password" element={<ChangePassword />} />
+      <Route path="/profile" element={<Profile />} />
       <Route path="/ops-closed" element={<OpsClosed />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
       <Route path="/redirect" element={<RoleRedirect />} />
@@ -68,17 +71,45 @@ export default function App() {
       >
         <Route index element={<AdminDashboard />} />
         <Route path="clients" element={<ClientsPage />} />
-        <Route path="stock" element={<StockPage />} />
+        <Route
+          path="stock"
+          element={
+            <AdminOnlyRoute>
+              <StockPage />
+            </AdminOnlyRoute>
+          }
+        />
         <Route path="products" element={<ProductsPage />} />
-        <Route path="tracking-catalog" element={<TrackingCatalogPage />} />
+        <Route
+          path="tracking-catalog"
+          element={
+            <AdminOnlyRoute>
+              <TrackingCatalogPage />
+            </AdminOnlyRoute>
+          }
+        />
         <Route path="quotations" element={<QuotationsPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="expenses" element={<ExpensesPage />} />
         <Route path="monthly-fees" element={<MonthlyFeesPage />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="staff" element={<StaffPage />} />
+        <Route
+          path="settings"
+          element={
+            <AdminOnlyRoute>
+              <SettingsPage />
+            </AdminOnlyRoute>
+          }
+        />
+        <Route
+          path="staff"
+          element={
+            <AdminOnlyRoute>
+              <StaffPage />
+            </AdminOnlyRoute>
+          }
+        />
         <Route path="my-pay" element={<MyPayPage />} />
       </Route>
 

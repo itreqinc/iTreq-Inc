@@ -1,4 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import {
   VIEW_MODES,
@@ -8,8 +9,15 @@ import {
 } from '../lib/authConfig'
 
 export function ProtectedRoute({ children, allowedRoles, requireOpsHours = false }) {
-  const { user, loading, opsAllowed, viewMode, dualRole } = useAuth()
+  const { user, loading, opsAllowed, viewMode, dualRole, setViewMode } = useAuth()
   const location = useLocation()
+
+  // Outside ops hours, dual-role staff must use client view — keep mode in sync
+  // so /portal is allowed and we don't bounce /admin ↔ /portal.
+  useEffect(() => {
+    if (!user || !dualRole || opsAllowed) return
+    if (viewMode !== VIEW_MODES.client) setViewMode(VIEW_MODES.client)
+  }, [user, dualRole, opsAllowed, viewMode, setViewMode])
 
   if (loading) {
     return (
@@ -35,9 +43,11 @@ export function ProtectedRoute({ children, allowedRoles, requireOpsHours = false
   }
 
   const ur = normalizeRole(user.role)
+  const portalAsDualRole =
+    dualRole && (viewMode === VIEW_MODES.client || !opsAllowed)
 
-  // Dual-role in client view: treat as portal access even if role is staff/admin.
-  if (allowedRoles?.includes(ROLES.client) && dualRole && viewMode === VIEW_MODES.client) {
+  // Dual-role in client view (or forced there when ops is closed).
+  if (allowedRoles?.includes(ROLES.client) && portalAsDualRole) {
     return children
   }
 
@@ -46,7 +56,7 @@ export function ProtectedRoute({ children, allowedRoles, requireOpsHours = false
     if (!ok) {
       if (ur === ROLES.client) return <Navigate to="/portal" replace />
       if (isStaffLike(ur)) {
-        if (dualRole && viewMode === VIEW_MODES.client) {
+        if (portalAsDualRole) {
           return <Navigate to="/portal" replace />
         }
         return <Navigate to="/admin" replace />
@@ -62,13 +72,14 @@ export function ProtectedRoute({ children, allowedRoles, requireOpsHours = false
     return <Navigate to="/ops-closed" replace />
   }
 
-  // Dual-role staff view should not linger on portal routes.
+  // Dual-role staff view should not linger on portal routes (only when ops is open).
   if (
     dualRole &&
+    opsAllowed &&
     viewMode === VIEW_MODES.staff &&
     location.pathname.startsWith('/portal')
   ) {
-    return <Navigate to={opsAllowed ? '/admin' : '/ops-closed'} replace />
+    return <Navigate to="/admin" replace />
   }
 
   return children

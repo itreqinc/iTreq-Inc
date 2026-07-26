@@ -17,6 +17,8 @@ import {
   normalizeRole,
   readViewMode,
   writeViewMode,
+  writeSessionRole,
+  clearSessionRole,
 } from '../lib/authConfig'
 import { authAction } from '../lib/authApi'
 
@@ -78,6 +80,7 @@ export function AuthProvider({ children }) {
       /* clear locally anyway */
     } finally {
       localStorage.removeItem('session')
+      clearSessionRole()
       setOpsAccess(null)
       if (!AUTH_BYPASS) setUser(null)
       else setUser(bypassUser(readBypassRole()))
@@ -85,14 +88,19 @@ export function AuthProvider({ children }) {
   }, [])
 
   const ingestAuthPayload = useCallback((data) => {
-    if (data?.user) setUser(data.user)
+    if (data?.user) {
+      setUser(data.user)
+      writeSessionRole(data.user.role)
+    }
     if (data?.ops_access) setOpsAccess(data.ops_access)
     else if (data?.user) setOpsAccess(null)
   }, [])
 
   const validateSession = useCallback(async (token) => {
     if (AUTH_BYPASS) {
-      setUser(bypassUser(readBypassRole()))
+      const role = readBypassRole()
+      setUser(bypassUser(role))
+      writeSessionRole(role)
       setOpsAccess({ allowed: true, reason: 'bypass' })
       setLoading(false)
       return
@@ -108,6 +116,7 @@ export function AuthProvider({ children }) {
       const status = error?.context?.status
       if (status === 401 || status === 403 || data?.success === false) {
         localStorage.removeItem('session')
+        clearSessionRole()
         setUser(null)
         setOpsAccess(null)
       } else if (error || !data?.user) {
@@ -130,6 +139,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem('session', token)
       if (userFromLogin) {
         setUser(userFromLogin)
+        writeSessionRole(userFromLogin.role)
         setLoading(false)
         return
       }
@@ -164,6 +174,15 @@ export function AuthProvider({ children }) {
     return data.user
   }, [ingestAuthPayload])
 
+  const updateProfile = useCallback(async (payload) => {
+    const { data, error } = await authAction('update_profile', payload, { withAuth: true })
+    if (error || data?.success === false) {
+      throw new Error(error?.message || data?.message || 'Could not update profile')
+    }
+    ingestAuthPayload(data)
+    return data.user
+  }, [ingestAuthPayload])
+
   const setBypassRole = useCallback((role) => {
     const raw = normalizeRole(role)
     const next =
@@ -177,12 +196,15 @@ export function AuthProvider({ children }) {
     } catch {
       /* ignore */
     }
+    writeSessionRole(next)
     if (AUTH_BYPASS) setUser(bypassUser(next))
   }, [])
 
   useEffect(() => {
     if (AUTH_BYPASS) {
-      setUser(bypassUser(readBypassRole()))
+      const role = readBypassRole()
+      setUser(bypassUser(role))
+      writeSessionRole(role)
       setOpsAccess({ allowed: true, reason: 'bypass' })
       setLoading(false)
       return
@@ -190,7 +212,10 @@ export function AuthProvider({ children }) {
 
     const token = localStorage.getItem('session')
     if (token) validateSession(token)
-    else setLoading(false)
+    else {
+      clearSessionRole()
+      setLoading(false)
+    }
   }, [validateSession])
 
   const dualRole = isDualRole(user)
@@ -210,6 +235,7 @@ export function AuthProvider({ children }) {
       loginWithToken,
       applySession,
       changePassword,
+      updateProfile,
       logout,
       setBypassRole,
       isStaffLike: user ? isStaffLike(user.role) : false,
@@ -225,6 +251,7 @@ export function AuthProvider({ children }) {
       loginWithToken,
       applySession,
       changePassword,
+      updateProfile,
       logout,
       setBypassRole,
     ],

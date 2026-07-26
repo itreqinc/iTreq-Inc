@@ -108,4 +108,4 @@ export function paydayLabel(settings = {}) {
   return 'Auto: later of last Tuesday / last Thursday'
 }
 
-export { ymdInTz, autoPaydayForMonth }
+export { ymdInTz }

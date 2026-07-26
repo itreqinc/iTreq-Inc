@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { payrollApi } from '../../lib/payrollApi'
 import { openPayslipPrintWindow } from '../../lib/payslipDocument'
 import { paydayLabel } from '../../lib/payrollPayday'
+import { AdminIconAction } from '../AdminIconAction'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnSecondary, adminTableShellClass, formatPula } from '../ui'
+import { adminTableShellClass, formatPula } from '../ui'
 
 export default function MyPayPage() {
   const { showError } = useOpsAlert()
@@ -78,13 +79,11 @@ export default function MyPayPage() {
                 <td className="px-3 py-2 text-ink-300">{formatPula(s.advances_recovered)}</td>
                 <td className="px-3 py-2 font-semibold text-white">{formatPula(s.net)}</td>
                 <td className="px-3 py-2 text-right">
-                  <button
-                    type="button"
-                    className={adminBtnSecondary}
+                  <AdminIconAction
+                    label="View / Print"
+                    icon="print"
                     onClick={() => openPayslipPrintWindow(s)}
-                  >
-                    View / Print
-                  </button>
+                  />
                 </td>
               </tr>
             ))}

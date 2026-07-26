@@ -4,12 +4,13 @@ import { ROLES, VIEW_MODES, isAdmin } from '../lib/authConfig'
 import { Logo } from '../components/Logo'
 import { OpsAlertProvider } from './OpsAlertContext'
 
-const baseNav = [
+const navItems = [
   { to: '/admin', label: 'Dashboard', end: true },
   { to: '/admin/clients', label: 'Clients' },
-  { to: '/admin/stock', label: 'Stock' },
+  { to: '/admin/staff', label: 'Staff', adminOnly: true },
+  { to: '/admin/stock', label: 'Stock', adminOnly: true },
   { to: '/admin/products', label: 'Products' },
-  { to: '/admin/tracking-catalog', label: 'Tracking catalog' },
+  { to: '/admin/tracking-catalog', label: 'Tracking catalog', adminOnly: true },
   { to: '/admin/quotations', label: 'Quotations' },
   { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/monthly-fees', label: 'Monthly fees' },
@@ -17,7 +18,7 @@ const baseNav = [
   { to: '/admin/expenses', label: 'Expenses' },
   { to: '/admin/my-pay', label: 'My pay' },
   { to: '/admin/reports', label: 'Reports' },
-  { to: '/admin/settings', label: 'Settings' },
+  { to: '/admin/settings', label: 'Settings', adminOnly: true },
 ]
 
 export function AdminLayout() {
@@ -31,13 +32,7 @@ export function AdminLayout() {
     setViewMode,
   } = useAuth()
 
-  const nav = isAdmin(user?.role)
-    ? [
-        ...baseNav.slice(0, 2),
-        { to: '/admin/staff', label: 'Staff' },
-        ...baseNav.slice(2),
-      ]
-    : baseNav
+  const nav = navItems.filter((item) => !item.adminOnly || isAdmin(user?.role))
 
   return (
     <OpsAlertProvider>
@@ -87,6 +82,22 @@ export function AdminLayout() {
                     Client view
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout()
+                    navigate('/login', { replace: true })
+                  }}
+                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-semibold text-amber-100"
+                >
+                  Switch user
+                </button>
+                <Link
+                  to="/profile"
+                  className="font-semibold text-ink-400 hover:text-ink-200"
+                >
+                  Profile
+                </Link>
                 <button
                   type="button"
                   onClick={async () => {

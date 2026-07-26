@@ -10,7 +10,7 @@ import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 
 export function PaydaySettingsPanel() {
   const { user } = useAuth()
-  const { showError, showSuccess } = useOpsAlert()
+  const { showError, showSuccess, confirm } = useOpsAlert()
   const [mode, setMode] = useState('auto_last_tue_thu')
   const [overrideDate, setOverrideDate] = useState('')
   const [overrideDom, setOverrideDom] = useState('25')
@@ -44,6 +44,17 @@ export function PaydaySettingsPanel() {
 
   async function save(e) {
     e.preventDefault()
+    const ok = await confirm({
+      title: 'Save payday settings?',
+      message:
+        mode === 'override_date'
+          ? `Override payday to ${overrideDate || 'the chosen date'}?`
+          : mode === 'override_day_of_month'
+            ? `Override payday to day ${overrideDom} of each month?`
+            : 'Use the auto last-Tuesday/Thursday payday rule?',
+      confirmLabel: 'Save payday',
+    })
+    if (!ok) return
     setSaving(true)
     const { data, error } = await payrollApi.updatePaydaySettings({
       payroll_payday_mode: mode,
@@ -62,6 +73,12 @@ export function PaydaySettingsPanel() {
   }
 
   async function resetAuto() {
+    const ok = await confirm({
+      title: 'Reset payday to auto?',
+      message: 'Clear any override and use the later of the month’s last Tuesday and last Thursday.',
+      confirmLabel: 'Reset to auto',
+    })
+    if (!ok) return
     setMode('auto_last_tue_thu')
     setSaving(true)
     const { data, error } = await payrollApi.updatePaydaySettings({

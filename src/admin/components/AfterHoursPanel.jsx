@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { authAction } from '../../lib/authApi'
 import { useAuth } from '../../contexts/AuthContext'
-import { isAdmin } from '../../lib/authConfig'
+import { AUTH_BYPASS, isAdmin, isAfterHoursActive } from '../../lib/authConfig'
+import { AdminIconAction } from '../AdminIconAction'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, adminTableShellClass } from '../ui'
+import { adminFieldClass, adminTableShellClass } from '../ui'
 
 export function AfterHoursPanel() {
   const { user } = useAuth()
-  const { showError, showSuccess } = useOpsAlert()
+  const { showError, showSuccess, confirm } = useOpsAlert()
   const [staff, setStaff] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!AUTH_BYPASS)
   const [busyId, setBusyId] = useState(null)
   const [untilById, setUntilById] = useState({})
 
   const load = useCallback(async () => {
-    if (!isAdmin(user?.role)) {
+    if (!isAdmin(user?.role) || AUTH_BYPASS) {
       setLoading(false)
       return
     }
@@ -29,7 +30,7 @@ export function AfterHoursPanel() {
     setStaff(list)
     const map = {}
     for (const s of list) {
-      if (s.after_hours_until) {
+      if (isAfterHoursActive(s.after_hours_until)) {
         const d = new Date(s.after_hours_until)
         const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
         map[s.id] = local.toISOString().slice(0, 16)
@@ -47,6 +48,31 @@ export function AfterHoursPanel() {
   if (!isAdmin(user?.role)) return null
 
   async function save(staffId, clear = false) {
+    const person = staff.find((s) => s.id === staffId)
+    if (clear) {
+      if (!isAfterHoursActive(person?.after_hours_until)) {
+        showError('This staff member has no after-hours access to clear.')
+        return
+      }
+      const ok = await confirm({
+        title: 'Clear after-hours access?',
+        message: `${person?.name || 'This staff member'} will only be able to open ops during normal hours (Mon–Fri 07:00–18:00).`,
+        confirmLabel: 'Clear access',
+      })
+      if (!ok) return
+    } else {
+      const value = untilById[staffId] || ''
+      if (!value) {
+        showError('Choose when after-hours access should end.')
+        return
+      }
+      const ok = await confirm({
+        title: 'Grant after-hours access?',
+        message: `${person?.name || 'This staff member'} will be able to open ops until ${new Date(value).toLocaleString()}.`,
+        confirmLabel: 'Grant access',
+      })
+      if (!ok) return
+    }
     setBusyId(staffId)
     try {
       const value = clear ? null : untilById[staffId] || null
@@ -76,7 +102,12 @@ export function AfterHoursPanel() {
         Staff ops is Mon–Fri 07:00–18:00 (Africa/Gaborone). Grant temporary access beyond that window.
       </p>
 
-      {loading ? (
+      {AUTH_BYPASS ? (
+        <p className="mt-3 text-sm text-ink-400">
+          After-hours controls need a real admin session. Set{' '}
+          <code className="text-ink-300">VITE_AUTH_BYPASS=false</code> and sign in.
+        </p>
+      ) : loading ? (
         <p className="mt-3 text-sm text-ink-400">Loading staff…</p>
       ) : (
         <div className={`${adminTableShellClass} mt-4`}>
@@ -105,23 +136,22 @@ export function AfterHoursPanel() {
                       className={adminFieldClass}
                     />
                   </td>
-                  <td className="space-x-2 px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      disabled={busyId === s.id}
-                      onClick={() => save(s.id, false)}
-                      className={adminBtnPrimary}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === s.id}
-                      onClick={() => save(s.id, true)}
-                      className={adminBtnSecondary}
-                    >
-                      Clear
-                    </button>
+                  <td className="px-3 py-2 text-right">
+                    <div className="inline-flex items-center gap-0.5">
+                      <AdminIconAction
+                        label="Save access window"
+                        icon="check"
+                        disabled={busyId === s.id}
+                        onClick={() => save(s.id, false)}
+                      />
+                      <AdminIconAction
+                        label="Clear access"
+                        icon="x"
+                        tone="muted"
+                        disabled={busyId === s.id || !isAfterHoursActive(s.after_hours_until)}
+                        onClick={() => save(s.id, true)}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

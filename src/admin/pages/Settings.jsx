@@ -3,9 +3,10 @@ import { COMPANY } from '../../data/site'
 import { emptyDocumentSettingsFields } from '../../lib/companyDocumentSettings'
 import { opsApi, sortExpenseCategories } from '../../lib/opsApi'
 import { useOpsAlert } from '../OpsAlertContext'
+import { AdminIconAction } from '../AdminIconAction'
 import { AfterHoursPanel } from '../components/AfterHoursPanel'
 import { PaydaySettingsPanel } from '../components/PaydaySettingsPanel'
-import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, adminFieldReadonlyClass } from '../ui'
+import { adminFieldClass, adminFieldReadonlyClass } from '../ui'
 
 const empty = {
   company_name: 'iTreq Inc',
@@ -201,27 +202,26 @@ function SectionEditActions({ editing, dirty, saving, onEdit, onCancel, onSave }
   if (!editing) {
     return (
       <div className="pt-1">
-        <button type="button" onClick={onEdit} className={adminBtnPrimary}>
-          Edit
-        </button>
+        <AdminIconAction label="Edit" icon="pencil" onClick={onEdit} />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-wrap gap-2 pt-1">
-      <button type="button" onClick={onCancel} disabled={saving} className={adminBtnSecondary}>
-        Cancel
-      </button>
-      <button
-        type="button"
-        onClick={onSave}
+    <div className="flex flex-wrap items-center gap-0.5 pt-1">
+      <AdminIconAction
+        label="Cancel"
+        icon="x"
+        tone="muted"
+        disabled={saving}
+        onClick={onCancel}
+      />
+      <AdminIconAction
+        label={saving ? 'Saving…' : 'Save'}
+        icon="check"
         disabled={saving || !dirty}
-        title={!dirty ? 'Change something before saving' : undefined}
-        className={adminBtnPrimary}
-      >
-        {saving ? 'Saving…' : 'Save'}
-      </button>
+        onClick={onSave}
+      />
     </div>
   )
 }

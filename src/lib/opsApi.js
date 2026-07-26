@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from './supabase'
 import { invokeFn } from './invokeFn'
-import { AUTH_BYPASS } from './authConfig'
+import { isAdmin, readSessionRole } from './authConfig'
 import { buildClientDisplayName, formToClientRow } from './clientRegistration'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
@@ -50,6 +50,18 @@ function dbUnavailable() {
     data: null,
     error: { message: 'Supabase is not configured.' },
   }
+}
+
+function adminRequired() {
+  return {
+    data: null,
+    error: { message: 'Admin access required for this action.' },
+  }
+}
+
+/** Client-side gate for Settings / Stock / Tracking catalog mutations. */
+function assertAdmin() {
+  return isAdmin(readSessionRole())
 }
 
 function mapError(error) {
@@ -209,6 +221,7 @@ export const opsApi = {
   },
 
   async updateProduct(id, payload) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     const row = {
       name: payload.name?.trim(),
@@ -233,6 +246,7 @@ export const opsApi = {
   },
 
   async deleteProduct(id) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     if (!id) {
       return { data: null, error: { message: 'Product id is required.' } }
@@ -273,6 +287,7 @@ export const opsApi = {
   },
 
   async createProduct(payload) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     const sku = String(payload.sku || '').trim()
     const name = String(payload.name || '').trim()
@@ -324,6 +339,7 @@ export const opsApi = {
   },
 
   async saveTrackableItem({ id, name, blurb, active, sort_order }) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     const row = {
       name: String(name || '').trim(),
@@ -355,6 +371,7 @@ export const opsApi = {
   },
 
   async deleteTrackableItem(id) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     const { error } = await supabase.from('trackable_items').delete().eq('id', id)
     if (error) return mapError(error)
@@ -362,6 +379,7 @@ export const opsApi = {
   },
 
   async saveTrackableItemComponents(trackableItemId, components) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     if (!trackableItemId) {
       return { data: null, error: { message: 'Trackable item is required.' } }
@@ -563,6 +581,7 @@ export const opsApi = {
   },
 
   async adjustStock({ productId, quantityDelta, note }) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     const delta = Number(quantityDelta)
     if (!productId || !Number.isInteger(delta) || delta === 0) {
@@ -663,6 +682,7 @@ export const opsApi = {
     notes,
     lines,
   }) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     const amt = Number(amount)
     if (!(amt > 0)) {
@@ -745,6 +765,7 @@ export const opsApi = {
   },
 
   async receivePurchaseOrder({ purchase_order_id, received_date, notes, lines }) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     if (!purchase_order_id) {
       return { data: null, error: { message: 'Purchase order is required.' } }
@@ -867,6 +888,7 @@ export const opsApi = {
   },
 
   async updatePurchaseReceipt({ id, received_date, notes, lines }) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     if (!id) {
       return { data: null, error: { message: 'Delivery is required.' } }
@@ -1033,6 +1055,7 @@ export const opsApi = {
   },
 
   async cancelPurchaseReceipt(id) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     if (!id) {
       return { data: null, error: { message: 'Delivery is required.' } }
@@ -1138,6 +1161,7 @@ export const opsApi = {
   },
 
   async updateSettings(payload) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     const row = {
       company_name: payload.company_name?.trim() || 'iTreq Inc',
@@ -2257,6 +2281,7 @@ export const opsApi = {
   },
 
   async saveExpenseCategory({ id, name, sort_order, active }) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     const trimmed = String(name || '').trim()
     if (!trimmed) {
@@ -2288,6 +2313,7 @@ export const opsApi = {
   },
 
   async deleteExpenseCategory(id) {
+    if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
     if (!id) {
       return { data: null, error: { message: 'Category id is required.' } }

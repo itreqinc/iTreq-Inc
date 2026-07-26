@@ -5,7 +5,7 @@ import { adminBtnPrimary, adminBtnSecondary } from '../admin/ui'
 
 export default function Unauthorized() {
   const navigate = useNavigate()
-  const { user, authBypass, setBypassRole } = useAuth()
+  const { user, authBypass, setBypassRole, logout } = useAuth()
   const role = user?.role
 
   return (
@@ -56,7 +56,17 @@ export default function Unauthorized() {
           </button>
         </div>
       ) : (
-        <div className="mt-6 flex gap-4">
+        <div className="mt-6 flex flex-wrap justify-center gap-4">
+          <button
+            type="button"
+            onClick={async () => {
+              await logout()
+              navigate('/login', { replace: true })
+            }}
+            className={adminBtnPrimary}
+          >
+            Switch user
+          </button>
           <Link
             to={
               role === ROLES.client

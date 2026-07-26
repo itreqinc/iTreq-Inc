@@ -190,6 +190,10 @@ function publicUser(row: Record<string, unknown>) {
     id: row.id,
     role: row.role,
     name: row.name,
+    first_name: row.first_name ?? null,
+    middle_name: row.middle_name ?? null,
+    surname: row.surname ?? null,
+    gender: row.gender ?? null,
     email: row.email ?? null,
     phone: row.phone ?? null,
     client_id: row.client_id ?? null,
@@ -198,6 +202,24 @@ function publicUser(row: Record<string, unknown>) {
     first_login_at: row.first_login_at ?? null,
     after_hours_until: row.after_hours_until ?? null,
   }
+}
+
+function buildDisplayName(parts: {
+  first_name?: unknown
+  middle_name?: unknown
+  surname?: unknown
+  name?: unknown
+}) {
+  const joined = [parts.first_name, parts.middle_name, parts.surname]
+    .map((p) => String(p || '').trim())
+    .filter(Boolean)
+    .join(' ')
+  return joined || String(parts.name || '').trim() || 'User'
+}
+
+function normalizeGender(value: unknown) {
+  const g = String(value || '').trim().toUpperCase()
+  return g === 'M' || g === 'F' ? g : null
 }
 
 function bearerToken(req: Request) {
@@ -637,6 +659,55 @@ async function handleChangePassword(
   })
 }
 
+async function handleUpdateProfile(
+  supabase: ReturnType<typeof adminClient>,
+  body: Record<string, unknown>,
+  req: Request,
+) {
+  const token = bearerToken(req) || String(body.session_token || '').trim()
+  const user = await loadSessionUser(supabase, token)
+  if (!user) {
+    return json(401, { success: false, message: 'Session expired. Please sign in again.' })
+  }
+
+  const first_name = String(body.first_name || '').trim()
+  const middle_name = String(body.middle_name || '').trim() || null
+  const surname = String(body.surname || '').trim()
+  const phone = String(body.phone || '').trim() || null
+  const gender = normalizeGender(body.gender)
+
+  if (!first_name || !surname) {
+    return json(400, { success: false, message: 'First name and last name are required.' })
+  }
+  if (!phone) {
+    return json(400, { success: false, message: 'Phone number is required.' })
+  }
+
+  const name = buildDisplayName({ first_name, middle_name, surname })
+  const now = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('users')
+    .update({
+      first_name,
+      middle_name,
+      surname,
+      name,
+      phone,
+      gender,
+      updated_at: now,
+    })
+    .eq('id', user.id)
+    .select('*')
+    .single()
+  if (error) throw error
+
+  return json(200, {
+    success: true,
+    user: publicUser(data),
+    ops_access: computeOpsAccess(data),
+  })
+}
+
 async function handleInviteClient(
   supabase: ReturnType<typeof adminClient>,
   body: Record<string, unknown>,
@@ -652,7 +723,7 @@ async function handleInviteClient(
 
   const { data: client, error: clientErr } = await supabase
     .from('clients')
-    .select('id, name, email, phone, cellphone')
+    .select('id, name, email, phone, cellphone, first_name, middle_name, surname, gender')
     .eq('id', clientId)
     .maybeSingle()
   if (clientErr) throw clientErr
@@ -665,9 +736,24 @@ async function handleInviteClient(
     return json(400, { success: false, message: 'Client needs an email before invite.' })
   }
   const phone = String(client.cellphone || client.phone || '').trim() || null
-  const name = String(client.name || 'Client').trim() || 'Client'
+  const first_name = String(client.first_name || '').trim() || null
+  const middle_name = String(client.middle_name || '').trim() || null
+  const surname = String(client.surname || '').trim() || null
+  const gender = normalizeGender(client.gender)
+  const name =
+    buildDisplayName({ first_name, middle_name, surname, name: client.name }) || 'Client'
   const now = new Date().toISOString()
   const password_hash = await hashPassword(DEFAULT_INVITE_PASSWORD)
+
+  const profileFields = {
+    name,
+    first_name,
+    middle_name,
+    surname,
+    gender,
+    email,
+    phone,
+  }
 
   const { data: existing } = await supabase
     .from('users')
@@ -687,9 +773,7 @@ async function handleInviteClient(
     const { data, error } = await supabase
       .from('users')
       .update({
-        name,
-        email,
-        phone,
+        ...profileFields,
         password_hash,
         must_change_password: true,
         invited_at: now,
@@ -705,9 +789,7 @@ async function handleInviteClient(
     const { data, error } = await supabase
       .from('users')
       .insert({
-        name,
-        email,
-        phone,
+        ...profileFields,
         password_hash,
         role: 'client',
         client_id: clientId,
@@ -978,6 +1060,8 @@ serve(async (req) => {
         return await handleLogout(supabase, req, body)
       case 'change_password':
         return await handleChangePassword(supabase, body, req)
+      case 'update_profile':
+        return await handleUpdateProfile(supabase, body, req)
       case 'invite_client':
         return await handleInviteClient(supabase, body, req)
       case 'list_portal_invites':

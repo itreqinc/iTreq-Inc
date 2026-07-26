@@ -1,13 +1,20 @@
 import { invokeFn } from './invokeFn'
+import { AUTH_BYPASS } from './authConfig'
+
+const BYPASS_SESSION_MSG =
+  'This action needs a real session. Set VITE_AUTH_BYPASS=false and sign in.'
 
 /**
  * Call the bundled `auth` Edge Function.
  * Pass withAuth when the action needs the current session bearer token.
+ * Under AUTH_BYPASS there is no session token — skip the fake "expired" path.
  */
 export async function authAction(action, body = {}, { withAuth = false } = {}) {
-  return invokeFn(
-    'auth',
-    { body: { action, ...body } },
-    { withAuth },
-  )
+  if (AUTH_BYPASS && withAuth) {
+    return {
+      data: null,
+      error: { message: BYPASS_SESSION_MSG, bypass: true },
+    }
+  }
+  return invokeFn('auth', { body: { action, ...body } }, { withAuth })
 }
