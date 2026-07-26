@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { NAV_LINKS } from '../data/site'
+import { useAuth } from '../contexts/AuthContext'
+import { ROLES, normalizeRole } from '../lib/authConfig'
 import { Logo } from './Logo'
 import { Button } from './Button'
 
 export function Navbar() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const { user } = useAuth()
+
+  const account = user
+    ? {
+        to: normalizeRole(user.role) === ROLES.client ? '/portal' : '/admin',
+        label: normalizeRole(user.role) === ROLES.client ? 'My portal' : 'Ops',
+      }
+    : { to: '/login', label: 'Sign in' }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12)
@@ -59,7 +69,13 @@ export function Navbar() {
           ))}
         </nav>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <Link
+            to={account.to}
+            className="rounded-full px-3.5 py-2 text-sm font-medium text-ink-300 transition hover:bg-white/5 hover:text-white"
+          >
+            {account.label}
+          </Link>
           <Button to="/contact" className="!px-5 !py-2.5">
             Get a Quote
           </Button>
@@ -104,7 +120,15 @@ export function Navbar() {
               </NavLink>
             ))}
           </nav>
-          <div className="mt-4">
+          <div className="mt-4 space-y-2">
+            <Button
+              to={account.to}
+              variant="ghost"
+              className="w-full"
+              onClick={() => setOpen(false)}
+            >
+              {account.label}
+            </Button>
             <Button to="/contact" className="w-full" onClick={() => setOpen(false)}>
               Get a Quote
             </Button>

@@ -8,6 +8,7 @@ import {
   paymentMethodLabel,
 } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
+import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { PaymentDocumentButtons } from '../PaymentDocumentButtons'
 import {
   openPaymentDocumentPrintWindow,
@@ -65,6 +66,7 @@ function snapshotPaymentForm(form) {
 
 export default function PaymentsPage() {
   const [params, setParams] = useSearchParams()
+  const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [clients, setClients] = useState([])
@@ -89,9 +91,9 @@ export default function PaymentsPage() {
       showError(p.error.message)
       return
     }
-    setRows(p.data || [])
-    setClients(c.data || [])
-  }, [showError])
+    setRows((p.data || []).filter((r) => String(r.client_id) !== String(ownClientId || '')))
+    setClients((c.data || []).filter((cl) => String(cl.id) !== String(ownClientId || '')))
+  }, [showError, ownClientId])
 
   const loadOpenInvoices = useCallback(
     async (clientId, paymentId = null, seedSelectedIds = null) => {
@@ -133,6 +135,10 @@ export default function PaymentsPage() {
         showError(error.message)
         return
       }
+      if (isBlocked(data.client_id)) {
+        showError(blockMessage())
+        return
+      }
       const selectedIds = (data.allocations || [])
         .filter((a) => Number(a.amount) > 0)
         .map((a) => a.invoice_id)
@@ -156,7 +162,7 @@ export default function PaymentsPage() {
         }),
       )
     },
-    [showError, loadOpenInvoices],
+    [showError, loadOpenInvoices, isBlocked, blockMessage],
   )
 
   useEffect(() => {

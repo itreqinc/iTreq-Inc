@@ -2,14 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Logo } from '../components/Logo'
 import { useAuth } from '../contexts/AuthContext'
-import { AUTH_BYPASS, ROLES } from '../lib/authConfig'
+import { AUTH_BYPASS, ROLES, VIEW_MODES } from '../lib/authConfig'
 import { getPortalClientId, setPortalClientId } from '../lib/portalClient'
 import { opsApi } from '../lib/opsApi'
 import { OpsAlertProvider, useOpsAlert } from '../admin/OpsAlertContext'
 
 function PortalShell() {
   const navigate = useNavigate()
-  const { user, authBypass, setBypassRole, logout } = useAuth()
+  const { user, authBypass, setBypassRole, logout, dualRole, setViewMode, opsAllowed } =
+    useAuth()
   const { showError } = useOpsAlert()
   const [clients, setClients] = useState([])
   const linkedClientId = user?.client_id && !user?.bypass ? user.client_id : null
@@ -157,7 +158,20 @@ function PortalShell() {
               >
                 Staff →
               </button>
-            ) : (
+            ) : null}
+            {dualRole && !authBypass ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode(VIEW_MODES.staff)
+                  navigate(opsAllowed ? '/admin' : '/ops-closed')
+                }}
+                className="font-semibold text-brand-400 hover:text-brand-300"
+              >
+                Staff view →
+              </button>
+            ) : null}
+            {!authBypass ? (
               <button
                 type="button"
                 onClick={async () => {
@@ -168,7 +182,7 @@ function PortalShell() {
               >
                 Sign out
               </button>
-            )}
+            ) : null}
             <Link to="/" className="text-ink-400 hover:text-ink-200">
               Public site
             </Link>

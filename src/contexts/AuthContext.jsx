@@ -10,8 +10,13 @@ import {
   AUTH_BYPASS,
   BYPASS_ROLE_KEY,
   ROLES,
+  VIEW_MODES,
+  canAccessOps,
+  isDualRole,
   isStaffLike,
   normalizeRole,
+  readViewMode,
+  writeViewMode,
 } from '../lib/authConfig'
 import { authAction } from '../lib/authApi'
 
@@ -44,14 +49,24 @@ function bypassUser(role) {
     name,
     email: null,
     phone: null,
-    client_id: null,
+    client_id: r === ROLES.client || r === ROLES.staff ? 'bypass-client' : null,
+    must_change_password: false,
+    after_hours_until: null,
     bypass: true,
   }
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [opsAccess, setOpsAccess] = useState(null)
+  const [viewMode, setViewModeState] = useState(() => readViewMode())
   const [loading, setLoading] = useState(true)
+
+  const setViewMode = useCallback((mode) => {
+    const next = mode === VIEW_MODES.client ? VIEW_MODES.client : VIEW_MODES.staff
+    writeViewMode(next)
+    setViewModeState(next)
+  }, [])
 
   const logout = useCallback(async () => {
     const token = localStorage.getItem('session')
@@ -63,14 +78,22 @@ export function AuthProvider({ children }) {
       /* clear locally anyway */
     } finally {
       localStorage.removeItem('session')
+      setOpsAccess(null)
       if (!AUTH_BYPASS) setUser(null)
       else setUser(bypassUser(readBypassRole()))
     }
   }, [])
 
+  const ingestAuthPayload = useCallback((data) => {
+    if (data?.user) setUser(data.user)
+    if (data?.ops_access) setOpsAccess(data.ops_access)
+    else if (data?.user) setOpsAccess(null)
+  }, [])
+
   const validateSession = useCallback(async (token) => {
     if (AUTH_BYPASS) {
       setUser(bypassUser(readBypassRole()))
+      setOpsAccess({ allowed: true, reason: 'bypass' })
       setLoading(false)
       return
     }
@@ -86,10 +109,11 @@ export function AuthProvider({ children }) {
       if (status === 401 || status === 403 || data?.success === false) {
         localStorage.removeItem('session')
         setUser(null)
+        setOpsAccess(null)
       } else if (error || !data?.user) {
         console.warn('Session validation skipped:', error?.message || data?.message)
       } else {
-        setUser(data.user)
+        ingestAuthPayload(data)
         if (data.session_token) {
           localStorage.setItem('session', data.session_token)
         }
@@ -99,7 +123,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [ingestAuthPayload])
 
   const loginWithToken = useCallback(
     async (token, userFromLogin = null) => {
@@ -119,10 +143,26 @@ export function AuthProvider({ children }) {
       throw new Error(data?.message || 'Login failed')
     }
     localStorage.setItem('session', data.session_token)
-    setUser(data.user)
+    ingestAuthPayload(data)
     setLoading(false)
     return data.user
-  }, [])
+  }, [ingestAuthPayload])
+
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    const { data, error } = await authAction(
+      'change_password',
+      {
+        current_password: currentPassword,
+        new_password: newPassword,
+      },
+      { withAuth: true },
+    )
+    if (error || data?.success === false) {
+      throw new Error(error?.message || data?.message || 'Could not change password')
+    }
+    ingestAuthPayload(data)
+    return data.user
+  }, [ingestAuthPayload])
 
   const setBypassRole = useCallback((role) => {
     const raw = normalizeRole(role)
@@ -143,6 +183,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (AUTH_BYPASS) {
       setUser(bypassUser(readBypassRole()))
+      setOpsAccess({ allowed: true, reason: 'bypass' })
       setLoading(false)
       return
     }
@@ -152,18 +193,41 @@ export function AuthProvider({ children }) {
     else setLoading(false)
   }, [validateSession])
 
+  const dualRole = isDualRole(user)
+  const effectiveViewMode = dualRole ? viewMode : isStaffLike(user?.role) ? VIEW_MODES.staff : VIEW_MODES.client
+  const opsAllowed = canAccessOps(user, opsAccess)
+
   const value = useMemo(
     () => ({
       user,
       loading,
       authBypass: AUTH_BYPASS,
+      opsAccess,
+      opsAllowed,
+      viewMode: effectiveViewMode,
+      setViewMode,
+      dualRole,
       loginWithToken,
       applySession,
+      changePassword,
       logout,
       setBypassRole,
       isStaffLike: user ? isStaffLike(user.role) : false,
     }),
-    [user, loading, loginWithToken, applySession, logout, setBypassRole],
+    [
+      user,
+      loading,
+      opsAccess,
+      opsAllowed,
+      effectiveViewMode,
+      setViewMode,
+      dualRole,
+      loginWithToken,
+      applySession,
+      changePassword,
+      logout,
+      setBypassRole,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

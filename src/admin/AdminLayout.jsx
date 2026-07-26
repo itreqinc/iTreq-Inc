@@ -1,10 +1,10 @@
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { ROLES } from '../lib/authConfig'
+import { ROLES, VIEW_MODES, isAdmin } from '../lib/authConfig'
 import { Logo } from '../components/Logo'
 import { OpsAlertProvider } from './OpsAlertContext'
 
-const nav = [
+const baseNav = [
   { to: '/admin', label: 'Dashboard', end: true },
   { to: '/admin/clients', label: 'Clients' },
   { to: '/admin/stock', label: 'Stock' },
@@ -15,13 +15,29 @@ const nav = [
   { to: '/admin/monthly-fees', label: 'Monthly fees' },
   { to: '/admin/payments', label: 'Payments' },
   { to: '/admin/expenses', label: 'Expenses' },
+  { to: '/admin/my-pay', label: 'My pay' },
   { to: '/admin/reports', label: 'Reports' },
   { to: '/admin/settings', label: 'Settings' },
 ]
 
 export function AdminLayout() {
   const navigate = useNavigate()
-  const { user, authBypass, setBypassRole, logout } = useAuth()
+  const {
+    user,
+    authBypass,
+    setBypassRole,
+    logout,
+    dualRole,
+    setViewMode,
+  } = useAuth()
+
+  const nav = isAdmin(user?.role)
+    ? [
+        ...baseNav.slice(0, 2),
+        { to: '/admin/staff', label: 'Staff' },
+        ...baseNav.slice(2),
+      ]
+    : baseNav
 
   return (
     <OpsAlertProvider>
@@ -58,16 +74,30 @@ export function AdminLayout() {
                 </label>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={async () => {
-                  await logout()
-                  navigate('/login', { replace: true })
-                }}
-                className="font-semibold text-ink-400 hover:text-ink-200"
-              >
-                Sign out
-              </button>
+              <>
+                {dualRole ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode(VIEW_MODES.client)
+                      navigate('/portal')
+                    }}
+                    className="rounded-md border border-brand-500/40 bg-brand-500/10 px-2 py-1 font-semibold text-brand-200"
+                  >
+                    Client view
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout()
+                    navigate('/login', { replace: true })
+                  }}
+                  className="font-semibold text-ink-400 hover:text-ink-200"
+                >
+                  Sign out
+                </button>
+              </>
             )}
             <span className="text-ink-400">
               {user?.name || 'User'} · <span className="text-ink-200">{user?.role}</span>
@@ -75,6 +105,13 @@ export function AdminLayout() {
           </div>
         </div>
       </header>
+
+      {dualRole ? (
+        <div className="border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-center text-xs text-amber-100 sm:px-6">
+          Staff view: you cannot review, edit, or delete quotes, invoices, or payments for your own
+          client account.
+        </div>
+      ) : null}
 
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[220px_1fr] lg:gap-0">
         <nav className="space-y-1 lg:sticky lg:top-6 lg:self-start lg:border-r lg:border-white/10 lg:pr-6">
@@ -92,9 +129,6 @@ export function AdminLayout() {
               }
             >
               <span>{item.label}</span>
-              {item.soon ? (
-                <span className="text-[10px] uppercase tracking-wide text-ink-500">Soon</span>
-              ) : null}
             </NavLink>
           ))}
         </nav>

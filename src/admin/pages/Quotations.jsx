@@ -14,6 +14,7 @@ import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import { ClientSelect } from '../ClientSelect'
 import { useOpsAlert } from '../OpsAlertContext'
+import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import {
@@ -53,6 +54,7 @@ function snapshotQuotationForm(form) {
 export default function QuotationsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm, prompt } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
@@ -91,13 +93,15 @@ export default function QuotationsPage() {
       showError(q.error.message)
       return
     }
-    setRows(q.data || [])
-    setClients(c.data || [])
+    setRows((q.data || []).filter((r) => String(r.client_id) !== String(ownClientId || '')))
+    setClients(
+      (c.data || []).filter((cl) => String(cl.id) !== String(ownClientId || '')),
+    )
     setProducts(p.data || [])
     setTaxRate(Number(s.data?.default_tax_rate) || 0)
     if (t.error) showError(t.error.message)
     else setTrackableItems(t.data || [])
-  }, [showError])
+  }, [showError, ownClientId])
 
   useEffect(() => {
     load()
@@ -124,6 +128,10 @@ export default function QuotationsPage() {
     const { data, error: err } = await opsApi.getQuotation(id)
     if (err) {
       showError(err.message)
+      return
+    }
+    if (isBlocked(data.client_id)) {
+      showError(blockMessage())
       return
     }
 

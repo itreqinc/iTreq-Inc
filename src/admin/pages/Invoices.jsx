@@ -22,6 +22,7 @@ import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
+import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
@@ -89,6 +90,7 @@ function snapshotInvoiceForm(form) {
 
 export default function InvoicesPage() {
   const [params, setParams] = useSearchParams()
+  const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [clients, setClients] = useState([])
@@ -132,15 +134,15 @@ export default function InvoicesPage() {
       showError(inv.error.message)
       return
     }
-    setRows(inv.data || [])
-    setClients(c.data || [])
+    setRows((inv.data || []).filter((r) => String(r.client_id) !== String(ownClientId || '')))
+    setClients((c.data || []).filter((cl) => String(cl.id) !== String(ownClientId || '')))
     setProducts(p.data || [])
     setTaxRate(Number(s.data?.default_tax_rate) || 0)
     if (t.error) showError(t.error.message)
     else setTrackableItems(t.data || [])
     if (unread.error) showError(unread.error.message)
     else setUnreadByInvoice(unread.data || {})
-  }, [showError])
+  }, [showError, ownClientId])
 
   useEffect(() => {
     load()
@@ -151,6 +153,10 @@ export default function InvoicesPage() {
       const { data, error: err } = await opsApi.getInvoice(id)
       if (err) {
         showError(err.message)
+        return
+      }
+      if (isBlocked(data.client_id)) {
+        showError(blockMessage())
         return
       }
 
@@ -187,7 +193,7 @@ export default function InvoicesPage() {
         setAccountCredit(0)
       }
     },
-    [showError, trackableItems],
+    [showError, trackableItems, isBlocked, blockMessage],
   )
 
   useEffect(() => {

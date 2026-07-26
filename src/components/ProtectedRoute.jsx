@@ -1,9 +1,14 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { isStaffLike, normalizeRole, ROLES } from '../lib/authConfig'
+import {
+  VIEW_MODES,
+  isStaffLike,
+  normalizeRole,
+  ROLES,
+} from '../lib/authConfig'
 
-export function ProtectedRoute({ children, allowedRoles }) {
-  const { user, loading } = useAuth()
+export function ProtectedRoute({ children, allowedRoles, requireOpsHours = false }) {
+  const { user, loading, opsAllowed, viewMode, dualRole } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -25,14 +30,45 @@ export function ProtectedRoute({ children, allowedRoles }) {
     )
   }
 
+  if (user.must_change_password && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />
+  }
+
+  const ur = normalizeRole(user.role)
+
+  // Dual-role in client view: treat as portal access even if role is staff/admin.
+  if (allowedRoles?.includes(ROLES.client) && dualRole && viewMode === VIEW_MODES.client) {
+    return children
+  }
+
   if (allowedRoles?.length) {
-    const ur = normalizeRole(user.role)
     const ok = allowedRoles.some((r) => normalizeRole(r) === ur)
     if (!ok) {
       if (ur === ROLES.client) return <Navigate to="/portal" replace />
-      if (isStaffLike(ur)) return <Navigate to="/admin" replace />
+      if (isStaffLike(ur)) {
+        if (dualRole && viewMode === VIEW_MODES.client) {
+          return <Navigate to="/portal" replace />
+        }
+        return <Navigate to="/admin" replace />
+      }
       return <Navigate to="/unauthorized" replace />
     }
+  }
+
+  if (requireOpsHours && isStaffLike(ur) && !opsAllowed) {
+    if (user.client_id) {
+      return <Navigate to="/portal" replace />
+    }
+    return <Navigate to="/ops-closed" replace />
+  }
+
+  // Dual-role staff view should not linger on portal routes.
+  if (
+    dualRole &&
+    viewMode === VIEW_MODES.staff &&
+    location.pathname.startsWith('/portal')
+  ) {
+    return <Navigate to={opsAllowed ? '/admin' : '/ops-closed'} replace />
   }
 
   return children

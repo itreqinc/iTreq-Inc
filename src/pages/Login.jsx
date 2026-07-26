@@ -36,7 +36,10 @@ export default function Login() {
   const [info, setInfo] = useState('')
 
   if (authBypass || user) {
-    const target = AUTH_BYPASS ? '/admin' : redirect
+    if (user?.must_change_password) {
+      return <Navigate to="/change-password" replace />
+    }
+    const target = AUTH_BYPASS ? '/admin' : redirect === '/admin' ? '/redirect' : redirect
     return <Navigate to={target} replace />
   }
 
@@ -128,7 +131,8 @@ export default function Login() {
       <div className="w-full max-w-md rounded-3xl border border-white/10 bg-ink-900/60 p-8">
         <h1 className="font-display text-2xl font-bold text-white">Sign in</h1>
         <p className="mt-2 text-sm text-ink-300">
-          Choose email OTP, SMS OTP, or password.
+          Use the email from your invite, or OTP / password. Invited clients should change the
+          temporary password on first login.
         </p>
 
         <div className="mt-6 grid grid-cols-3 gap-2">

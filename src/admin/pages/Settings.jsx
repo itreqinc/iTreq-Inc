@@ -3,6 +3,8 @@ import { COMPANY } from '../../data/site'
 import { emptyDocumentSettingsFields } from '../../lib/companyDocumentSettings'
 import { opsApi, sortExpenseCategories } from '../../lib/opsApi'
 import { useOpsAlert } from '../OpsAlertContext'
+import { AfterHoursPanel } from '../components/AfterHoursPanel'
+import { PaydaySettingsPanel } from '../components/PaydaySettingsPanel'
 import { adminBtnPrimary, adminBtnSecondary, adminFieldClass, adminFieldReadonlyClass } from '../ui'
 
 const empty = {
@@ -805,6 +807,9 @@ export default function SettingsPage() {
           </IconAction>
         </div>
       </CollapsibleSection>
+
+      <AfterHoursPanel />
+      <PaydaySettingsPanel />
     </div>
   )
 }

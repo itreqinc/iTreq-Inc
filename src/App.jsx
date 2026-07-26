@@ -14,6 +14,8 @@ import ExpensesPage from './admin/pages/Expenses'
 import ReportsPage from './admin/pages/Reports'
 import MonthlyFeesPage from './admin/pages/MonthlyFees'
 import TrackingCatalogPage from './admin/pages/TrackingCatalog'
+import StaffPage from './admin/pages/Staff'
+import MyPayPage from './admin/pages/MyPay'
 import PortalHome from './portal/PortalHome'
 import { PortalLayout } from './portal/PortalLayout'
 import PortalInvoices from './portal/PortalInvoices'
@@ -34,6 +36,8 @@ import Contact from './pages/Contact'
 import Login from './pages/Login'
 import Unauthorized from './pages/Unauthorized'
 import RoleRedirect from './pages/RoleRedirect'
+import ChangePassword from './pages/ChangePassword'
+import OpsClosed from './pages/OpsClosed'
 import { ROLES, STAFF_LIKE_ROLES } from './lib/authConfig'
 
 export default function App() {
@@ -49,13 +53,15 @@ export default function App() {
       </Route>
 
       <Route path="/login" element={<Login />} />
+      <Route path="/change-password" element={<ChangePassword />} />
+      <Route path="/ops-closed" element={<OpsClosed />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
       <Route path="/redirect" element={<RoleRedirect />} />
 
       <Route
         path="/admin"
         element={
-          <ProtectedRoute allowedRoles={STAFF_LIKE_ROLES}>
+          <ProtectedRoute allowedRoles={STAFF_LIKE_ROLES} requireOpsHours>
             <AdminLayout />
           </ProtectedRoute>
         }
@@ -72,6 +78,8 @@ export default function App() {
         <Route path="monthly-fees" element={<MonthlyFeesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="staff" element={<StaffPage />} />
+        <Route path="my-pay" element={<MyPayPage />} />
       </Route>
 
       <Route
