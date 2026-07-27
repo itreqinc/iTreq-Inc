@@ -85,7 +85,6 @@ export function AdminLayout() {
       <header className="relative z-40 border-b border-white/10 bg-ink-900/80">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <MobileMenuButton open={navOpen} onToggle={() => setNavOpen((v) => !v)} />
             <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
               <Logo className="h-9 shrink-0" />
               <span className="font-display text-sm font-semibold text-white">Ops</span>
@@ -164,6 +163,7 @@ export function AdminLayout() {
               {user?.name || 'User'} ·{' '}
               <span className="text-ink-200">{privilegeRoleLabel(user?.role)}</span>
             </span>
+            <MobileMenuButton open={navOpen} onToggle={() => setNavOpen((v) => !v)} />
           </div>
         </div>
 

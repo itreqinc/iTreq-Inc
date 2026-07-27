@@ -118,24 +118,6 @@ function PortalShell() {
       <header className="relative z-40 border-b border-white/10 bg-ink-900/80">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/15 text-white md:hidden"
-              aria-label={navOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={navOpen}
-              onClick={() => setNavOpen((v) => !v)}
-            >
-              <span className="sr-only">Menu</span>
-              <div className="flex w-5 flex-col gap-1.5">
-                <span
-                  className={`h-0.5 w-full bg-current transition ${navOpen ? 'translate-y-2 rotate-45' : ''}`}
-                />
-                <span className={`h-0.5 w-full bg-current transition ${navOpen ? 'opacity-0' : ''}`} />
-                <span
-                  className={`h-0.5 w-full bg-current transition ${navOpen ? '-translate-y-2 -rotate-45' : ''}`}
-                />
-              </div>
-            </button>
             <Link to="/portal" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
               <Logo className="h-9 shrink-0" />
               <span className="font-display text-sm font-semibold text-white">Client portal</span>
@@ -234,6 +216,24 @@ function PortalShell() {
             <Link to="/" className="text-ink-400 hover:text-ink-200">
               Public site
             </Link>
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/15 text-white md:hidden"
+              aria-label={navOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen((v) => !v)}
+            >
+              <span className="sr-only">Menu</span>
+              <div className="flex w-5 flex-col gap-1.5">
+                <span
+                  className={`h-0.5 w-full bg-current transition ${navOpen ? 'translate-y-2 rotate-45' : ''}`}
+                />
+                <span className={`h-0.5 w-full bg-current transition ${navOpen ? 'opacity-0' : ''}`} />
+                <span
+                  className={`h-0.5 w-full bg-current transition ${navOpen ? '-translate-y-2 -rotate-45' : ''}`}
+                />
+              </div>
+            </button>
           </div>
         </div>
 
