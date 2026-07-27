@@ -65,7 +65,7 @@ export default function Unauthorized() {
             }}
             className={adminBtnPrimary}
           >
-            Switch user
+            Sign out
           </button>
           <Link
             to={

@@ -83,22 +83,26 @@ export function AdminLayout() {
     <OpsAlertProvider>
     <div className="min-h-screen overflow-x-clip bg-ink-950 text-ink-100">
       <header className="relative z-40 border-b border-white/10 bg-ink-900/80">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
-              <Logo className="h-9 shrink-0" />
-              <span className="font-display text-sm font-semibold text-white">Ops</span>
-            </Link>
-            <Link
-              to="/"
-              className="hidden text-xs text-ink-400 hover:text-ink-200 sm:inline"
-              onClick={() => setNavOpen(false)}
-            >
-              ← Public site
-            </Link>
-          </div>
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
+            <div className="flex items-center justify-between gap-3 lg:justify-start">
+              <div className="flex min-w-0 items-center gap-3">
+                <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
+                  <Logo className="h-9 shrink-0" />
+                  <span className="font-display text-sm font-semibold text-white">Ops</span>
+                </Link>
+                <Link
+                  to="/"
+                  className="hidden text-xs text-ink-400 hover:text-ink-200 sm:inline"
+                  onClick={() => setNavOpen(false)}
+                >
+                  ← Public site
+                </Link>
+              </div>
+              <MobileMenuButton open={navOpen} onToggle={() => setNavOpen((v) => !v)} />
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-3 text-xs">
             {authBypass ? (
               <>
                 <span className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-amber-200">
@@ -131,16 +135,6 @@ export function AdminLayout() {
                     Client view
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await logout()
-                    navigate('/login', { replace: true })
-                  }}
-                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-semibold text-amber-100"
-                >
-                  Switch user
-                </button>
                 <Link
                   to="/profile"
                   className="font-semibold text-ink-400 hover:text-ink-200"
@@ -163,7 +157,7 @@ export function AdminLayout() {
               {user?.name || 'User'} ·{' '}
               <span className="text-ink-200">{privilegeRoleLabel(user?.role)}</span>
             </span>
-            <MobileMenuButton open={navOpen} onToggle={() => setNavOpen((v) => !v)} />
+            </div>
           </div>
         </div>
 

@@ -116,22 +116,43 @@ function PortalShell() {
   return (
     <div className="min-h-screen overflow-x-clip bg-ink-950 text-ink-100">
       <header className="relative z-40 border-b border-white/10 bg-ink-900/80">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <Link to="/portal" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
-              <Logo className="h-9 shrink-0" />
-              <span className="font-display text-sm font-semibold text-white">Client portal</span>
-            </Link>
-            <nav className="hidden flex-wrap gap-1 md:flex">
-              {portalNav.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
-          </div>
+        <div className="mx-auto max-w-5xl px-4 py-3 sm:px-6">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
+            <div className="flex items-center justify-between gap-3 md:justify-start">
+              <div className="flex min-w-0 items-center gap-3">
+                <Link to="/portal" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
+                  <Logo className="h-9 shrink-0" />
+                  <span className="font-display text-sm font-semibold text-white">Client portal</span>
+                </Link>
+                <nav className="hidden flex-wrap gap-1 md:flex">
+                  {portalNav.map((item) => (
+                    <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </nav>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/15 text-white md:hidden"
+                aria-label={navOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={navOpen}
+                onClick={() => setNavOpen((v) => !v)}
+              >
+                <span className="sr-only">Menu</span>
+                <div className="flex w-5 flex-col gap-1.5">
+                  <span
+                    className={`h-0.5 w-full bg-current transition ${navOpen ? 'translate-y-2 rotate-45' : ''}`}
+                  />
+                  <span className={`h-0.5 w-full bg-current transition ${navOpen ? 'opacity-0' : ''}`} />
+                  <span
+                    className={`h-0.5 w-full bg-current transition ${navOpen ? '-translate-y-2 -rotate-45' : ''}`}
+                  />
+                </div>
+              </button>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-3 text-xs">
             {AUTH_BYPASS || authBypass ? (
               <label className="flex items-center gap-2 text-ink-300">
                 Client
@@ -185,16 +206,6 @@ function PortalShell() {
             ) : null}
             {!authBypass ? (
               <>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await logout()
-                    navigate('/login', { replace: true })
-                  }}
-                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-semibold text-amber-100"
-                >
-                  Switch user
-                </button>
                 <Link
                   to="/profile"
                   className="font-semibold text-ink-400 hover:text-ink-200"
@@ -216,24 +227,7 @@ function PortalShell() {
             <Link to="/" className="text-ink-400 hover:text-ink-200">
               Public site
             </Link>
-            <button
-              type="button"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/15 text-white md:hidden"
-              aria-label={navOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={navOpen}
-              onClick={() => setNavOpen((v) => !v)}
-            >
-              <span className="sr-only">Menu</span>
-              <div className="flex w-5 flex-col gap-1.5">
-                <span
-                  className={`h-0.5 w-full bg-current transition ${navOpen ? 'translate-y-2 rotate-45' : ''}`}
-                />
-                <span className={`h-0.5 w-full bg-current transition ${navOpen ? 'opacity-0' : ''}`} />
-                <span
-                  className={`h-0.5 w-full bg-current transition ${navOpen ? '-translate-y-2 -rotate-45' : ''}`}
-                />
-              </div>
-            </button>
+            </div>
           </div>
         </div>
 
