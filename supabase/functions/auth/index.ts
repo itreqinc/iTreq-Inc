@@ -205,7 +205,25 @@ function publicUser(row: Record<string, unknown>) {
     invited_at: row.invited_at ?? null,
     first_login_at: row.first_login_at ?? null,
     after_hours_until: row.after_hours_until ?? null,
+    job_title: row.job_title ?? null,
   }
+}
+
+/** Attach organizational job title from staff_employment (not users.role). */
+async function publicUserWithEmployment(
+  supabase: ReturnType<typeof adminClient>,
+  row: Record<string, unknown>,
+) {
+  const role = String(row.role || '')
+  if (role !== 'staff' && role !== 'admin') return publicUser(row)
+  const { data: emp, error } = await supabase
+    .from('staff_employment')
+    .select('job_title')
+    .eq('user_id', row.id)
+    .maybeSingle()
+  if (error) throw error
+  if (!emp?.job_title) return publicUser(row)
+  return publicUser({ ...row, job_title: emp.job_title })
 }
 
 function buildDisplayName(parts: {
@@ -449,7 +467,7 @@ async function authSuccessPayload(
   const ops_access = computeOpsAccess(user)
   return json(200, {
     success: true,
-    user: publicUser(user),
+    user: await publicUserWithEmployment(supabase, user),
     session_token: sessionToken,
     ops_access,
   })
@@ -640,7 +658,7 @@ async function handleValidateSession(
   }
   return json(200, {
     success: true,
-    user: publicUser(user),
+    user: await publicUserWithEmployment(supabase, user),
     ops_access: computeOpsAccess(user),
   })
 }
@@ -699,7 +717,7 @@ async function handleChangePassword(
 
   return json(200, {
     success: true,
-    user: publicUser(data),
+    user: await publicUserWithEmployment(supabase, data),
     ops_access: computeOpsAccess(data),
   })
 }
@@ -748,7 +766,7 @@ async function handleUpdateProfile(
 
   return json(200, {
     success: true,
-    user: publicUser(data),
+    user: await publicUserWithEmployment(supabase, data),
     ops_access: computeOpsAccess(data),
   })
 }

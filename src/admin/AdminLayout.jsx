@@ -1,6 +1,6 @@
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { ROLES, VIEW_MODES, isAdmin } from '../lib/authConfig'
+import { ROLES, VIEW_MODES, isAdmin, privilegeRoleLabel } from '../lib/authConfig'
 import { Logo } from '../components/Logo'
 import { OpsAlertProvider } from './OpsAlertContext'
 
@@ -111,7 +111,8 @@ export function AdminLayout() {
               </>
             )}
             <span className="text-ink-400">
-              {user?.name || 'User'} · <span className="text-ink-200">{user?.role}</span>
+              {user?.name || 'User'} ·{' '}
+              <span className="text-ink-200">{privilegeRoleLabel(user?.role)}</span>
             </span>
           </div>
         </div>

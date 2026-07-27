@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { canAccessOps, isStaffLike, ROLES, normalizeRole } from '../lib/authConfig'
+import { canAccessOps, isStaffLike, ROLES, normalizeRole, privilegeRoleLabel } from '../lib/authConfig'
 import {
   inferCountryCodeFromPhone,
   validatePhoneForCountry,
@@ -168,9 +168,12 @@ export default function Profile() {
           <>
             <dl className="mt-6 grid gap-4 sm:grid-cols-2">
               <Field label="Display name">{dash(user.name)}</Field>
-              <Field label="Role">
-                <span className="capitalize">{dash(user.role)}</span>
+              <Field label="System role">
+                <span>{privilegeRoleLabel(user.role)}</span>
               </Field>
+              {user.job_title ? (
+                <Field label="Job title">{dash(user.job_title)}</Field>
+              ) : null}
               <Field label="First name">{dash(user.first_name)}</Field>
               <Field label="Middle name">{dash(user.middle_name)}</Field>
               <Field label="Last name">{dash(user.surname)}</Field>

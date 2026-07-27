@@ -23,6 +23,8 @@ import {
   filterByDateRange,
   todayIso,
 } from '../../lib/dateRange'
+import { useAuth } from '../../contexts/AuthContext'
+import { isAdmin } from '../../lib/authConfig'
 import { adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
@@ -53,6 +55,7 @@ function snapshotQuotationForm(form) {
 
 export default function QuotationsPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [params, setParams] = useSearchParams()
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm, prompt } = useOpsAlert()
@@ -200,6 +203,12 @@ export default function QuotationsPage() {
     !saving &&
     !isDirty
   const canDecline = canCancel
+  const canDelete =
+    isAdmin(user?.role) &&
+    Boolean(editingId) &&
+    form.status !== 'converted' &&
+    !isDirty &&
+    !saving
 
   function statusLabel(quoteOrStatus) {
     if (quoteOrStatus && typeof quoteOrStatus === 'object') {
@@ -331,6 +340,28 @@ export default function QuotationsPage() {
     }
     showSuccess('Quotation declined. The client can see your reason.')
     setShowForm(false)
+    setBaseline('')
+    await load()
+  }
+
+  async function handleDeleteQuotation() {
+    if (!canDelete) return
+    const ok = await confirm({
+      title: 'Delete this quotation?',
+      message: `Permanently delete ${form.number || 'this quotation'}? This cannot be undone.`,
+      confirmLabel: 'Delete quotation',
+    })
+    if (!ok) return
+    setSaving(true)
+    const { error: err } = await opsApi.deleteQuotation(editingId)
+    setSaving(false)
+    if (err) {
+      showError(err.message)
+      return
+    }
+    showSuccess('Quotation deleted.')
+    setShowForm(false)
+    setEditingId(null)
     setBaseline('')
     await load()
   }
@@ -540,6 +571,25 @@ export default function QuotationsPage() {
             >
               Decline
             </button>
+            {isAdmin(user?.role) ? (
+              <button
+                type="button"
+                disabled={!canDelete}
+                title={
+                  !editingId
+                    ? 'Save this quotation first'
+                    : form.status === 'converted'
+                      ? 'Converted quotations cannot be deleted'
+                      : isDirty
+                        ? 'Save or discard changes before deleting'
+                        : 'Permanently remove this quotation'
+                }
+                onClick={handleDeleteQuotation}
+                className={adminBtnDanger}
+              >
+                Delete
+              </button>
+            ) : null}
           </div>
         </form>
       ) : null}

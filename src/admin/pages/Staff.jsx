@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { payrollApi } from '../../lib/payrollApi'
 import { openPayslipPrintWindow } from '../../lib/payslipDocument'
-import { AUTH_BYPASS, isAfterHoursActive } from '../../lib/authConfig'
+import { useAuth } from '../../contexts/AuthContext'
+import { AUTH_BYPASS, isAfterHoursActive, privilegeRoleLabel } from '../../lib/authConfig'
 import { authAction } from '../../lib/authApi'
 import {
   inferCountryCodeFromPhone,
@@ -40,6 +41,8 @@ const emptyForm = () => ({
   email: '',
   country: 'BW',
   phone: '+267',
+  // Privilege role for the account: controls ops access in the system.
+  role: 'staff',
   job_title: 'Staff',
   base_salary: '0',
   start_date: new Date().toISOString().slice(0, 10),
@@ -70,6 +73,7 @@ function DetailField({ label, children, className = '' }) {
 }
 
 export default function StaffPage() {
+  const { user: currentUser } = useAuth()
   const { showError, showSuccess, confirm } = useOpsAlert()
 
   const [staff, setStaff] = useState([])
@@ -198,6 +202,7 @@ export default function StaffPage() {
       email: row.email || '',
       country: inferCountryCodeFromPhone(phone) || 'BW',
       phone,
+      role: row.role || 'staff',
       job_title: row.employment?.job_title || 'Staff',
       base_salary: String(row.employment?.base_salary ?? 0),
       start_date: row.employment?.start_date || new Date().toISOString().slice(0, 10),
@@ -250,6 +255,7 @@ export default function StaffPage() {
       gender: form.gender || null,
       email: form.email,
       phone: form.phone,
+      role: form.role,
       job_title: form.job_title,
       base_salary: Number(form.base_salary) || 0,
       start_date: form.start_date,
@@ -332,7 +338,8 @@ export default function StaffPage() {
   }
 
   function staffRowMenuItems(row) {
-    return [
+    const isSelf = row.id === currentUser?.id
+    const items = [
       {
         label: 'View',
         icon: 'eye',
@@ -343,25 +350,30 @@ export default function StaffPage() {
         icon: 'pencil',
         onClick: () => startEdit(row),
       },
-      {
-        label: 'Reset password',
-        icon: 'key',
-        onClick: () => resetPassword(row),
-      },
-      {
-        label: row.is_active ? 'Disable' : 'Enable',
-        icon: row.is_active ? 'ban' : 'checkCircle',
-        tone: row.is_active ? 'danger' : undefined,
-        onClick: () => toggleActive(row),
-      },
-      {
-        label: deletingId === row.id ? 'Deleting…' : 'Delete',
-        icon: 'trash',
-        tone: 'danger',
-        disabled: deletingId === row.id,
-        onClick: () => removeStaff(row),
-      },
     ]
+    if (!isSelf) {
+      items.push(
+        {
+          label: 'Reset password',
+          icon: 'key',
+          onClick: () => resetPassword(row),
+        },
+        {
+          label: row.is_active ? 'Disable' : 'Enable',
+          icon: row.is_active ? 'ban' : 'checkCircle',
+          tone: row.is_active ? 'danger' : undefined,
+          onClick: () => toggleActive(row),
+        },
+        {
+          label: deletingId === row.id ? 'Deleting…' : 'Delete',
+          icon: 'trash',
+          tone: 'danger',
+          disabled: deletingId === row.id,
+          onClick: () => removeStaff(row),
+        },
+      )
+    }
+    return items
   }
 
   function startEditBenefit(assignment) {
@@ -591,6 +603,7 @@ export default function StaffPage() {
   }
 
   const viewing = viewId ? staff.find((s) => s.id === viewId) : null
+  const editingSelf = Boolean(form.user_id && form.user_id === currentUser?.id)
 
   return (
     <div className="space-y-6">
@@ -714,6 +727,28 @@ export default function StaffPage() {
                 />
               </label>
               <label className="text-sm text-ink-300">
+                Role (system privileges)
+                <select
+                  className={`${adminFieldClass} mt-1`}
+                  value={form.role}
+                  onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+                  disabled={editingSelf}
+                  required
+                >
+                  <option value="staff">Staff</option>
+                  <option value="admin">Admin</option>
+                </select>
+                {editingSelf ? (
+                  <span className="mt-1 block text-xs text-ink-500">
+                    You cannot change your own system role.
+                  </span>
+                ) : (
+                  <span className="mt-1 block text-xs text-ink-500">
+                    Controls ops access (admin nav, settings, stock). Not the job title.
+                  </span>
+                )}
+              </label>
+              <label className="text-sm text-ink-300">
                 Employment status
                 <select
                   className={`${adminFieldClass} mt-1`}
@@ -802,6 +837,7 @@ export default function StaffPage() {
               <h2 className="font-semibold text-white">{viewing.name}</h2>
               <p className="mt-1 text-xs text-ink-400">
                 {viewing.employment?.job_title || 'Staff'} ·{' '}
+                {privilegeRoleLabel(viewing.role)} ·{' '}
                 <span className={viewing.is_active ? 'text-brand-300' : 'text-red-300'}>
                   {viewing.is_active ? 'Active' : 'Disabled'}
                 </span>
@@ -830,6 +866,7 @@ export default function StaffPage() {
             <DetailField label="Email">{dash(viewing.email)}</DetailField>
             <DetailField label="Phone">{dash(viewing.phone)}</DetailField>
             <DetailField label="Job title">{dash(viewing.employment?.job_title)}</DetailField>
+            <DetailField label="System role">{privilegeRoleLabel(viewing.role)}</DetailField>
             <DetailField label="Base salary">
               {formatPula(viewing.employment?.base_salary || 0)}
             </DetailField>
@@ -853,7 +890,8 @@ export default function StaffPage() {
           <thead className="border-b border-white/10 text-ink-400">
             <tr>
               <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Title</th>
+              <th className="px-3 py-2">Job title</th>
+              <th className="px-3 py-2">System role</th>
               <th className="px-3 py-2">Salary</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2" />
@@ -862,13 +900,13 @@ export default function StaffPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-3 py-4 text-ink-500">
+                <td colSpan={6} className="px-3 py-4 text-ink-500">
                   Loading…
                 </td>
               </tr>
             ) : !staff.length ? (
               <tr>
-                <td colSpan={5} className="px-3 py-4 text-ink-500">
+                <td colSpan={6} className="px-3 py-4 text-ink-500">
                   No staff yet.
                 </td>
               </tr>
@@ -894,6 +932,7 @@ export default function StaffPage() {
                       <td className="px-3 py-2 text-ink-300">
                         {row.employment?.job_title || '—'}
                       </td>
+                      <td className="px-3 py-2 text-ink-300">{privilegeRoleLabel(row.role)}</td>
                       <td className="px-3 py-2 text-ink-200">
                         {formatPula(row.employment?.base_salary || 0)}
                       </td>
@@ -917,7 +956,7 @@ export default function StaffPage() {
                     </tr>
                     {isSelected ? (
                       <tr className="border-b border-white/10 bg-ink-950/70">
-                        <td colSpan={5} className="px-3 py-4">
+                        <td colSpan={6} className="px-3 py-4">
                           <div className="grid gap-4 lg:grid-cols-3">
                             <section className="rounded-xl border border-white/10 bg-ink-900/50 p-3 sm:p-4">
                               <h3 className="text-sm font-semibold text-white">Benefits</h3>
@@ -1089,7 +1128,11 @@ export default function StaffPage() {
                               <p className="mt-1 text-xs text-ink-500">
                                 Ops is Mon–Fri 07:00–18:00. Grant temporary access beyond that window.
                               </p>
-                              {AUTH_BYPASS ? (
+                              {String(row.role) === 'admin' ? (
+                                <p className="mt-3 text-sm text-ink-500">
+                                  Admins always have ops access.
+                                </p>
+                              ) : AUTH_BYPASS ? (
                                 <p className="mt-3 text-sm text-ink-500">
                                   Needs a real admin session.
                                 </p>

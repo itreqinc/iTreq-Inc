@@ -6,6 +6,8 @@ import {
 import { useSearchParams } from 'react-router-dom'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
+import { useAuth } from '../../contexts/AuthContext'
+import { isAdmin } from '../../lib/authConfig'
 import {
   currentMonthStartIso,
   documentFilterDate,
@@ -17,6 +19,7 @@ import { opsApi } from '../../lib/opsApi'
 import { emptyLine,
   mapDocLinesForEditor } from '../../lib/billing'
 import { invoiceBalanceDue,
+  dueDateFromIssueDate,
   invoiceDisplayStatus } from '../../lib/payments'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
@@ -76,6 +79,7 @@ function snapshotInvoiceForm(form) {
     client_id: form.client_id || '',
     issue_date: form.issue_date || '',
     due_date: form.due_date || '',
+    billing_period: form.billing_period || '',
     notes: form.notes || '',
     discount_amount: String(form.discount_amount ?? 0),
     lines: (form.lines || []).map((l) => ({
@@ -89,6 +93,7 @@ function snapshotInvoiceForm(form) {
 }
 
 export default function InvoicesPage() {
+  const { user } = useAuth()
   const [params, setParams] = useSearchParams()
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm } = useOpsAlert()
@@ -106,17 +111,21 @@ export default function InvoicesPage() {
   const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
   const [dateTo, setDateTo] = useState(todayIso)
   const [unreadByInvoice, setUnreadByInvoice] = useState({})
-  const [form, setForm] = useState({
-    client_id: '',
-    issue_date: '',
-    due_date: '',
-    notes: '',
-    status: 'draft',
-    number: '',
-    total: 0,
-    amount_paid: 0,
-    discount_amount: 0,
-    lines: [emptyLine()],
+  const [form, setForm] = useState(() => {
+    const issue = todayIso()
+    return {
+      client_id: '',
+      issue_date: issue,
+      due_date: dueDateFromIssueDate(issue),
+      notes: '',
+      status: 'draft',
+      billing_period: '',
+      number: '',
+      total: 0,
+      amount_paid: 0,
+      discount_amount: 0,
+      lines: [emptyLine()],
+    }
   })
 
   const load = useCallback(async () => {
@@ -169,10 +178,12 @@ export default function InvoicesPage() {
         }
       }
 
+      const issue = data.issue_date || todayIso()
       const nextForm = {
         client_id: data.client_id,
-        issue_date: data.issue_date || '',
-        due_date: data.due_date || '',
+        issue_date: issue,
+        due_date: data.due_date || dueDateFromIssueDate(issue),
+        billing_period: data.billing_period || '',
         notes: data.notes || '',
         status: data.status,
         number: data.number || '',
@@ -207,12 +218,14 @@ export default function InvoicesPage() {
     }
     const clientId = params.get('client')
     if (clientId) {
+      const issue = todayIso()
       const nextForm = {
         client_id: clientId,
-        issue_date: '',
-        due_date: '',
+        issue_date: issue,
+        due_date: dueDateFromIssueDate(issue),
         notes: '',
         status: 'draft',
+        billing_period: '',
         number: '',
         total: 0,
         amount_paid: 0,
@@ -230,12 +243,14 @@ export default function InvoicesPage() {
   }, [params, setParams, openRow])
 
   function startNew() {
+    const issue = todayIso()
     const nextForm = {
       client_id: '',
-      issue_date: '',
-      due_date: '',
+      issue_date: issue,
+      due_date: dueDateFromIssueDate(issue),
       notes: '',
       status: 'draft',
+      billing_period: '',
       number: '',
       total: 0,
       amount_paid: 0,
@@ -312,6 +327,13 @@ export default function InvoicesPage() {
     Boolean(editingId) && form.status === 'draft' && !isDirty && !saving
   const canVoid =
     Boolean(editingId) && form.status !== 'void' && !isDirty && !saving
+  const canDelete =
+    isAdmin(user?.role) &&
+    Boolean(editingId) &&
+    !isDirty &&
+    !saving &&
+    (form.status === 'draft' ||
+      (form.status === 'void' && Number(form.amount_paid) <= 0.001))
 
   async function handleSave(e) {
     e.preventDefault()
@@ -438,6 +460,31 @@ export default function InvoicesPage() {
     await load()
   }
 
+  async function handleDelete() {
+    if (!editingId || !canDelete) return
+    const ok = await confirm({
+      title: 'Delete this invoice?',
+      message:
+        form.status === 'draft'
+          ? 'This permanently removes the draft invoice. This cannot be undone.'
+          : 'This permanently removes the void invoice from the system. This cannot be undone.',
+      confirmLabel: 'Delete invoice',
+    })
+    if (!ok) return
+    setSaving(true)
+    const { error: err } = await opsApi.deleteInvoice(editingId)
+    setSaving(false)
+    if (err) {
+      showError(err.message)
+      return
+    }
+    showSuccess('Invoice deleted.')
+    setShowForm(false)
+    setEditingId(null)
+    setBaseline('')
+    await load()
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -501,7 +548,16 @@ export default function InvoicesPage() {
               label="Issue date"
               disabled={readOnly}
               value={form.issue_date}
-              onChange={(issue_date) => setForm((f) => ({ ...f, issue_date }))}
+              onChange={(issue_date) =>
+                setForm((f) => ({
+                  ...f,
+                  issue_date,
+                  due_date:
+                    f.billing_period || !issue_date
+                      ? f.due_date
+                      : dueDateFromIssueDate(issue_date),
+                }))
+              }
             />
             <YearMonthDaySelect
               label="Due date"
@@ -606,6 +662,25 @@ export default function InvoicesPage() {
             >
               Void
             </button>
+            {isAdmin(user?.role) ? (
+              <button
+                type="button"
+                disabled={!canDelete}
+                title={
+                  !editingId
+                    ? 'Save this invoice first'
+                    : form.status === 'draft'
+                      ? 'Permanently remove this draft'
+                      : form.status === 'void'
+                        ? 'Permanently remove this void invoice (no payments)'
+                        : 'Void the invoice first, or only drafts can be deleted'
+                }
+                onClick={handleDelete}
+                className={adminBtnDanger}
+              >
+                Delete
+              </button>
+            ) : null}
           </div>
         </form>
       ) : null}

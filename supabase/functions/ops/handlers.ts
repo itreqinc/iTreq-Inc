@@ -76,11 +76,49 @@ function addMonthsIso(isoDate: string, months = 1) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
+const INVOICE_DUE_DAYS = 5
+
+function addDaysIso(isoDate: string, days: number) {
+  const base = String(isoDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return ''
+  const [y, m, d] = base.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + days)
+  return localTodayIso(dt)
+}
+
+function dueDateFromIssueDate(issueDate: string, days = INVOICE_DUE_DAYS) {
+  const issue = String(issueDate || '').slice(0, 10)
+  if (!issue) return ''
+  return addDaysIso(issue, days)
+}
+
+function resolveInvoiceDates(
+  payload: Record<string, unknown>,
+  existing?: Record<string, unknown>,
+) {
+  if (existing?.billing_period || payload.billing_period) {
+    const issueRaw = payload.issue_date ?? existing?.issue_date
+    const dueRaw = payload.due_date ?? existing?.due_date
+    return {
+      issue_date: issueRaw ? String(issueRaw).slice(0, 10) : localTodayIso(),
+      due_date: dueRaw ? String(dueRaw).slice(0, 10) : null,
+    }
+  }
+  const issue = String(
+    payload.issue_date || existing?.issue_date || localTodayIso(),
+  ).slice(0, 10)
+  return {
+    issue_date: issue,
+    due_date: dueDateFromIssueDate(issue),
+  }
+}
+
 function invoiceEffectiveDueDate(invoice: Record<string, unknown>) {
   const due = invoice?.due_date ? String(invoice.due_date).slice(0, 10) : ''
   if (due) return due
   const issued = invoice?.issue_date ? String(invoice.issue_date).slice(0, 10) : ''
-  return issued ? addMonthsIso(issued, 1) : ''
+  return issued ? dueDateFromIssueDate(issued) : ''
 }
 
 function summarizeReceivables(invoices: Record<string, unknown>[], today = localTodayIso()) {
@@ -242,8 +280,14 @@ function simpleEmailHtml(title: string, body: string) {
 // ---------------------------------------------------------------------------
 
 async function getSettingsInternal(sb: SupabaseClient) {
-  const { data, error } = await sb.from('company_settings').select('*').eq('id', 1).single()
+  const { data, error } = await sb.from('company_settings').select('*').eq('id', 1).maybeSingle()
   if (error) throw mapDbError(error)
+  if (!data) {
+    throw new OpsError(
+      'Company settings row is missing. Apply migrations or insert company_settings id=1.',
+      500,
+    )
+  }
   return data as Record<string, unknown>
 }
 
@@ -541,9 +585,11 @@ async function saveInvoiceInternal(
   const totals = calcDocTotals(normalized, taxRate, Number(discount_amount) || 0)
 
   let invoiceId = id ? String(id) : null
+  const existingRow = invoiceId ? await getInvoiceInternal(sb, invoiceId) : null
+  const dates = resolveInvoiceDates(payload, existingRow || undefined)
 
   if (invoiceId) {
-    const existing = await getInvoiceInternal(sb, invoiceId)
+    const existing = existingRow!
     if (existing.status !== 'draft') {
       throw new OpsError('Only draft invoices can be edited.')
     }
@@ -552,8 +598,8 @@ async function saveInvoiceInternal(
       .update({
         client_id,
         quotation_id: quotation_id || existing.quotation_id,
-        issue_date: issue_date || null,
-        due_date: due_date || null,
+        issue_date: dates.issue_date,
+        due_date: dates.due_date,
         notes: notes ? String(notes).trim() : null,
         status: 'draft',
         ...totals,
@@ -568,8 +614,8 @@ async function saveInvoiceInternal(
       .insert({
         client_id,
         quotation_id: quotation_id || null,
-        issue_date: issue_date || null,
-        due_date: due_date || null,
+        issue_date: dates.issue_date,
+        due_date: dates.due_date,
         notes: notes ? String(notes).trim() : null,
         status: status || 'draft',
         ...totals,
@@ -1649,6 +1695,7 @@ handlers.convert_quotation_to_invoice = async ({ user, sb }, args) => {
     discount_amount: quote.discount_amount,
     lines: quote.lines,
     status: 'draft',
+    issue_date: localTodayIso(),
   })
 
   const { error } = await sb
@@ -1716,6 +1763,39 @@ handlers.void_invoice = async ({ user, sb }, args) => {
   const { error } = await sb.rpc('void_invoice', { p_invoice_id: id })
   if (error) throw mapDbError(error)
   return getInvoiceInternal(sb, id)
+}
+
+handlers.delete_invoice = async ({ user, sb }, args) => {
+  assertAdminUser(user)
+  const id = String(args[0] || '')
+  const existing = await getInvoiceInternal(sb, id)
+  assertNotOwnClient(user, String(existing.client_id))
+
+  const status = String(existing.status)
+  if (status === 'draft') {
+    // Drafts have no stock movement or payments.
+  } else if (status === 'void') {
+    const amountPaid = Number(existing.amount_paid) || 0
+    if (amountPaid > 0.001) {
+      throw new OpsError('Cannot delete a void invoice that had payments recorded.')
+    }
+    const { count, error: cErr } = await sb
+      .from('payment_allocations')
+      .select('id', { count: 'exact', head: true })
+      .eq('invoice_id', id)
+    if (cErr) throw mapDbError(cErr)
+    if ((count || 0) > 0) {
+      throw new OpsError('Cannot delete this invoice — payment records still reference it.')
+    }
+  } else {
+    throw new OpsError(
+      'Only draft invoices can be deleted, or void invoices with no payments. Void active invoices first.',
+    )
+  }
+
+  const { error } = await sb.from('invoices').delete().eq('id', id)
+  if (error) throw mapDbError(error)
+  return { ok: true }
 }
 
 handlers.preview_monthly_fee_run = async ({ sb }, args) => {
@@ -2740,6 +2820,21 @@ handlers.decline_quotation = async ({ sb }, args) => {
     .single()
   if (error) throw mapDbError(error)
   return data
+}
+
+handlers.delete_quotation = async ({ user, sb }, args) => {
+  assertAdminUser(user)
+  const id = String(args[0] || '')
+  const existing = await getQuotationInternal(sb, id)
+  assertNotOwnClient(user, String(existing.client_id))
+
+  if (String(existing.status) === 'converted') {
+    throw new OpsError('Converted quotations cannot be deleted.')
+  }
+
+  const { error } = await sb.from('quotations').delete().eq('id', id)
+  if (error) throw mapDbError(error)
+  return { ok: true }
 }
 
 handlers.get_ops_dashboard_summary = async ({ sb }) => {

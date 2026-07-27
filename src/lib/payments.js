@@ -46,15 +46,35 @@ export function addMonthsIso(isoDate, months = 1) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
+/** Standard payment terms for one-off invoices (days after issue date). */
+export const INVOICE_DUE_DAYS = 5
+
+/** Add calendar days to a YYYY-MM-DD string. */
+export function addDaysIso(isoDate, days = 0) {
+  const base = String(isoDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return ''
+  const [y, m, d] = base.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + Number(days) || 0)
+  return localTodayIso(dt)
+}
+
+/** Due date for a regular (non–monthly-fee) invoice from its issue date. */
+export function dueDateFromIssueDate(issueDate, days = INVOICE_DUE_DAYS) {
+  const issue = String(issueDate || '').slice(0, 10)
+  if (!issue) return ''
+  return addDaysIso(issue, days)
+}
+
 /**
- * When payment is expected. Uses the stored due date, falling back to one
- * calendar month after issue so month length is respected.
+ * When payment is expected. Uses the stored due date, falling back to
+ * {@link INVOICE_DUE_DAYS} after issue date.
  */
 export function invoiceEffectiveDueDate(invoice) {
   const due = invoice?.due_date ? String(invoice.due_date).slice(0, 10) : ''
   if (due) return due
   const issued = invoice?.issue_date ? String(invoice.issue_date).slice(0, 10) : ''
-  return issued ? addMonthsIso(issued, 1) : ''
+  return issued ? dueDateFromIssueDate(issued) : ''
 }
 
 /** Unpaid and past its due date (derived; not stored). Partial payments excluded. */

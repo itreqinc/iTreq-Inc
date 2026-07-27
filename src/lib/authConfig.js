@@ -51,6 +51,15 @@ export function isAdmin(role) {
   return normalizeRole(role) === ROLES.admin
 }
 
+/** Human label for users.role (system privileges, not job title). */
+export function privilegeRoleLabel(role) {
+  const r = normalizeRole(role)
+  if (r === ROLES.admin) return 'Admin'
+  if (r === ROLES.staff) return 'Staff'
+  if (r === ROLES.client) return 'Client'
+  return '—'
+}
+
 /** Role currently signed in (session or auth bypass). Used by opsApi admin gates. */
 export function readSessionRole() {
   try {

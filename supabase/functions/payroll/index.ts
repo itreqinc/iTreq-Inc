@@ -256,7 +256,7 @@ async function handleListStaffHr(
     .select(
       'id, name, first_name, middle_name, surname, gender, email, phone, role, is_active, after_hours_until, client_id, created_at',
     )
-    .eq('role', 'staff')
+    .in('role', ['staff', 'admin'])
     .order('name')
   if (error) throw error
 
@@ -303,6 +303,41 @@ async function handleUpsertStaff(
   const notes = String(body.notes || '').trim() || null
   const userId = body.user_id ? String(body.user_id) : ''
 
+  const allowedRoles = ['staff', 'admin'] as const
+  const roleInput =
+    body.role !== undefined && body.role !== null && String(body.role).trim() !== ''
+      ? String(body.role).trim().toLowerCase()
+      : undefined
+
+  // Resolve desired role for inserts/updates.
+  // For updates without `body.role`, default to the existing DB role.
+  let desiredRole: (typeof allowedRoles)[number] = 'staff'
+  if (userId) {
+    const { data: existing, error: rErr } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle()
+    if (rErr) throw rErr
+    const existingRole = String(existing?.role || '')
+    const candidate = roleInput || (existingRole === 'admin' ? 'admin' : 'staff')
+    if (!allowedRoles.includes(candidate as (typeof allowedRoles)[number])) {
+      return json(400, { success: false, message: 'Invalid role.' })
+    }
+    desiredRole = candidate as (typeof allowedRoles)[number]
+
+    // Prevent admins from changing their own privilege role.
+    if (userId === gate.user!.id && desiredRole !== String(gate.user!.role)) {
+      return json(400, { success: false, message: 'You cannot change your own role.' })
+    }
+  } else {
+    const candidate = roleInput || 'staff'
+    if (!allowedRoles.includes(candidate as (typeof allowedRoles)[number])) {
+      return json(400, { success: false, message: 'Invalid role.' })
+    }
+    desiredRole = candidate as (typeof allowedRoles)[number]
+  }
+
   if (!first_name || !surname) {
     return json(400, { success: false, message: 'first name and last name are required' })
   }
@@ -343,10 +378,10 @@ async function handleUpsertStaff(
       .from('users')
       .update({
         ...profileFields,
+        role: desiredRole,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId)
-      .eq('role', 'staff')
       .select('*')
       .single()
     if (error) throw error
@@ -366,7 +401,7 @@ async function handleUpsertStaff(
       .from('users')
       .insert({
         ...profileFields,
-        role: 'staff',
+        role: desiredRole,
         password_hash,
         must_change_password: true,
         is_active: true,
@@ -413,11 +448,16 @@ async function handleSetStaffActive(
   const isActive = !!body.is_active
   if (!userId) return json(400, { success: false, message: 'user_id required' })
 
+  // Prevent admins from disabling themselves (would lock access).
+  if (userId === gate.user!.id) {
+    return json(400, { success: false, message: 'You cannot disable your own account.' })
+  }
+
   const { data, error } = await supabase
     .from('users')
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
     .eq('id', userId)
-    .eq('role', 'staff')
+    .in('role', ['staff', 'admin'])
     .select('id, name, is_active')
     .single()
   if (error) throw error
@@ -455,10 +495,10 @@ async function handleDeleteStaff(
     .from('users')
     .select('id, name, role')
     .eq('id', userId)
-    .eq('role', 'staff')
+    .in('role', ['staff', 'admin'])
     .maybeSingle()
   if (tErr) throw tErr
-  if (!target) return json(404, { success: false, message: 'Staff member not found.' })
+  if (!target) return json(404, { success: false, message: 'User not found.' })
 
   // Payslips are financial records: keep them and require disabling instead.
   const { count, error: cErr } = await supabase
@@ -473,7 +513,11 @@ async function handleDeleteStaff(
     })
   }
 
-  const { error } = await supabase.from('users').delete().eq('id', userId).eq('role', 'staff')
+  const { error } = await supabase
+    .from('users')
+    .delete()
+    .eq('id', userId)
+    .in('role', ['staff', 'admin'])
   if (error) throw error
 
   return json(200, { success: true, deleted_id: userId, name: target.name })
@@ -500,10 +544,10 @@ async function handleResetStaffPassword(
     .from('users')
     .select('id, name, role')
     .eq('id', userId)
-    .eq('role', 'staff')
+    .in('role', ['staff', 'admin'])
     .maybeSingle()
   if (tErr) throw tErr
-  if (!target) return json(404, { success: false, message: 'Staff member not found.' })
+  if (!target) return json(404, { success: false, message: 'User not found.' })
 
   const password_hash = await hashPassword(DEFAULT_PASSWORD)
   const { error } = await supabase
@@ -514,7 +558,7 @@ async function handleResetStaffPassword(
       updated_at: new Date().toISOString(),
     })
     .eq('id', userId)
-    .eq('role', 'staff')
+    .in('role', ['staff', 'admin'])
   if (error) throw error
 
   // Force re-login with the temporary password.

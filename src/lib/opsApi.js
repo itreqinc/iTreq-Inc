@@ -7,6 +7,7 @@ import { prepareBillingDocumentBundle } from './billingDocument'
 import { preparePaymentDocumentBundle } from './paymentDocument'
 import {
   BALANCE_INVOICE_STATUSES,
+  dueDateFromIssueDate,
   invoiceAffectsClientBalance,
   invoiceEffectiveDueDate,
   localTodayIso,
@@ -1155,8 +1156,17 @@ const directOpsApi = {
       .from('company_settings')
       .select('*')
       .eq('id', 1)
-      .single()
+      .maybeSingle()
     if (error) return mapError(error)
+    if (!data) {
+      return {
+        data: null,
+        error: {
+          message:
+            'Company settings are not available via direct database access. Sign in and use the ops API (VITE_AUTH_BYPASS=false).',
+        },
+      }
+    }
     return { data, error: null }
   },
 
@@ -1359,6 +1369,7 @@ const directOpsApi = {
       discount_amount: quote.discount_amount,
       lines: quote.lines,
       status: 'draft',
+      issue_date: localTodayIso(),
     })
     if (invRes.error) return invRes
 
@@ -1444,20 +1455,34 @@ const directOpsApi = {
     const totals = calcDocTotals(normalized, taxRate, discount_amount)
 
     let invoiceId = id || null
-
+    let existingData = null
     if (invoiceId) {
       const existing = await this.getInvoice(invoiceId)
       if (existing.error) return existing
       if (existing.data.status !== 'draft') {
         return { data: null, error: { message: 'Only draft invoices can be edited.' } }
       }
+      existingData = existing.data
+    }
+
+    let resolvedIssue = issue_date
+    let resolvedDue = due_date
+    if (existingData?.billing_period) {
+      resolvedIssue = issue_date || existingData.issue_date || localTodayIso()
+      resolvedDue = due_date ?? existingData.due_date ?? null
+    } else {
+      resolvedIssue = issue_date || existingData?.issue_date || localTodayIso()
+      resolvedDue = dueDateFromIssueDate(resolvedIssue)
+    }
+
+    if (invoiceId) {
       const { error } = await supabase
         .from('invoices')
         .update({
           client_id,
-          quotation_id: quotation_id || existing.data.quotation_id,
-          issue_date: issue_date || null,
-          due_date: due_date || null,
+          quotation_id: quotation_id || existingData.quotation_id,
+          issue_date: resolvedIssue || null,
+          due_date: resolvedDue || null,
           notes: notes?.trim() || null,
           status: 'draft',
           ...totals,
@@ -1472,8 +1497,8 @@ const directOpsApi = {
         .insert({
           client_id,
           quotation_id: quotation_id || null,
-          issue_date: issue_date || null,
-          due_date: due_date || null,
+          issue_date: resolvedIssue || null,
+          due_date: resolvedDue || null,
           notes: notes?.trim() || null,
           status: status || 'draft',
           ...totals,
@@ -1512,6 +1537,49 @@ const directOpsApi = {
     const { data, error } = await supabase.rpc('void_invoice', { p_invoice_id: id })
     if (error) return mapError(error)
     return this.getInvoice(id)
+  },
+
+  async deleteInvoice(id) {
+    if (!assertAdmin()) return adminRequired()
+    if (!supabase) return dbUnavailable()
+    const existing = await this.getInvoice(id)
+    if (existing.error) return existing
+
+    const status = String(existing.data.status)
+    if (status === 'draft') {
+      // ok
+    } else if (status === 'void') {
+      const amountPaid = Number(existing.data.amount_paid) || 0
+      if (amountPaid > 0.001) {
+        return {
+          data: null,
+          error: { message: 'Cannot delete a void invoice that had payments recorded.' },
+        }
+      }
+      const { count, error: cErr } = await supabase
+        .from('payment_allocations')
+        .select('id', { count: 'exact', head: true })
+        .eq('invoice_id', id)
+      if (cErr) return mapError(cErr)
+      if ((count || 0) > 0) {
+        return {
+          data: null,
+          error: { message: 'Cannot delete this invoice — payment records still reference it.' },
+        }
+      }
+    } else {
+      return {
+        data: null,
+        error: {
+          message:
+            'Only draft invoices can be deleted, or void invoices with no payments. Void active invoices first.',
+        },
+      }
+    }
+
+    const { error } = await supabase.from('invoices').delete().eq('id', id)
+    if (error) return mapError(error)
+    return { data: { ok: true }, error: null }
   },
 
   // --- Monthly fees (Phase 4) ---
@@ -2797,6 +2865,20 @@ const directOpsApi = {
     return { data, error: null }
   },
 
+  async deleteQuotation(id) {
+    if (!assertAdmin()) return adminRequired()
+    if (!supabase) return dbUnavailable()
+    const existing = await this.getQuotation(id)
+    if (existing.error) return existing
+    if (String(existing.data.status) === 'converted') {
+      return { data: null, error: { message: 'Converted quotations cannot be deleted.' } }
+    }
+
+    const { error } = await supabase.from('quotations').delete().eq('id', id)
+    if (error) return mapError(error)
+    return { data: { ok: true }, error: null }
+  },
+
   // --- Staff dashboard ---
 
   /** Everything the dashboard needs to show real work waiting for staff. */
@@ -2871,12 +2953,42 @@ function camelToAction(name) {
   return name.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '')
 }
 
+function hasSessionToken() {
+  try {
+    return Boolean(localStorage.getItem('session'))
+  } catch {
+    return false
+  }
+}
+
+/** Edge when production path, or whenever a real session exists (seed login). */
+function useOpsEdge() {
+  if (!AUTH_BYPASS) return true
+  return hasSessionToken()
+}
+
+function postProcessOpsResult(key, res) {
+  if (res.error || !res.data) return res
+  if (key === 'getBillingDocumentBundle' || key === 'getBillingDocumentBundleForClient') {
+    return { data: prepareBillingDocumentBundle(res.data), error: null }
+  }
+  if (key === 'getPaymentDocumentBundle' || key === 'getPaymentDocumentBundleForClient') {
+    return { data: preparePaymentDocumentBundle(res.data), error: null }
+  }
+  return res
+}
+
 async function callOps(action, args) {
   const { data, error } = await invokeFn('ops', { body: { action, args } }, { withAuth: true })
   if (error) {
+    const status = error?.context?.status
+    const message =
+      status === 404
+        ? 'Ops API is not deployed. Run: supabase functions deploy ops'
+        : error.message
     return {
       data: null,
-      error: { message: error.message, context: error.context },
+      error: { message, context: error.context },
     }
   }
   if (data?.success === false) {
@@ -2885,44 +2997,23 @@ async function callOps(action, args) {
   return { data: data?.data, error: null }
 }
 
-function wrapOpsApi(direct) {
-  const wrapped = { ...direct }
-  const skip = new Set(['invoke'])
-
-  for (const key of Object.keys(direct)) {
-    if (typeof direct[key] !== 'function' || key.startsWith('_') || skip.has(key)) continue
-
-    wrapped[key] = async (...args) => {
-      const res = await callOps(camelToAction(key), args)
-      if (res.error) return res
-
-      if (
-        key === 'getBillingDocumentBundle' ||
-        key === 'getBillingDocumentBundleForClient'
-      ) {
-        if (!res.data) return res
-        return {
-          data: prepareBillingDocumentBundle(res.data),
-          error: null,
-        }
+function createOpsApiProxy(target) {
+  return new Proxy(target, {
+    get(obj, prop, receiver) {
+      const value = Reflect.get(obj, prop, receiver)
+      if (typeof value !== 'function' || String(prop).startsWith('_') || prop === 'invoke') {
+        return typeof value === 'function' ? value.bind(obj) : value
       }
-
-      if (
-        key === 'getPaymentDocumentBundle' ||
-        key === 'getPaymentDocumentBundleForClient'
-      ) {
-        if (!res.data) return res
-        return {
-          data: preparePaymentDocumentBundle(res.data),
-          error: null,
-        }
+      if (!useOpsEdge()) {
+        return value.bind(obj)
       }
-
-      return res
-    }
-  }
-
-  return wrapped
+      const key = String(prop)
+      return async (...args) => {
+        const res = await callOps(camelToAction(key), args)
+        return postProcessOpsResult(key, res)
+      }
+    },
+  })
 }
 
-export const opsApi = AUTH_BYPASS ? directOpsApi : wrapOpsApi(directOpsApi)
+export const opsApi = createOpsApiProxy(directOpsApi)
