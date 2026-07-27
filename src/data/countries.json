@@ -253,7 +253,7 @@
   {"code":"UG","name":"Uganda","dialCode":"+256","minLength":8,"maxLength":11,"flag":"https://flagcdn.com/w20/ug.png"},
   {"code":"UA","name":"Ukraine","dialCode":"+380","minLength":9,"maxLength":11,"flag":"https://flagcdn.com/w20/ua.png"},
   {"code":"AE","name":"United Arab Emirates","dialCode":"+971","minLength":10,"maxLength":10,"flag":"https://flagcdn.com/w20/ae.png"},
-  {"code":"GB","name":"United Kingdom","dialCode":"+44","minLength":11,"maxLength":11,"flag":"https://flagcdn.com/w20/gb.png"},
+  {"code":"GB","name":"United Kingdom","dialCode":"+44","minLength":10,"maxLength":11,"flag":"https://flagcdn.com/w20/gb.png"},
   {"code":"US","name":"United States","dialCode":"+1","minLength":7,"maxLength":10,"flag":"https://flagcdn.com/w20/us.png"},
   {"code":"UM","name":"United States Minor Outlying Islands","dialCode":"+1","minLength":7,"maxLength":12,"flag":"https://flagcdn.com/w20/um.png"},
   {"code":"UY","name":"Uruguay","dialCode":"+598","minLength":10,"maxLength":10,"flag":"https://flagcdn.com/w20/uy.png"},
