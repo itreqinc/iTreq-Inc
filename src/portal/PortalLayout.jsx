@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Logo } from '../components/Logo'
 import { useAuth } from '../contexts/AuthContext'
 import { AUTH_BYPASS, ROLES, VIEW_MODES } from '../lib/authConfig'
@@ -91,31 +91,61 @@ function PortalShell() {
       isActive ? 'bg-brand-500/15 text-brand-300' : 'text-ink-300 hover:bg-white/5 hover:text-white'
     }`
 
+  const [navOpen, setNavOpen] = useState(false)
+  const location = useLocation()
+
+  useEffect(() => {
+    setNavOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    document.body.style.overflow = navOpen ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [navOpen])
+
+  const portalNav = [
+    { to: '/portal', label: 'Overview', end: true },
+    { to: '/portal/quotes', label: 'Quotes' },
+    { to: '/portal/invoices', label: 'Invoices' },
+    { to: '/portal/payments', label: 'Payments' },
+    { to: '/portal/statement', label: 'Statement' },
+  ]
+
   return (
     <div className="min-h-screen overflow-x-clip bg-ink-950 text-ink-100">
-      <header className="border-b border-white/10 bg-ink-900/80">
+      <header className="relative z-40 border-b border-white/10 bg-ink-900/80">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <Link to="/portal" className="flex items-center gap-2">
-              <Logo className="h-9" />
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/15 text-white md:hidden"
+              aria-label={navOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen((v) => !v)}
+            >
+              <span className="sr-only">Menu</span>
+              <div className="flex w-5 flex-col gap-1.5">
+                <span
+                  className={`h-0.5 w-full bg-current transition ${navOpen ? 'translate-y-2 rotate-45' : ''}`}
+                />
+                <span className={`h-0.5 w-full bg-current transition ${navOpen ? 'opacity-0' : ''}`} />
+                <span
+                  className={`h-0.5 w-full bg-current transition ${navOpen ? '-translate-y-2 -rotate-45' : ''}`}
+                />
+              </div>
+            </button>
+            <Link to="/portal" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
+              <Logo className="h-9 shrink-0" />
               <span className="font-display text-sm font-semibold text-white">Client portal</span>
             </Link>
-            <nav className="flex flex-wrap gap-1">
-              <NavLink to="/portal" end className={navClass}>
-                Overview
-              </NavLink>
-              <NavLink to="/portal/quotes" className={navClass}>
-                Quotes
-              </NavLink>
-              <NavLink to="/portal/invoices" className={navClass}>
-                Invoices
-              </NavLink>
-              <NavLink to="/portal/payments" className={navClass}>
-                Payments
-              </NavLink>
-              <NavLink to="/portal/statement" className={navClass}>
-                Statement
-              </NavLink>
+            <nav className="hidden flex-wrap gap-1 md:flex">
+              {portalNav.map((item) => (
+                <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
+                  {item.label}
+                </NavLink>
+              ))}
             </nav>
           </div>
 
@@ -206,6 +236,36 @@ function PortalShell() {
             </Link>
           </div>
         </div>
+
+        {navOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-ink-950/60 backdrop-blur-sm md:hidden"
+              aria-label="Close menu"
+              onClick={() => setNavOpen(false)}
+            />
+            <nav className="relative z-50 border-t border-white/10 bg-ink-900/98 px-4 py-3 md:hidden">
+              <div className="flex flex-col gap-1">
+                {portalNav.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    onClick={() => setNavOpen(false)}
+                    className={({ isActive }) =>
+                      `rounded-lg px-3 py-2.5 text-sm font-medium ${
+                        isActive ? 'bg-brand-500/15 text-brand-300' : 'text-ink-200'
+                      }`
+                    }
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </nav>
+          </>
+        ) : null}
       </header>
 
       <main className="mx-auto min-w-0 max-w-5xl px-4 py-6 sm:px-6">

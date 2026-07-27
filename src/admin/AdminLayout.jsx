@@ -1,4 +1,5 @@
-import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { ROLES, VIEW_MODES, isAdmin, privilegeRoleLabel } from '../lib/authConfig'
 import { Logo } from '../components/Logo'
@@ -21,8 +22,41 @@ const navItems = [
   { to: '/admin/settings', label: 'Settings', adminOnly: true },
 ]
 
+function navLinkClass(isActive) {
+  return `flex items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
+    isActive
+      ? 'bg-brand-500/15 text-brand-300'
+      : 'text-ink-300 hover:bg-white/5 hover:text-white'
+  }`
+}
+
+function MobileMenuButton({ open, onToggle }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/15 text-white lg:hidden"
+      aria-label={open ? 'Close menu' : 'Open menu'}
+      aria-expanded={open}
+      onClick={onToggle}
+    >
+      <span className="sr-only">Menu</span>
+      <div className="flex w-5 flex-col gap-1.5">
+        <span
+          className={`h-0.5 w-full bg-current transition ${open ? 'translate-y-2 rotate-45' : ''}`}
+        />
+        <span className={`h-0.5 w-full bg-current transition ${open ? 'opacity-0' : ''}`} />
+        <span
+          className={`h-0.5 w-full bg-current transition ${open ? '-translate-y-2 -rotate-45' : ''}`}
+        />
+      </div>
+    </button>
+  )
+}
+
 export function AdminLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [navOpen, setNavOpen] = useState(false)
   const {
     user,
     authBypass,
@@ -34,17 +68,33 @@ export function AdminLayout() {
 
   const nav = navItems.filter((item) => !item.adminOnly || isAdmin(user?.role))
 
+  useEffect(() => {
+    setNavOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    document.body.style.overflow = navOpen ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [navOpen])
+
   return (
     <OpsAlertProvider>
     <div className="min-h-screen overflow-x-clip bg-ink-950 text-ink-100">
-      <header className="border-b border-white/10 bg-ink-900/80">
+      <header className="relative z-40 border-b border-white/10 bg-ink-900/80">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-4">
-            <Link to="/admin" className="flex items-center gap-2">
-              <Logo className="h-9" />
+          <div className="flex min-w-0 items-center gap-3">
+            <MobileMenuButton open={navOpen} onToggle={() => setNavOpen((v) => !v)} />
+            <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
+              <Logo className="h-9 shrink-0" />
               <span className="font-display text-sm font-semibold text-white">Ops</span>
             </Link>
-            <Link to="/" className="text-xs text-ink-400 hover:text-ink-200">
+            <Link
+              to="/"
+              className="hidden text-xs text-ink-400 hover:text-ink-200 sm:inline"
+              onClick={() => setNavOpen(false)}
+            >
               ← Public site
             </Link>
           </div>
@@ -116,6 +166,32 @@ export function AdminLayout() {
             </span>
           </div>
         </div>
+
+        {navOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-ink-950/60 backdrop-blur-sm lg:hidden"
+              aria-label="Close menu"
+              onClick={() => setNavOpen(false)}
+            />
+            <nav className="relative z-50 max-h-[min(70vh,28rem)] overflow-y-auto border-t border-white/10 bg-ink-900/98 px-4 py-3 lg:hidden">
+              <div className="space-y-1">
+                {nav.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    onClick={() => setNavOpen(false)}
+                    className={({ isActive }) => navLinkClass(isActive)}
+                  >
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </nav>
+          </>
+        ) : null}
       </header>
 
       {dualRole ? (
@@ -125,20 +201,14 @@ export function AdminLayout() {
         </div>
       ) : null}
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[220px_1fr] lg:gap-0">
-        <nav className="space-y-1 lg:sticky lg:top-6 lg:self-start lg:border-r lg:border-white/10 lg:pr-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:grid lg:grid-cols-[220px_1fr] lg:gap-0">
+        <nav className="hidden space-y-1 lg:sticky lg:top-6 lg:block lg:self-start lg:border-r lg:border-white/10 lg:pr-6">
           {nav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.end}
-              className={({ isActive }) =>
-                `flex items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
-                  isActive
-                    ? 'bg-brand-500/15 text-brand-300'
-                    : 'text-ink-300 hover:bg-white/5 hover:text-white'
-                }`
-              }
+              className={({ isActive }) => navLinkClass(isActive)}
             >
               <span>{item.label}</span>
             </NavLink>
