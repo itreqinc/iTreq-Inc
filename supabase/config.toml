@@ -17,3 +17,10 @@ verify_jwt = false
 
 [functions.payroll]
 verify_jwt = false
+
+[functions.ops]
+verify_jwt = false
+
+[functions.send-billing-document]
+verify_jwt = false
+

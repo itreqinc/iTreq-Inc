@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from './supabase'
 import { invokeFn } from './invokeFn'
-import { isAdmin, readSessionRole } from './authConfig'
+import { AUTH_BYPASS, isAdmin, readSessionRole } from './authConfig'
 import { buildClientDisplayName, formToClientRow } from './clientRegistration'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
@@ -102,13 +102,13 @@ function mapError(error) {
   }
 }
 
-export const opsApi = {
+const directOpsApi = {
   async getStatus() {
     return {
       data: {
         authBypass: AUTH_BYPASS,
         supabaseConfigured: isSupabaseConfigured,
-        phase: 'phase-4-monthly-fees',
+        phase: 'phase-6-edge',
       },
       error: null,
     }
@@ -2866,3 +2866,63 @@ export const opsApi = {
     }
   },
 }
+
+function camelToAction(name) {
+  return name.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '')
+}
+
+async function callOps(action, args) {
+  const { data, error } = await invokeFn('ops', { body: { action, args } }, { withAuth: true })
+  if (error) {
+    return {
+      data: null,
+      error: { message: error.message, context: error.context },
+    }
+  }
+  if (data?.success === false) {
+    return { data: null, error: { message: data.message || 'Request failed.' } }
+  }
+  return { data: data?.data, error: null }
+}
+
+function wrapOpsApi(direct) {
+  const wrapped = { ...direct }
+  const skip = new Set(['invoke'])
+
+  for (const key of Object.keys(direct)) {
+    if (typeof direct[key] !== 'function' || key.startsWith('_') || skip.has(key)) continue
+
+    wrapped[key] = async (...args) => {
+      const res = await callOps(camelToAction(key), args)
+      if (res.error) return res
+
+      if (
+        key === 'getBillingDocumentBundle' ||
+        key === 'getBillingDocumentBundleForClient'
+      ) {
+        if (!res.data) return res
+        return {
+          data: prepareBillingDocumentBundle(res.data),
+          error: null,
+        }
+      }
+
+      if (
+        key === 'getPaymentDocumentBundle' ||
+        key === 'getPaymentDocumentBundleForClient'
+      ) {
+        if (!res.data) return res
+        return {
+          data: preparePaymentDocumentBundle(res.data),
+          error: null,
+        }
+      }
+
+      return res
+    }
+  }
+
+  return wrapped
+}
+
+export const opsApi = AUTH_BYPASS ? directOpsApi : wrapOpsApi(directOpsApi)
