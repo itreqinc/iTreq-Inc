@@ -86,7 +86,7 @@ export default function QuotationsPage() {
     setLoading(true)
     const [q, c, p, s, t] = await Promise.all([
       opsApi.listQuotations(),
-      opsApi.listClients(),
+      opsApi.listClients({ activeOnly: true }),
       opsApi.listProducts({ activeOnly: true }),
       opsApi.getSettings(),
       opsApi.listTrackableItems({ withComponents: true }),

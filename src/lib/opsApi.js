@@ -103,6 +103,44 @@ function mapError(error) {
   }
 }
 
+async function clientHasFinancialRecordsLocal(clientId) {
+  if (!supabase) return false
+  const tables = ['invoices', 'quotations', 'payments']
+  for (const table of tables) {
+    const { count, error } = await supabase
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', clientId)
+    if (error) {
+      const msg = String(error.message || '').toLowerCase()
+      if (msg.includes('does not exist') || msg.includes('could not find')) continue
+      throw error
+    }
+    if ((count || 0) > 0) return true
+  }
+  return false
+}
+
+async function enrichClientsFinancialFlagsLocal(clients) {
+  if (!supabase || !clients.length) return clients
+  const withRecords = new Set()
+  for (const table of ['invoices', 'quotations', 'payments']) {
+    const { data, error } = await supabase.from(table).select('client_id')
+    if (error) {
+      const msg = String(error.message || '').toLowerCase()
+      if (msg.includes('does not exist') || msg.includes('could not find')) continue
+      return clients
+    }
+    for (const row of data || []) {
+      withRecords.add(row.client_id)
+    }
+  }
+  return clients.map((c) => ({
+    ...c,
+    has_financial_records: withRecords.has(c.id),
+  }))
+}
+
 const directOpsApi = {
   async getStatus() {
     return {
@@ -121,24 +159,19 @@ const directOpsApi = {
 
   // --- Clients ---
 
-  async listClients() {
+  async listClients({ activeOnly = false } = {}) {
     if (!supabase) return dbUnavailable()
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .order('name', { ascending: true })
+    let q = supabase.from('clients').select('*').order('name', { ascending: true })
+    if (activeOnly) q = q.eq('is_active', true)
+    const { data, error } = await q
     if (error) return mapError(error)
-    return { data, error: null }
+    if (activeOnly) return { data, error: null }
+    return { data: await enrichClientsFinancialFlagsLocal(data || []), error: null }
   },
 
-  /**
-   * Clients with statement-style closing balance.
-   * Balance = sum(issued|partial|paid invoice totals) − sum(recorded payments).
-   * Draft and void invoices are excluded.
-   */
-  async listClientsWithBalances() {
+  async listClientsWithBalances({ activeOnly = false } = {}) {
     if (!supabase) return dbUnavailable()
-    const clientsRes = await this.listClients()
+    const clientsRes = await this.listClients({ activeOnly })
     if (clientsRes.error) return clientsRes
 
     const [invRes, payRes] = await Promise.all([
@@ -203,6 +236,45 @@ const directOpsApi = {
     const { data, error } = await supabase
       .from('clients')
       .update({ ...formToClientRow(form), updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async deleteClient(id) {
+    if (!assertAdmin()) return adminRequired()
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Client id is required.' } }
+    }
+    try {
+      if (await clientHasFinancialRecordsLocal(id)) {
+        return {
+          data: null,
+          error: {
+            message:
+              'This client has invoices, quotations, or payments. Deactivate the client instead of deleting.',
+          },
+        }
+      }
+    } catch (error) {
+      return mapError(error)
+    }
+    const { error } = await supabase.from('clients').delete().eq('id', id)
+    if (error) return mapError(error)
+    return { data: { ok: true }, error: null }
+  },
+
+  async setClientActive(id, isActive) {
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Client id is required.' } }
+    }
+    const { data, error } = await supabase
+      .from('clients')
+      .update({ is_active: Boolean(isActive), updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single()

@@ -85,7 +85,10 @@ export default function PaymentsPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, c] = await Promise.all([opsApi.listPayments(), opsApi.listClients()])
+    const [p, c] = await Promise.all([
+      opsApi.listPayments(),
+      opsApi.listClients({ activeOnly: true }),
+    ])
     setLoading(false)
     if (p.error) {
       showError(p.error.message)

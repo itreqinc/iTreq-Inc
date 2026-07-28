@@ -23,6 +23,12 @@ import { invoiceBalanceDue,
   invoiceDisplayStatus } from '../../lib/payments'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
+import {
+  openBillingDocumentPrintWindow,
+  fillBillingDocumentPrintWindow,
+  closeBillingDocumentPrintWindow,
+} from '../../lib/billingDocument'
+import { ActionsMenu } from '../ActionsMenu'
 import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
@@ -132,7 +138,7 @@ export default function InvoicesPage() {
     setLoading(true)
     const [inv, c, p, s, t, unread] = await Promise.all([
       opsApi.listInvoices(),
-      opsApi.listClients(),
+      opsApi.listClients({ activeOnly: true }),
       opsApi.listProducts({ activeOnly: true }),
       opsApi.getSettings(),
       opsApi.listTrackableItems({ withComponents: true }),
@@ -272,44 +278,6 @@ export default function InvoicesPage() {
     accountCredit > 0.001
   const applyCreditAmount = Math.min(accountCredit, balanceDue)
 
-  async function handleApplyCredit() {
-    if (!editingId || !canApplyCredit) return
-    const ok = await confirm({
-      title: 'Apply account credit?',
-      message: `Apply ${formatPula(applyCreditAmount)} from this client's account to invoice ${form.number || ''}?`,
-      confirmLabel: 'Apply credit',
-    })
-    if (!ok) return
-
-    setSaving(true)
-    const applyRes = await opsApi.applyClientCreditToInvoice(editingId)
-    setSaving(false)
-    if (applyRes.error) {
-      showError(applyRes.error.message)
-      return
-    }
-
-    const reload = await opsApi.getInvoice(editingId)
-    if (reload.error) {
-      showError(reload.error.message)
-      return
-    }
-    const data = reload.data
-    setForm((f) => ({
-      ...f,
-      status: data.status,
-      amount_paid: Number(data.amount_paid) || 0,
-      total: Number(data.total) || 0,
-      number: data.number || f.number,
-    }))
-    const creditRes = await opsApi.getClientCreditBalance(data.client_id)
-    setAccountCredit(creditRes.data?.balance ?? 0)
-    showSuccess(
-      `${formatPula(applyRes.data.applied)} applied from account credit.`,
-    )
-    await load()
-  }
-
   const isDirty = useMemo(
     () => snapshotInvoiceForm(form) !== baseline,
     [form, baseline],
@@ -334,6 +302,7 @@ export default function InvoicesPage() {
     !saving &&
     (form.status === 'draft' ||
       (form.status === 'void' && Number(form.amount_paid) <= 0.001))
+  const canVoidOrDelete = canDelete || canVoid
 
   async function handleSave(e) {
     e.preventDefault()
@@ -364,20 +333,26 @@ export default function InvoicesPage() {
     await load()
   }
 
-  async function handleIssue() {
-    if (!editingId) return
-    if (isDirty) {
+  async function handleIssue(invoiceId = editingId) {
+    if (!invoiceId) return
+    if (invoiceId === editingId && isDirty) {
       showError('Please save your changes before issuing this invoice.')
       return
     }
 
-    const creditRes = await opsApi.getClientCreditBalance(form.client_id)
-    const accountCredit = creditRes.data?.balance ?? 0
+    const invoice =
+      invoiceId === editingId
+        ? form
+        : (await opsApi.getInvoice(invoiceId)).data
+    if (!invoice) return
+
+    const creditRes = await opsApi.getClientCreditBalance(invoice.client_id)
+    const clientCredit = creditRes.data?.balance ?? 0
 
     let issueMessage =
       'Issuing assigns an invoice number and manipulates stock levels for items listed in this invoice. This action cannot be undone. Continue?'
-    if (accountCredit > 0) {
-      issueMessage += `\n\nThis client has ${formatPula(accountCredit)} on account. You can apply it to this invoice after issuing.`
+    if (clientCredit > 0) {
+      issueMessage += `\n\nThis client has ${formatPula(clientCredit)} on account. You can apply it to this invoice after issuing.`
     }
 
     const ok = await confirm({
@@ -387,7 +362,7 @@ export default function InvoicesPage() {
     })
     if (!ok) return
     setSaving(true)
-    const { data, error: err } = await opsApi.issueInvoice(editingId)
+    const { data, error: err } = await opsApi.issueInvoice(invoiceId)
     setSaving(false)
     if (err) {
       showError(err.message)
@@ -397,7 +372,7 @@ export default function InvoicesPage() {
     let issued = data
     const balanceDue =
       Math.round((Number(issued.total) - Number(issued.amount_paid || 0)) * 100) / 100
-    const applyCap = Math.min(accountCredit, balanceDue)
+    const applyCap = Math.min(clientCredit, balanceDue)
     let successMessage = `Invoice ${issued.number || ''} has been issued.`
 
     if (applyCap > 0.001) {
@@ -409,12 +384,12 @@ export default function InvoicesPage() {
       })
       if (applyOk) {
         setSaving(true)
-        const applyRes = await opsApi.applyClientCreditToInvoice(editingId)
+        const applyRes = await opsApi.applyClientCreditToInvoice(invoiceId)
         setSaving(false)
         if (applyRes.error) {
           showError(applyRes.error.message)
         } else if (applyRes.data.applied > 0) {
-          const reload = await opsApi.getInvoice(editingId)
+          const reload = await opsApi.getInvoice(invoiceId)
           if (!reload.error) issued = reload.data
           successMessage = `Invoice ${issued.number || ''} issued. ${formatPula(applyRes.data.applied)} applied from account credit.`
         }
@@ -423,23 +398,29 @@ export default function InvoicesPage() {
 
     showSuccess(successMessage)
 
-    const nextForm = {
-      ...form,
-      status: issued.status,
-      number: issued.number || '',
-      issue_date: issued.issue_date || form.issue_date,
-      total: Number(issued.total) || form.total,
-      amount_paid: Number(issued.amount_paid) || 0,
+    if (invoiceId === editingId) {
+      const nextForm = {
+        ...form,
+        status: issued.status,
+        number: issued.number || '',
+        issue_date: issued.issue_date || form.issue_date,
+        total: Number(issued.total) || form.total,
+        amount_paid: Number(issued.amount_paid) || 0,
+      }
+      setForm(nextForm)
+      setBaseline(snapshotInvoiceForm(nextForm))
+      const creditLeft = await opsApi.getClientCreditBalance(form.client_id)
+      setAccountCredit(creditLeft.data?.balance ?? 0)
     }
-    setForm(nextForm)
-    setBaseline(snapshotInvoiceForm(nextForm))
-    const creditLeft = await opsApi.getClientCreditBalance(form.client_id)
-    setAccountCredit(creditLeft.data?.balance ?? 0)
     await load()
   }
 
-  async function handleVoid() {
-    if (!editingId) return
+  async function handleVoid(invoiceId = editingId) {
+    if (!invoiceId) return
+    if (invoiceId === editingId && isDirty) {
+      showError('Save or discard changes before voiding this invoice.')
+      return
+    }
     const ok = await confirm({
       title: 'Void this invoice?',
       message: 'Stock levels for items listed in this invoice will be restored. This cannot be undone.',
@@ -447,42 +428,244 @@ export default function InvoicesPage() {
     })
     if (!ok) return
     setSaving(true)
-    const { data, error: err } = await opsApi.voidInvoice(editingId)
+    const { data, error: err } = await opsApi.voidInvoice(invoiceId)
     setSaving(false)
     if (err) {
       showError(err.message)
       return
     }
     showSuccess('The Invoice has been voided. Stock levels have been restored where applicable.')
-    const nextForm = { ...form, status: data.status }
-    setForm(nextForm)
-    setBaseline(snapshotInvoiceForm(nextForm))
+    if (invoiceId === editingId) {
+      const nextForm = { ...form, status: data.status }
+      setForm(nextForm)
+      setBaseline(snapshotInvoiceForm(nextForm))
+    }
     await load()
   }
 
-  async function handleDelete() {
-    if (!editingId || !canDelete) return
+  async function handleDelete(invoiceId = editingId, status = form.status) {
+    if (!invoiceId) return
+    if (invoiceId === editingId && isDirty) {
+      showError('Save or discard changes before deleting this invoice.')
+      return
+    }
     const ok = await confirm({
       title: 'Delete this invoice?',
       message:
-        form.status === 'draft'
+        status === 'draft'
           ? 'This permanently removes the draft invoice. This cannot be undone.'
           : 'This permanently removes the void invoice from the system. This cannot be undone.',
       confirmLabel: 'Delete invoice',
     })
     if (!ok) return
     setSaving(true)
-    const { error: err } = await opsApi.deleteInvoice(editingId)
+    const { error: err } = await opsApi.deleteInvoice(invoiceId)
     setSaving(false)
     if (err) {
       showError(err.message)
       return
     }
     showSuccess('Invoice deleted.')
-    setShowForm(false)
-    setEditingId(null)
-    setBaseline('')
+    if (invoiceId === editingId) {
+      setShowForm(false)
+      setEditingId(null)
+      setBaseline('')
+    }
     await load()
+  }
+
+  async function handleVoidOrDelete(invoiceId = editingId, row) {
+    const status = row?.status ?? form.status
+    const amountPaid = Number(row?.amount_paid ?? form.amount_paid) || 0
+    const mayDelete =
+      isAdmin(user?.role) &&
+      (status === 'draft' || (status === 'void' && amountPaid <= 0.001))
+    if (mayDelete) {
+      await handleDelete(invoiceId, status)
+      return
+    }
+    await handleVoid(invoiceId)
+  }
+
+  async function handleApplyCreditFor(invoiceId, row) {
+    if (!invoiceId) return
+    if (invoiceId === editingId && isDirty) {
+      showError('Save or discard changes before applying credit.')
+      return
+    }
+
+    const invoice =
+      invoiceId === editingId
+        ? form
+        : row || (await opsApi.getInvoice(invoiceId)).data
+    if (!invoice) return
+
+    const due = invoiceBalanceDue(invoice)
+    if (due <= 0.001 || !['issued', 'partial'].includes(invoice.status)) return
+
+    const creditRes = await opsApi.getClientCreditBalance(invoice.client_id)
+    const credit = creditRes.data?.balance ?? 0
+    const amount = Math.min(credit, due)
+    if (amount <= 0.001) {
+      showError('No applicable account credit for this invoice.')
+      return
+    }
+
+    const ok = await confirm({
+      title: 'Apply account credit?',
+      message: `Apply ${formatPula(amount)} from this client's account to invoice ${invoice.number || ''}?`,
+      confirmLabel: 'Apply credit',
+    })
+    if (!ok) return
+
+    setSaving(true)
+    const applyRes = await opsApi.applyClientCreditToInvoice(invoiceId)
+    setSaving(false)
+    if (applyRes.error) {
+      showError(applyRes.error.message)
+      return
+    }
+
+    if (invoiceId === editingId) {
+      const reload = await opsApi.getInvoice(invoiceId)
+      if (!reload.error) {
+        const data = reload.data
+        setForm((f) => ({
+          ...f,
+          status: data.status,
+          amount_paid: Number(data.amount_paid) || 0,
+          total: Number(data.total) || 0,
+          number: data.number || f.number,
+        }))
+      }
+      const creditLeft = await opsApi.getClientCreditBalance(invoice.client_id)
+      setAccountCredit(creditLeft.data?.balance ?? 0)
+    }
+    showSuccess(`${formatPula(applyRes.data.applied)} applied from account credit.`)
+    await load()
+  }
+
+  async function printInvoice(invoiceId) {
+    if (!invoiceId) return
+    if (invoiceId === editingId && isDirty) {
+      showError('Save your changes before printing or emailing this invoice.')
+      return
+    }
+    const opened = openBillingDocumentPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+    setSaving(true)
+    const { data, error } = await opsApi.getBillingDocumentBundle('invoice', invoiceId)
+    setSaving(false)
+    if (error) {
+      closeBillingDocumentPrintWindow(win)
+      showError(error.message)
+      return
+    }
+    const result = fillBillingDocumentPrintWindow(win, data.model)
+    if (!result.ok) showError(result.message)
+  }
+
+  async function emailInvoice(invoiceId) {
+    if (!invoiceId) return
+    if (invoiceId === editingId && isDirty) {
+      showError('Save your changes before printing or emailing this invoice.')
+      return
+    }
+    setSaving(true)
+    const preview = await opsApi.getBillingDocumentBundle('invoice', invoiceId)
+    setSaving(false)
+    if (preview.error) {
+      showError(preview.error.message)
+      return
+    }
+    const to = preview.data.model.client.email?.trim()
+    if (!to) {
+      showError('This client has no email address on file. Update the client record first.')
+      return
+    }
+    const ok = await confirm({
+      title: 'Email invoice to client?',
+      message: `A copy will be sent to ${to}.`,
+      confirmLabel: 'Send email',
+    })
+    if (!ok) return
+    setSaving(true)
+    const { error } = await opsApi.sendBillingDocumentEmail('invoice', invoiceId)
+    setSaving(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess(`Email sent to ${to}.`)
+  }
+
+  function rowBlocked(invoiceId) {
+    return invoiceId === editingId && isDirty
+  }
+
+  function rowInvoiceMenuItems(row) {
+    const id = row.id
+    const status = row.status
+    const amountPaid = Number(row.amount_paid) || 0
+    const blocked = rowBlocked(id)
+    const rowCanIssue = status === 'draft' && !blocked && !saving
+    const rowCanVoid = status !== 'void' && !blocked && !saving
+    const rowCanDelete =
+      isAdmin(user?.role) &&
+      (status === 'draft' || (status === 'void' && amountPaid <= 0.001)) &&
+      !blocked &&
+      !saving
+    const rowCanVoidOrDelete = rowCanDelete || rowCanVoid
+    const rowCanShare = !blocked && !saving
+    const rowCanApplyCredit =
+      ['issued', 'partial'].includes(status) && !blocked && !saving
+
+    const items = [
+      {
+        label: 'Open invoice',
+        icon: 'eye',
+        onClick: () => openRow(id),
+      },
+      {
+        label: 'Issue invoice',
+        icon: 'checkCircle',
+        disabled: !rowCanIssue,
+        onClick: () => handleIssue(id),
+      },
+      {
+        label: 'Apply credit',
+        icon: 'payment',
+        disabled: !rowCanApplyCredit,
+        onClick: () => handleApplyCreditFor(id, row),
+      },
+      {
+        label: 'Print / Save PDF',
+        icon: 'print',
+        disabled: !rowCanShare,
+        onClick: () => printInvoice(id),
+      },
+      {
+        label: 'Email to client',
+        icon: 'mail',
+        disabled: !rowCanShare,
+        onClick: () => emailInvoice(id),
+      },
+    ]
+
+    if (rowCanVoidOrDelete) {
+      items.push({
+        label: rowCanDelete ? 'Delete invoice' : 'Void invoice',
+        icon: rowCanDelete ? 'trash' : 'ban',
+        tone: 'danger',
+        onClick: () => handleVoidOrDelete(id, row),
+      })
+    }
+
+    return items
   }
 
   return (
@@ -512,16 +695,18 @@ export default function InvoicesPage() {
                 ? `${form.number || 'Draft invoice'} · ${invoiceDisplayStatus(form)}`
                 : 'New invoice'}
             </h2>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false)
-                setBaseline('')
-              }}
-              className={adminBtnSecondary}
-            >
-              Close
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false)
+                  setBaseline('')
+                }}
+                className={adminBtnSecondary}
+              >
+                Close
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -626,7 +811,7 @@ export default function InvoicesPage() {
                       ? 'Save your changes before issuing'
                       : undefined
               }
-              onClick={handleIssue}
+              onClick={() => handleIssue()}
               className={adminBtnPrimary}
             >
               Issue invoice
@@ -639,46 +824,20 @@ export default function InvoicesPage() {
                   ? `Client has ${formatPula(accountCredit)} on account`
                   : 'No applicable account credit for this invoice'
               }
-              onClick={handleApplyCredit}
+              onClick={() => handleApplyCreditFor(editingId, form)}
               className={adminBtnPrimary}
             >
               Apply credit
               {canApplyCredit ? ` (${formatPula(applyCreditAmount)})` : ''}
             </button>
-            <button
-              type="button"
-              disabled={!canVoid}
-              title={
-                !editingId
-                  ? 'Save this invoice first'
-                  : form.status === 'void'
-                    ? 'This invoice is already void'
-                    : isDirty
-                      ? 'Save or discard changes before voiding'
-                      : undefined
-              }
-              onClick={handleVoid}
-              className={adminBtnDanger}
-            >
-              Void
-            </button>
-            {isAdmin(user?.role) ? (
+            {canVoidOrDelete ? (
               <button
                 type="button"
-                disabled={!canDelete}
-                title={
-                  !editingId
-                    ? 'Save this invoice first'
-                    : form.status === 'draft'
-                      ? 'Permanently remove this draft'
-                      : form.status === 'void'
-                        ? 'Permanently remove this void invoice (no payments)'
-                        : 'Void the invoice first, or only drafts can be deleted'
-                }
-                onClick={handleDelete}
+                disabled={saving}
+                onClick={() => handleVoidOrDelete()}
                 className={adminBtnDanger}
               >
-                Delete
+                {canDelete ? 'Delete invoice' : 'Void invoice'}
               </button>
             ) : null}
           </div>
@@ -768,10 +927,15 @@ export default function InvoicesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-ink-200">{formatPula(row.total)}</td>
-                    <td className={`px-4 py-3 text-right ${adminColSecondary}`}>
-                      <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
-                        Open
-                      </span>
+                    <td
+                      className="px-4 py-3 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <ActionsMenu
+                        label={`Actions for ${row.number || 'invoice'}`}
+                        items={rowInvoiceMenuItems(row)}
+                      />
                     </td>
                   </tr>
                 )

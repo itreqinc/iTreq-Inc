@@ -4,6 +4,8 @@ import {
   useMemo,
   useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+import { isAdmin } from '../../lib/authConfig'
 import { opsApi } from '../../lib/opsApi'
 import { clientToForm,
   emptyClientForm } from '../../lib/clientRegistration'
@@ -50,35 +52,26 @@ function balanceClass(balance) {
   return 'text-ink-300'
 }
 
-function ClientRowActions({ onEdit, onInvoice, onPayment, onPrint, printing }) {
+function ClientRowActions({ items, label = 'Client actions' }) {
   return (
     <div
       className="inline-flex items-center justify-end"
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
     >
-      <ActionsMenu
-        label="Client actions"
-        items={[
-          { label: 'Edit client', icon: 'pencil', onClick: onEdit },
-          { label: 'New invoice', icon: 'invoice', onClick: onInvoice },
-          { label: 'Record payment', icon: 'payment', onClick: onPayment },
-          {
-            label: printing ? 'Opening statement…' : 'Print statement',
-            icon: 'print',
-            onClick: onPrint,
-            disabled: printing,
-          },
-        ]}
-      />
+      <ActionsMenu label={label} items={items} />
     </div>
   )
 }
 
 export default function ClientsPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const admin = isAdmin(user?.role)
   const { showError, showSuccess, showWarning, confirm } = useOpsAlert()
   const [view, setView] = useState('directory')
+  // Directory filter: default to active clients only.
+  const [showAllClients, setShowAllClients] = useState(false)
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(emptyClientForm)
@@ -89,6 +82,7 @@ export default function ClientsPage() {
   const [stmtModalClient, setStmtModalClient] = useState(null)
   const [stmtFrom, setStmtFrom] = useState(monthStartIso)
   const [stmtTo, setStmtTo] = useState(todayIso)
+  const [deletingId, setDeletingId] = useState(null)
 
   const [selectedId, setSelectedId] = useState(null)
   const [statement, setStatement] = useState(null)
@@ -97,17 +91,18 @@ export default function ClientsPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    const activeOnly = !showAllClients
     const { data, error: err } =
       view === 'accounts'
-        ? await opsApi.listClientsWithBalances()
-        : await opsApi.listClients()
+        ? await opsApi.listClientsWithBalances({ activeOnly })
+        : await opsApi.listClients({ activeOnly })
     setLoading(false)
     if (err) {
       showError(err.message)
       return
     }
     setClients(data || [])
-  }, [showError, view])
+  }, [showError, view, showAllClients])
 
   useEffect(() => {
     load()
@@ -157,8 +152,13 @@ export default function ClientsPage() {
   }, [view, selectedId, showError])
 
   useEffect(() => {
-    if (view === 'accounts' && clients.length && !selectedId) {
-      setSelectedId(clients[0].id)
+    if (view !== 'accounts') return
+    if (!clients.length) {
+      if (selectedId) setSelectedId(null)
+      return
+    }
+    if (!selectedId || !clients.some((c) => c.id === selectedId)) {
+      setSelectedId(clients[0]?.id || null)
     }
   }, [view, clients, selectedId])
 
@@ -249,6 +249,93 @@ export default function ClientsPage() {
     }
   }
 
+  async function toggleClientActive(client) {
+    const next = !client.is_active
+    const ok = await confirm({
+      title: next ? 'Activate this client?' : 'Deactivate this client?',
+      message: next
+        ? `${client.name} will appear in client pickers and can receive new quotes, invoices, and payments.`
+        : `${client.name} will be hidden from client pickers. Existing invoices, quotations, and payments stay on record.`,
+      confirmLabel: next ? 'Activate' : 'Deactivate',
+      type: next ? 'warning' : 'warning',
+    })
+    if (!ok) return
+
+    const { error } = await opsApi.setClientActive(client.id, next)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess(next ? 'Client activated.' : 'Client deactivated.')
+    await load()
+  }
+
+  async function removeClient(client) {
+    const ok = await confirm({
+      title: 'Delete this client?',
+      message: `Permanently remove ${client.name}? This only works when there are no invoices, quotations, or payments.`,
+      confirmLabel: 'Delete client',
+      type: 'warning',
+    })
+    if (!ok) return
+
+    setDeletingId(client.id)
+    const { error } = await opsApi.deleteClient(client.id)
+    setDeletingId(null)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess('Client deleted.')
+    if (selectedId === client.id) {
+      setSelectedId(null)
+      setStatement(null)
+    }
+    await load()
+  }
+
+  function clientMenuItems(client) {
+    const actions = clientIconActions(client)
+    const items = [
+      { label: 'Edit client', icon: 'pencil', onClick: actions.onEdit },
+      { label: 'New invoice', icon: 'invoice', onClick: actions.onInvoice },
+      { label: 'Record payment', icon: 'payment', onClick: actions.onPayment },
+      {
+        label: actions.printing ? 'Opening statement…' : 'Print statement',
+        icon: 'print',
+        onClick: actions.onPrint,
+        disabled: actions.printing,
+      },
+    ]
+
+    if (client.is_active !== false) {
+      items.push({
+        label: 'Deactivate client',
+        icon: 'ban',
+        tone: 'danger',
+        onClick: () => toggleClientActive(client),
+      })
+    } else {
+      items.push({
+        label: 'Activate client',
+        icon: 'checkCircle',
+        onClick: () => toggleClientActive(client),
+      })
+    }
+
+    if (admin && !client.has_financial_records) {
+      items.push({
+        label: deletingId === client.id ? 'Deleting…' : 'Delete client',
+        icon: 'trash',
+        tone: 'danger',
+        disabled: deletingId === client.id,
+        onClick: () => removeClient(client),
+      })
+    }
+
+    return items
+  }
+
   function openTransaction(line) {
     if (!line?.id) return
     if (line.type === 'invoice') navigate(`/admin/invoices?open=${line.id}`)
@@ -337,7 +424,37 @@ export default function ClientsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold text-white">Clients</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-display text-2xl font-bold text-white">Clients</h1>
+            <button
+              type="button"
+              onClick={() => setShowAllClients((v) => !v)}
+              aria-pressed={showAllClients}
+              aria-label={showAllClients ? 'Showing all clients' : 'Showing active clients only'}
+              className="relative inline-flex h-6 w-[4.5rem] shrink-0 items-center rounded-md border border-white/15 bg-ink-900/80 p-0.5 transition hover:bg-white/10"
+            >
+              <span
+                aria-hidden="true"
+                className={`absolute inset-y-0.5 left-0.5 w-[calc(50%-0.125rem)] rounded border border-brand-500/35 bg-brand-500/20 transition-transform duration-200 ${
+                  showAllClients ? 'translate-x-[calc(100%+0.125rem)]' : 'translate-x-0'
+                }`}
+              />
+              <span
+                className={`relative z-10 flex-1 text-center text-[10px] font-semibold leading-none transition ${
+                  !showAllClients ? 'text-brand-200' : 'text-ink-500'
+                }`}
+              >
+                Active
+              </span>
+              <span
+                className={`relative z-10 flex-1 text-center text-[10px] font-semibold leading-none transition ${
+                  showAllClients ? 'text-brand-200' : 'text-ink-500'
+                }`}
+              >
+                All
+              </span>
+            </button>
+          </div>
           <p className="mt-1 text-sm text-ink-300">
             {view === 'directory'
               ? 'Capture core client details. Manage client information and contact details for easy tracking and communication.'
@@ -569,12 +686,17 @@ export default function ClientsPage() {
                       key={c.id}
                       role="link"
                       tabIndex={0}
-                      className={`group bg-ink-900/20 ${clickableRowClass}`}
+                      className={`group bg-ink-900/20 ${clickableRowClass} ${
+                        c.is_active === false ? 'opacity-60' : ''
+                      }`}
                       onClick={open}
                       onKeyDown={(e) => activateRowKey(e, open)}
                     >
                       <td className="min-w-0 break-words px-4 py-3">
                         <span className={clickableDocClass}>{c.name}</span>
+                        {c.is_active === false ? (
+                          <span className="ml-2 text-xs text-red-300">Inactive</span>
+                        ) : null}
                       </td>
                       <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                         {c.id_number || '—'}
@@ -584,7 +706,10 @@ export default function ClientsPage() {
                         {c.email || '—'}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <ClientRowActions {...clientIconActions(c)} />
+                        <ClientRowActions
+                          label={`Actions for ${c.name}`}
+                          items={clientMenuItems(c)}
+                        />
                       </td>
                     </tr>
                   )
@@ -671,7 +796,10 @@ export default function ClientsPage() {
                       </button>
                     ) : null}
                     {selectedClient ? (
-                      <ClientRowActions {...clientIconActions(selectedClient)} />
+                      <ClientRowActions
+                        label={`Actions for ${selectedClient.name}`}
+                        items={clientMenuItems(selectedClient)}
+                      />
                     ) : null}
                   </div>
                 </div>

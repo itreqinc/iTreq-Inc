@@ -291,13 +291,44 @@ async function getSettingsInternal(sb: SupabaseClient) {
   return data as Record<string, unknown>
 }
 
-async function listClientsInternal(sb: SupabaseClient) {
-  const { data, error } = await sb
-    .from('clients')
-    .select('*')
-    .order('name', { ascending: true })
+async function listClientsInternal(sb: SupabaseClient, { activeOnly = false } = {}) {
+  let q = sb.from('clients').select('*').order('name', { ascending: true })
+  if (activeOnly) q = q.eq('is_active', true)
+  const { data, error } = await q
   if (error) throw mapDbError(error)
   return (data || []) as Record<string, unknown>[]
+}
+
+async function clientHasFinancialRecords(sb: SupabaseClient, clientId: string) {
+  const tables = ['invoices', 'quotations', 'payments']
+  for (const table of tables) {
+    const { count, error } = await sb
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', clientId)
+    if (error) throw mapDbError(error)
+    if ((count || 0) > 0) return true
+  }
+  return false
+}
+
+async function enrichClientsFinancialFlags(
+  sb: SupabaseClient,
+  clients: Record<string, unknown>[],
+) {
+  if (!clients.length) return clients
+  const withRecords = new Set<string>()
+  for (const table of ['invoices', 'quotations', 'payments']) {
+    const { data, error } = await sb.from(table).select('client_id')
+    if (error) throw mapDbError(error)
+    for (const row of data || []) {
+      withRecords.add(String((row as { client_id: string }).client_id))
+    }
+  }
+  return clients.map((c) => ({
+    ...c,
+    has_financial_records: withRecords.has(String(c.id)),
+  }))
 }
 
 async function getClientInternal(sb: SupabaseClient, id: string) {
@@ -844,10 +875,19 @@ handlers.get_status = async () => ({
   phase: 'phase-6-edge',
 })
 
-handlers.list_clients = async ({ sb }) => listClientsInternal(sb)
+handlers.list_clients = async ({ sb }, args) => {
+  const opts = (args[0] || {}) as { activeOnly?: boolean }
+  const clients = await listClientsInternal(sb, opts)
+  if (opts.activeOnly) return clients
+  return enrichClientsFinancialFlags(sb, clients)
+}
 
-handlers.list_clients_with_balances = async ({ sb }) => {
-  const clients = await listClientsInternal(sb)
+handlers.list_clients_with_balances = async ({ sb }, args) => {
+  const opts = (args[0] || {}) as { activeOnly?: boolean }
+  const clients = await enrichClientsFinancialFlags(
+    sb,
+    await listClientsInternal(sb, opts),
+  )
   const [invRes, payRes] = await Promise.all([
     sb.from('invoices').select('client_id, total, status').in('status', [...BALANCE_INVOICE_STATUSES]),
     sb.from('payments').select('client_id, amount'),
@@ -895,6 +935,38 @@ handlers.update_client = async ({ sb }, args) => {
   const { data, error } = await sb
     .from('clients')
     .update({ ...formToClientRow(form), updated_at: nowIso() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw mapDbError(error)
+  return data
+}
+
+handlers.delete_client = async ({ user, sb }, args) => {
+  assertAdminUser(user)
+  const id = String(args[0] || '')
+  if (!id) throw new OpsError('Client id is required.')
+
+  if (await clientHasFinancialRecords(sb, id)) {
+    throw new OpsError(
+      'This client has invoices, quotations, or payments. Deactivate the client instead of deleting.',
+    )
+  }
+
+  const { error } = await sb.from('clients').delete().eq('id', id)
+  if (error) throw mapDbError(error)
+  return { ok: true }
+}
+
+handlers.set_client_active = async ({ sb }, args) => {
+  const id = String(args[0] || '')
+  const payload = args[1] as { is_active?: boolean } | boolean | undefined
+  const isActive = typeof payload === 'boolean' ? payload : !!payload?.is_active
+  if (!id) throw new OpsError('Client id is required.')
+
+  const { data, error } = await sb
+    .from('clients')
+    .update({ is_active: isActive, updated_at: nowIso() })
     .eq('id', id)
     .select()
     .single()

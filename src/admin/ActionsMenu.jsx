@@ -34,7 +34,12 @@ function MenuIcon({ icon, tone }) {
  * Compact ⋮ menu. Portals the panel so table overflow does not clip it.
  * Items: { label, onClick, icon?, tone?, disabled? }
  */
-export function ActionsMenu({ items = [], align = 'right', label = 'Actions' }) {
+export function ActionsMenu({
+  items = [],
+  align = 'right',
+  label = 'Actions',
+  prominent = false,
+}) {
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState(null)
   const rootRef = useRef(null)
@@ -111,7 +116,11 @@ export function ActionsMenu({ items = [], align = 'right', label = 'Actions' }) 
           e.stopPropagation()
           setOpen((v) => !v)
         }}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-400 transition hover:bg-white/10 hover:text-white"
+        className={`inline-flex shrink-0 items-center justify-center rounded-lg transition hover:bg-white/10 hover:text-white ${
+          prominent
+            ? 'h-10 w-10 border border-white/15 text-white'
+            : 'h-8 w-8 text-ink-400'
+        }`}
       >
         <span className="flex flex-col items-center justify-center gap-[3px]" aria-hidden>
           <span className="block h-[3px] w-[3px] rounded-full bg-current" />
