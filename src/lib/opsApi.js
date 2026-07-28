@@ -1621,13 +1621,6 @@ const directOpsApi = {
     if (status === 'draft') {
       // ok
     } else if (status === 'void') {
-      const amountPaid = Number(existing.data.amount_paid) || 0
-      if (amountPaid > 0.001) {
-        return {
-          data: null,
-          error: { message: 'Cannot delete a void invoice that had payments recorded.' },
-        }
-      }
       const { count, error: cErr } = await supabase
         .from('payment_allocations')
         .select('id', { count: 'exact', head: true })
@@ -1647,6 +1640,31 @@ const directOpsApi = {
             'Only draft invoices can be deleted, or void invoices with no payments. Void active invoices first.',
         },
       }
+    }
+
+    // Reopen source quotation (if any) before delete — FK only nulls converted_invoice_id.
+    const { error: byConvertedErr } = await supabase
+      .from('quotations')
+      .update({
+        status: 'draft',
+        converted_invoice_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('converted_invoice_id', id)
+      .eq('status', 'converted')
+    if (byConvertedErr) return mapError(byConvertedErr)
+
+    if (existing.data.quotation_id) {
+      const { error: byLinkErr } = await supabase
+        .from('quotations')
+        .update({
+          status: 'draft',
+          converted_invoice_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.data.quotation_id)
+        .eq('status', 'converted')
+      if (byLinkErr) return mapError(byLinkErr)
     }
 
     const { error } = await supabase.from('invoices').delete().eq('id', id)

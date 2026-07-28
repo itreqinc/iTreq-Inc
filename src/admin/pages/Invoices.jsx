@@ -130,6 +130,7 @@ export default function InvoicesPage() {
       total: 0,
       amount_paid: 0,
       discount_amount: 0,
+      quotation_id: '',
       lines: [emptyLine()],
     }
   })
@@ -196,6 +197,7 @@ export default function InvoicesPage() {
         total: Number(data.total) || 0,
         amount_paid: Number(data.amount_paid) || 0,
         discount_amount: Number(data.discount_amount) || 0,
+        quotation_id: data.quotation_id || '',
         lines: mapDocLinesForEditor(data.lines, catalog),
       }
       setEditingId(id)
@@ -236,6 +238,7 @@ export default function InvoicesPage() {
         total: 0,
         amount_paid: 0,
         discount_amount: 0,
+        quotation_id: '',
         lines: [emptyLine()],
       }
       setEditingId(null)
@@ -261,6 +264,7 @@ export default function InvoicesPage() {
       total: 0,
       amount_paid: 0,
       discount_amount: 0,
+      quotation_id: '',
       lines: [emptyLine()],
     }
     setEditingId(null)
@@ -295,14 +299,19 @@ export default function InvoicesPage() {
     Boolean(editingId) && form.status === 'draft' && !isDirty && !saving
   const canVoid =
     Boolean(editingId) && form.status !== 'void' && !isDirty && !saving
-  const canDelete =
+  /** Draft delete requires a clean form; void invoices are read-only so isDirty is ignored. */
+  const canDeleteDraft =
     isAdmin(user?.role) &&
     Boolean(editingId) &&
+    form.status === 'draft' &&
     !isDirty &&
-    !saving &&
-    (form.status === 'draft' ||
-      (form.status === 'void' && Number(form.amount_paid) <= 0.001))
-  const canVoidOrDelete = canDelete || canVoid
+    !saving
+  const canDeleteVoid =
+    isAdmin(user?.role) &&
+    Boolean(editingId) &&
+    form.status === 'void' &&
+    !saving
+  const canDelete = canDeleteDraft || canDeleteVoid
 
   async function handleSave(e) {
     e.preventDefault()
@@ -443,18 +452,26 @@ export default function InvoicesPage() {
     await load()
   }
 
-  async function handleDelete(invoiceId = editingId, status = form.status) {
+  async function handleDelete(invoiceId = editingId, status = form.status, row) {
     if (!invoiceId) return
     if (invoiceId === editingId && isDirty) {
       showError('Save or discard changes before deleting this invoice.')
       return
     }
+    const hasQuotation = Boolean(
+      row?.quotation_id ||
+        (invoiceId === editingId && form.quotation_id) ||
+        rows.find((r) => r.id === invoiceId)?.quotation_id,
+    )
+    const baseMessage =
+      status === 'draft'
+        ? 'This permanently removes the draft invoice.'
+        : 'This permanently removes the void invoice from the system.'
     const ok = await confirm({
       title: 'Delete this invoice?',
-      message:
-        status === 'draft'
-          ? 'This permanently removes the draft invoice. This cannot be undone.'
-          : 'This permanently removes the void invoice from the system. This cannot be undone.',
+      message: hasQuotation
+        ? `${baseMessage} The linked quotation will return to draft so it can be converted again. This cannot be undone.`
+        : `${baseMessage} This cannot be undone.`,
       confirmLabel: 'Delete invoice',
     })
     if (!ok) return
@@ -465,7 +482,11 @@ export default function InvoicesPage() {
       showError(err.message)
       return
     }
-    showSuccess('Invoice deleted.')
+    showSuccess(
+      hasQuotation
+        ? 'Invoice deleted. The linked quotation is back to draft.'
+        : 'Invoice deleted.',
+    )
     if (invoiceId === editingId) {
       setShowForm(false)
       setEditingId(null)
@@ -476,12 +497,11 @@ export default function InvoicesPage() {
 
   async function handleVoidOrDelete(invoiceId = editingId, row) {
     const status = row?.status ?? form.status
-    const amountPaid = Number(row?.amount_paid ?? form.amount_paid) || 0
     const mayDelete =
       isAdmin(user?.role) &&
-      (status === 'draft' || (status === 'void' && amountPaid <= 0.001))
+      (status === 'draft' || status === 'void')
     if (mayDelete) {
-      await handleDelete(invoiceId, status)
+      await handleDelete(invoiceId, status, row)
       return
     }
     await handleVoid(invoiceId)
@@ -610,15 +630,14 @@ export default function InvoicesPage() {
   function rowInvoiceMenuItems(row) {
     const id = row.id
     const status = row.status
-    const amountPaid = Number(row.amount_paid) || 0
     const blocked = rowBlocked(id)
     const rowCanIssue = status === 'draft' && !blocked && !saving
     const rowCanVoid = status !== 'void' && !blocked && !saving
-    const rowCanDelete =
-      isAdmin(user?.role) &&
-      (status === 'draft' || (status === 'void' && amountPaid <= 0.001)) &&
-      !blocked &&
-      !saving
+    const rowCanDeleteDraft =
+      isAdmin(user?.role) && status === 'draft' && !blocked && !saving
+    const rowCanDeleteVoid =
+      isAdmin(user?.role) && status === 'void' && !saving
+    const rowCanDelete = rowCanDeleteDraft || rowCanDeleteVoid
     const rowCanVoidOrDelete = rowCanDelete || rowCanVoid
     const rowCanShare = !blocked && !saving
     const rowCanApplyCredit =
@@ -830,14 +849,23 @@ export default function InvoicesPage() {
               Apply credit
               {canApplyCredit ? ` (${formatPula(applyCreditAmount)})` : ''}
             </button>
-            {canVoidOrDelete ? (
+            {canDelete ? (
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => handleVoidOrDelete()}
+                onClick={() => handleDelete()}
                 className={adminBtnDanger}
               >
-                {canDelete ? 'Delete invoice' : 'Void invoice'}
+                Delete invoice
+              </button>
+            ) : canVoid ? (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleVoid()}
+                className={adminBtnDanger}
+              >
+                Void invoice
               </button>
             ) : null}
           </div>
