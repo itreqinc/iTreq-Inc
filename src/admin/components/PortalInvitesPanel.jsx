@@ -14,31 +14,10 @@ function formatWhen(iso) {
   }
 }
 
-function CollapsibleInviteList({
-  title,
-  count,
-  open,
-  onToggle,
-  children,
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/20">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm font-semibold text-ink-200 hover:bg-white/[0.03]"
-      >
-        <span>
-          {title}
-          <span className="ml-2 text-xs font-normal tabular-nums text-ink-400">({count})</span>
-        </span>
-        <span className="text-xs text-ink-400">{open ? 'Hide' : 'Show'}</span>
-      </button>
-      {open ? <div className="border-t border-white/10 p-2">{children}</div> : null}
-    </div>
-  )
-}
+const detailsClass =
+  'rounded-xl border border-white/10 bg-ink-950/20 [&>summary]:cursor-pointer [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden'
+const summaryClass =
+  'flex items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-ink-200 hover:bg-white/[0.03]'
 
 export function PortalInvitesPanel() {
   const { showError, showSuccess } = useOpsAlert()
@@ -46,9 +25,6 @@ export function PortalInvitesPanel() {
   const [notified, setNotified] = useState([])
   const [loading, setLoading] = useState(!AUTH_BYPASS)
   const [busyId, setBusyId] = useState(null)
-  const [panelOpen, setPanelOpen] = useState(false)
-  const [pendingOpen, setPendingOpen] = useState(false)
-  const [notifiedOpen, setNotifiedOpen] = useState(false)
 
   const load = useCallback(async () => {
     if (AUTH_BYPASS) {
@@ -94,43 +70,42 @@ export function PortalInvitesPanel() {
   }
 
   return (
-    <section className="mt-10 rounded-2xl border border-white/10 bg-ink-900/30">
-      <button
-        type="button"
-        onClick={() => setPanelOpen((o) => !o)}
-        aria-expanded={panelOpen}
-        className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left sm:px-5"
-      >
+    <details className="mt-10 rounded-2xl border border-white/10 bg-ink-900/30 [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer items-start justify-between gap-3 px-4 py-3 sm:px-5">
         <div>
           <h2 className="font-display text-lg font-semibold text-white">Portal invites</h2>
           <p className="mt-1 text-sm text-ink-400">
-            Notify clients of portal credentials. After their first successful login they leave this
-            list.
+            Click to manage portal credentials. After a client&apos;s first login they leave these
+            lists.
           </p>
         </div>
-        <span className="shrink-0 pt-1 text-xs font-semibold text-ink-400">
-          {panelOpen ? 'Hide' : 'Show'}
+        <span className="shrink-0 pt-1 text-xs font-semibold uppercase tracking-wide text-brand-300">
+          Expand
         </span>
-      </button>
+      </summary>
 
-      {panelOpen ? (
-        <div className="space-y-4 border-t border-white/10 px-4 pb-4 pt-3 sm:px-5">
-          {AUTH_BYPASS ? (
-            <p className="text-sm text-ink-400">
-              Portal invites need a real session. Set{' '}
-              <code className="text-ink-300">VITE_AUTH_BYPASS=false</code> and sign in to list or
-              send invites.
-            </p>
-          ) : loading ? (
-            <p className="text-sm text-ink-400">Loading invite status…</p>
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <CollapsibleInviteList
-                title="Yet to notify"
-                count={pending.length}
-                open={pendingOpen}
-                onToggle={() => setPendingOpen((o) => !o)}
-              >
+      <div className="space-y-4 border-t border-white/10 px-4 pb-4 pt-3 sm:px-5">
+        {AUTH_BYPASS ? (
+          <p className="text-sm text-ink-400">
+            Portal invites need a real session. Set{' '}
+            <code className="text-ink-300">VITE_AUTH_BYPASS=false</code> and sign in to list or send
+            invites.
+          </p>
+        ) : loading ? (
+          <p className="text-sm text-ink-400">Loading invite status…</p>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <details className={detailsClass}>
+              <summary className={summaryClass}>
+                <span>
+                  Yet to notify
+                  <span className="ml-2 text-xs font-normal tabular-nums text-ink-400">
+                    ({pending.length})
+                  </span>
+                </span>
+                <span className="text-xs uppercase tracking-wide text-brand-300">Expand</span>
+              </summary>
+              <div className="border-t border-white/10 p-2">
                 <div className={adminTableShellClass}>
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-white/10 text-ink-400">
@@ -165,14 +140,20 @@ export function PortalInvitesPanel() {
                     </tbody>
                   </table>
                 </div>
-              </CollapsibleInviteList>
+              </div>
+            </details>
 
-              <CollapsibleInviteList
-                title="Notified (awaiting first login)"
-                count={notified.length}
-                open={notifiedOpen}
-                onToggle={() => setNotifiedOpen((o) => !o)}
-              >
+            <details className={detailsClass}>
+              <summary className={summaryClass}>
+                <span>
+                  Notified (awaiting first login)
+                  <span className="ml-2 text-xs font-normal tabular-nums text-ink-400">
+                    ({notified.length})
+                  </span>
+                </span>
+                <span className="text-xs uppercase tracking-wide text-brand-300">Expand</span>
+              </summary>
+              <div className="border-t border-white/10 p-2">
                 <div className={adminTableShellClass}>
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-white/10 text-ink-400">
@@ -208,11 +189,11 @@ export function PortalInvitesPanel() {
                     </tbody>
                   </table>
                 </div>
-              </CollapsibleInviteList>
-            </div>
-          )}
-        </div>
-      ) : null}
-    </section>
+              </div>
+            </details>
+          </div>
+        )}
+      </div>
+    </details>
   )
 }

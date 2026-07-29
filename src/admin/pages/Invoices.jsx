@@ -41,13 +41,6 @@ import { ActionsMenu } from '../ActionsMenu'
 import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
-import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
-import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
-import {
-  clearDefaultNewInvoiceIssueDate,
-  getDefaultNewInvoiceIssueDate,
-  setDefaultNewInvoiceIssueDate,
-} from '../../lib/invoiceDefaults'
 import { adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
