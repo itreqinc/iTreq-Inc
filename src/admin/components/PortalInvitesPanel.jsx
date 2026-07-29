@@ -14,10 +14,27 @@ function formatWhen(iso) {
   }
 }
 
+function DetailsChevron({ className = '' }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+      className={`h-5 w-5 shrink-0 text-ink-400 transition-transform duration-200 group-open:rotate-180 ${className}`}
+    >
+      <path
+        fillRule="evenodd"
+        d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+        clipRule="evenodd"
+      />
+    </svg>
+  )
+}
+
 const detailsClass =
-  'rounded-xl border border-white/10 bg-ink-950/20 [&>summary]:cursor-pointer [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden'
+  'group rounded-xl border border-white/10 bg-ink-950/20 [&>summary]:cursor-pointer [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden'
 const summaryClass =
-  'flex items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-ink-200 hover:bg-white/[0.03]'
+  'flex items-start justify-between gap-3 px-3 py-2.5 hover:bg-white/[0.03]'
 
 export function PortalInvitesPanel() {
   const { showError, showSuccess } = useOpsAlert()
@@ -70,18 +87,17 @@ export function PortalInvitesPanel() {
   }
 
   return (
-    <details className="mt-10 rounded-2xl border border-white/10 bg-ink-900/30 [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden">
+    <details
+      className="group mt-10 rounded-2xl border border-white/10 bg-ink-900/30 [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden"
+    >
       <summary className="flex cursor-pointer items-start justify-between gap-3 px-4 py-3 sm:px-5">
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className="font-display text-lg font-semibold text-white">Portal invites</h2>
           <p className="mt-1 text-sm text-ink-400">
-            Click to manage portal credentials. After a client&apos;s first login they leave these
-            lists.
+            Send portal login details and track who still needs to sign in.
           </p>
         </div>
-        <span className="shrink-0 pt-1 text-xs font-semibold uppercase tracking-wide text-brand-300">
-          Expand
-        </span>
+        <DetailsChevron className="mt-1" />
       </summary>
 
       <div className="space-y-4 border-t border-white/10 px-4 pb-4 pt-3 sm:px-5">
@@ -97,13 +113,18 @@ export function PortalInvitesPanel() {
           <div className="grid gap-4 lg:grid-cols-2">
             <details className={detailsClass}>
               <summary className={summaryClass}>
-                <span>
-                  Yet to notify
-                  <span className="ml-2 text-xs font-normal tabular-nums text-ink-400">
-                    ({pending.length})
-                  </span>
-                </span>
-                <span className="text-xs uppercase tracking-wide text-brand-300">Expand</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-ink-200">
+                    Yet to notify
+                    <span className="ml-2 text-xs font-normal tabular-nums text-ink-400">
+                      ({pending.length})
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-400">
+                    Clients who have not been sent portal login details yet.
+                  </p>
+                </div>
+                <DetailsChevron className="mt-0.5" />
               </summary>
               <div className="border-t border-white/10 p-2">
                 <div className={adminTableShellClass}>
@@ -145,13 +166,18 @@ export function PortalInvitesPanel() {
 
             <details className={detailsClass}>
               <summary className={summaryClass}>
-                <span>
-                  Notified (awaiting first login)
-                  <span className="ml-2 text-xs font-normal tabular-nums text-ink-400">
-                    ({notified.length})
-                  </span>
-                </span>
-                <span className="text-xs uppercase tracking-wide text-brand-300">Expand</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-ink-200">
+                    Notified (awaiting first login)
+                    <span className="ml-2 text-xs font-normal tabular-nums text-ink-400">
+                      ({notified.length})
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-400">
+                    Invited by email but have not signed in to the portal yet.
+                  </p>
+                </div>
+                <DetailsChevron className="mt-0.5" />
               </summary>
               <div className="border-t border-white/10 p-2">
                 <div className={adminTableShellClass}>
