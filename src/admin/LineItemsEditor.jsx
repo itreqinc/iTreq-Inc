@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import {
   adminBtnSecondary,
   adminFieldClass,
@@ -7,6 +8,14 @@ import {
   adminColSecondary,
 } from './ui'
 import { calcDocTotals, calcLineTotal, emptyLine } from '../lib/billing'
+import {
+  catalogComponentDescription,
+  isUsageProduct,
+} from '../lib/productKind'
+import {
+  buildRoamingDescription,
+  inclusiveDayCount,
+} from '../lib/roamingLine'
 import { useOpsAlert } from './OpsAlertContext'
 
 function componentProduct(comp) {
@@ -33,19 +42,21 @@ export function linesFromTrackableItem(item, quantity = 1, startSort = 1) {
 
   return components.map((comp, i) => {
     const product = componentProduct(comp)
-    const isFee = product?.tracks_stock === false
     const unitQty = Math.round(Number(comp.quantity || 1) * qty * 100) / 100
     return {
       ...emptyLine(startSort + i),
       product_id: product?.id || '',
       trackable_item_id: item?.id || '',
-      description: isFee
-        ? `${item.name} — ${product?.name || 'Monthly fee'}`
-        : `${item.name} - Tracker Installation`,
+      description: catalogComponentDescription(item.name, product),
       quantity: unitQty,
       unit_price: Number(product?.unit_price) || 0,
     }
   })
+}
+
+function todayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function LineItemsEditor({
@@ -59,6 +70,29 @@ export function LineItemsEditor({
   onDiscountChange,
 }) {
   const { confirm } = useOpsAlert()
+  const usageProducts = useMemo(
+    () => products.filter((p) => p.active !== false && isUsageProduct(p)),
+    [products],
+  )
+  const [roaming, setRoaming] = useState(() => ({
+    product_id: '',
+    registration: '',
+    from_date: todayIso(),
+    to_date: todayIso(),
+  }))
+
+  const roamingProductId = roaming.product_id || usageProducts[0]?.id || ''
+  const roamingProduct = products.find((p) => p.id === roamingProductId)
+  const roamingDays = inclusiveDayCount(roaming.from_date, roaming.to_date)
+  const roamingPreview =
+    roamingProduct && (roaming.registration.trim() || roaming.from_date)
+      ? buildRoamingDescription(
+          roamingProduct.name,
+          roaming.registration,
+          roaming.from_date,
+          roaming.to_date,
+        )
+      : ''
 
   function updateLine(index, patch) {
     const next = lines.map((line, i) => (i === index ? { ...line, ...patch } : line))
@@ -92,6 +126,30 @@ export function LineItemsEditor({
     onChange([...lines, emptyLine(lines.length + 1)])
   }
 
+  function addRoamingLine() {
+    if (!roamingProduct || roamingDays < 1) return
+    const description = buildRoamingDescription(
+      roamingProduct.name,
+      roaming.registration,
+      roaming.from_date,
+      roaming.to_date,
+    )
+    const line = {
+      ...emptyLine(lines.length + 1),
+      product_id: roamingProduct.id,
+      trackable_item_id: '',
+      description,
+      quantity: roamingDays,
+      unit_price: Number(roamingProduct.unit_price) || 0,
+    }
+    onChange([...lines, line])
+    setRoaming((r) => ({
+      ...r,
+      product_id: roamingProduct.id,
+      registration: '',
+    }))
+  }
+
   async function removeLine(index) {
     const line = lines[index]
     const label =
@@ -110,6 +168,14 @@ export function LineItemsEditor({
 
   const totals = calcDocTotals(lines, taxRate, discountAmount)
   const catalog = trackableItems.filter((t) => t.active !== false)
+
+  function descriptionPlaceholder(line) {
+    const product = products.find((p) => p.id === line.product_id)
+    if (product && isUsageProduct(product)) {
+      return 'e.g. Roaming — B 123 ABC, 12–15 Jul 2026'
+    }
+    return ''
+  }
 
   return (
     <div className="space-y-3">
@@ -165,6 +231,12 @@ export function LineItemsEditor({
                     disabled={readOnly}
                     className={adminFieldClass}
                     value={line.description || ''}
+                    placeholder={readOnly ? '' : descriptionPlaceholder(line)}
+                    title={
+                      readOnly
+                        ? undefined
+                        : 'Edit the line text shown on the invoice — add registrations, dates, or other detail.'
+                    }
                     onChange={(e) => updateLine(index, { description: e.target.value })}
                   />
                 </td>
@@ -227,9 +299,86 @@ export function LineItemsEditor({
       </div>
 
       {!readOnly ? (
-        <button type="button" onClick={addLine} className={adminBtnSecondary}>
-          Add line
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={addLine} className={adminBtnSecondary}>
+            Add line
+          </button>
+        </div>
+      ) : null}
+
+      {!readOnly && usageProducts.length > 0 ? (
+        <div className="space-y-3 rounded-xl border border-amber-400/20 bg-amber-500/5 p-3 sm:p-4">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Add roaming / usage days</h3>
+            <p className="mt-0.5 text-xs text-ink-400">
+              Builds a draft line with registration and dates. Qty is set to the number of days
+              (inclusive). You can still edit the description afterward.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <label className="block lg:col-span-2">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Usage SKU
+              </span>
+              <select
+                className={adminFieldClass}
+                value={roamingProductId}
+                onChange={(e) => setRoaming((r) => ({ ...r, product_id: e.target.value }))}
+              >
+                {usageProducts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({formatPula(p.unit_price)}/day)
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Registration
+              </span>
+              <input
+                className={adminFieldClass}
+                value={roaming.registration}
+                onChange={(e) => setRoaming((r) => ({ ...r, registration: e.target.value }))}
+                placeholder="B 123 ABC"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">From</span>
+              <input
+                type="date"
+                className={adminFieldClass}
+                value={roaming.from_date}
+                onChange={(e) => setRoaming((r) => ({ ...r, from_date: e.target.value }))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">To</span>
+              <input
+                type="date"
+                className={adminFieldClass}
+                value={roaming.to_date}
+                min={roaming.from_date || undefined}
+                onChange={(e) => setRoaming((r) => ({ ...r, to_date: e.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={!roamingProduct || roamingDays < 1}
+              onClick={addRoamingLine}
+              className={adminBtnSecondary}
+            >
+              Add {roamingDays > 0 ? `${roamingDays} day${roamingDays === 1 ? '' : 's'}` : 'line'}
+            </button>
+            {roamingPreview ? (
+              <p className="min-w-0 text-xs text-ink-400">
+                Preview: <span className="text-ink-200">{roamingPreview}</span>
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       <div className="flex flex-wrap items-end justify-between gap-4">

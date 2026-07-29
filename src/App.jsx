@@ -80,14 +80,7 @@ export default function App() {
           }
         />
         <Route path="products" element={<ProductsPage />} />
-        <Route
-          path="tracking-catalog"
-          element={
-            <AdminOnlyRoute>
-              <TrackingCatalogPage />
-            </AdminOnlyRoute>
-          }
-        />
+        <Route path="tracking-catalog" element={<TrackingCatalogPage />} />
         <Route path="quotations" element={<QuotationsPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="payments" element={<PaymentsPage />} />

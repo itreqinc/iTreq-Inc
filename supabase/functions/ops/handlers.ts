@@ -429,7 +429,7 @@ async function listTrackableItemsInternal(
   { activeOnly = false, withComponents = false } = {},
 ) {
   const select = withComponents
-    ? '*, trackable_item_components(id, product_id, quantity, sort_order, products(id, sku, name, unit_price, tracks_stock, active))'
+    ? '*, trackable_item_components(id, product_id, quantity, sort_order, products(id, sku, name, unit_price, tracks_stock, product_kind, active))'
     : '*'
   let q = sb
     .from('trackable_items')
@@ -493,10 +493,18 @@ async function linesFromCatalogSelectionsInternal(
         )
       }
       const qty = Math.round(Number(comp.quantity) * pick.quantity * 100) / 100
-      const isFee = product.tracks_stock === false
-      const description = isFee
-        ? `${item.name} — ${product.name}`
-        : `${item.name} - Tracker Installation`
+      const productKind = String(product.product_kind || '')
+      const kind =
+        productKind ||
+        (product.tracks_stock ? 'hardware' : 'monthly_fee')
+      let description: string
+      if (kind === 'monthly_fee') {
+        description = `${item.name} — ${product.name}`
+      } else if (kind === 'usage') {
+        description = String(product.name || 'Usage charge')
+      } else {
+        description = `${item.name} - Tracker Installation`
+      }
       lines.push({
         product_id: product.id,
         trackable_item_id: item.id,
@@ -983,14 +991,30 @@ handlers.update_product = async ({ user, sb }, args) => {
   assertAdminUser(user)
   const id = String(args[0] || '')
   const payload = (args[1] || {}) as Record<string, unknown>
-  const row = {
-    name: payload.name ? String(payload.name).trim() : '',
-    unit_price: Number(payload.unit_price),
-    active: Boolean(payload.active),
-    updated_at: nowIso(),
+  const row: Record<string, unknown> = { updated_at: nowIso() }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'name')) {
+    const name = String(payload.name || '').trim()
+    if (!name) throw new OpsError('Product name is required.')
+    row.name = name
   }
-  if (!row.name) throw new OpsError('Product name is required.')
-  if (!(Number(row.unit_price) >= 0)) throw new OpsError('Unit price must be zero or greater.')
+  if (Object.prototype.hasOwnProperty.call(payload, 'unit_price')) {
+    const unit_price = Number(payload.unit_price)
+    if (!(unit_price >= 0)) throw new OpsError('Unit price must be zero or greater.')
+    row.unit_price = unit_price
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'active')) {
+    row.active = Boolean(payload.active)
+  }
+
+  if (
+    !Object.prototype.hasOwnProperty.call(payload, 'name') &&
+    !Object.prototype.hasOwnProperty.call(payload, 'unit_price') &&
+    !Object.prototype.hasOwnProperty.call(payload, 'active')
+  ) {
+    throw new OpsError('Nothing to update.')
+  }
+
   const { data, error } = await sb.from('products').update(row).eq('id', id).select().single()
   if (error) throw mapDbError(error)
   return data
@@ -1038,11 +1062,17 @@ handlers.create_product = async ({ user, sb }, args) => {
   const name = String(payload.name || '').trim()
   if (!sku) throw new OpsError('SKU is required.')
   if (!name) throw new OpsError('Product name is required.')
+  const allowedKinds = ['hardware', 'monthly_fee', 'usage']
+  let productKind = String(payload.product_kind || '').trim()
+  if (!allowedKinds.includes(productKind)) {
+    productKind = payload.tracks_stock ? 'hardware' : 'monthly_fee'
+  }
   const row = {
     sku,
     name,
     unit_price: Math.max(0, Number(payload.unit_price) || 0),
-    tracks_stock: Boolean(payload.tracks_stock),
+    product_kind: productKind,
+    tracks_stock: productKind === 'hardware',
     active: payload.active !== false,
   }
   const { data, error } = await sb.from('products').insert(row).select().single()
@@ -1114,6 +1144,40 @@ handlers.save_trackable_item_components = async ({ user, sb }, args) => {
       quantity,
       sort_order: Number(c.sort_order) || (i + 1) * 10,
     })
+  }
+
+  if (cleaned.length) {
+    const productIds = cleaned.map((c) => String(c.product_id))
+    const { data: products, error: pErr } = await sb
+      .from('products')
+      .select('id, sku, name, product_kind, tracks_stock, active')
+      .in('id', productIds)
+    if (pErr) throw mapDbError(pErr)
+    const byId = Object.fromEntries((products || []).map((p) => [p.id, p]))
+    for (const line of cleaned) {
+      const p = byId[String(line.product_id)] as
+        | {
+            id: string
+            sku: string
+            product_kind?: string
+            tracks_stock?: boolean
+            active?: boolean
+          }
+        | undefined
+      if (!p) throw new OpsError('One of the products was not found.')
+      if (p.active === false) {
+        throw new OpsError(`${p.sku} is inactive and cannot be used in a bundle.`)
+      }
+      const kind = p.product_kind || (p.tracks_stock ? 'hardware' : 'monthly_fee')
+      if (kind === 'usage') {
+        throw new OpsError(
+          `${p.sku} is a usage charge — add it on invoices when it occurs, not in catalog bundles.`,
+        )
+      }
+      if (kind !== 'hardware' && kind !== 'monthly_fee') {
+        throw new OpsError(`${p.sku} cannot be used in a catalog bundle.`)
+      }
+    }
   }
 
   const { error: delErr } = await sb

@@ -36,7 +36,9 @@ export function qtyByTrackableFromQuoteLines(lines, catalog) {
     const trackerComp =
       comps.find((c) => {
         const p = Array.isArray(c.products) ? c.products[0] : c.products
-        return p && p.tracks_stock !== false
+        if (!p) return false
+        if (p.product_kind) return p.product_kind === 'hardware'
+        return p.tracks_stock !== false
       }) || comps[0]
     if (!trackerComp || trackerComp.product_id !== line.product_id) continue
     const unit = Number(trackerComp.quantity) || 1

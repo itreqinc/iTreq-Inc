@@ -101,9 +101,9 @@ export default function MonthlyFeesPage() {
       <div>
         <h1 className="font-display text-2xl font-bold text-white">Monthly fees</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-300">
-          Generate issued invoices for the selected month by copying monthly fee lines (non-stock
-          products) from each client&apos;s previous-month invoice. Clients without a previous fee
-          invoice are skipped — bill those manually under Invoices.
+          Generate issued invoices for the selected month by copying recurring monthly fee lines from
+          each client&apos;s previous-month invoice. Usage charges (e.g. roaming) are excluded —
+          add those manually when they occur. Clients without a previous fee invoice are skipped.
         </p>
       </div>
 

@@ -296,18 +296,34 @@ const directOpsApi = {
   async updateProduct(id, payload) {
     if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()
-    const row = {
-      name: payload.name?.trim(),
-      unit_price: Number(payload.unit_price),
-      active: Boolean(payload.active),
-      updated_at: new Date().toISOString(),
+    const row = { updated_at: new Date().toISOString() }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'name')) {
+      const name = String(payload.name || '').trim()
+      if (!name) {
+        return { data: null, error: { message: 'Product name is required.' } }
+      }
+      row.name = name
     }
-    if (!row.name) {
-      return { data: null, error: { message: 'Product name is required.' } }
+    if (Object.prototype.hasOwnProperty.call(payload, 'unit_price')) {
+      const unit_price = Number(payload.unit_price)
+      if (!(unit_price >= 0)) {
+        return { data: null, error: { message: 'Unit price must be zero or greater.' } }
+      }
+      row.unit_price = unit_price
     }
-    if (!(Number(row.unit_price) >= 0)) {
-      return { data: null, error: { message: 'Unit price must be zero or greater.' } }
+    if (Object.prototype.hasOwnProperty.call(payload, 'active')) {
+      row.active = Boolean(payload.active)
     }
+
+    if (
+      !Object.prototype.hasOwnProperty.call(payload, 'name') &&
+      !Object.prototype.hasOwnProperty.call(payload, 'unit_price') &&
+      !Object.prototype.hasOwnProperty.call(payload, 'active')
+    ) {
+      return { data: null, error: { message: 'Nothing to update.' } }
+    }
+
     const { data, error } = await supabase
       .from('products')
       .update(row)
@@ -370,11 +386,17 @@ const directOpsApi = {
     if (!name) {
       return { data: null, error: { message: 'Product name is required.' } }
     }
+    const allowedKinds = ['hardware', 'monthly_fee', 'usage']
+    let productKind = String(payload.product_kind || '').trim()
+    if (!allowedKinds.includes(productKind)) {
+      productKind = payload.tracks_stock ? 'hardware' : 'monthly_fee'
+    }
     const row = {
       sku,
       name,
       unit_price: Math.max(0, Number(payload.unit_price) || 0),
-      tracks_stock: Boolean(payload.tracks_stock),
+      product_kind: productKind,
+      tracks_stock: productKind === 'hardware',
       active: payload.active !== false,
     }
     const { data, error } = await supabase.from('products').insert(row).select().single()
@@ -387,7 +409,7 @@ const directOpsApi = {
   async listTrackableItems({ activeOnly = false, withComponents = false } = {}) {
     if (!supabase) return dbUnavailable()
     const select = withComponents
-      ? '*, trackable_item_components(id, product_id, quantity, sort_order, products(id, sku, name, unit_price, tracks_stock, active))'
+      ? '*, trackable_item_components(id, product_id, quantity, sort_order, products(id, sku, name, unit_price, tracks_stock, product_kind, active))'
       : '*'
     let q = supabase
       .from('trackable_items')
@@ -485,6 +507,43 @@ const directOpsApi = {
       })
     }
 
+    if (cleaned.length) {
+      const productIds = cleaned.map((c) => c.product_id)
+      const { data: products, error: pErr } = await supabase
+        .from('products')
+        .select('id, sku, name, product_kind, tracks_stock, active')
+        .in('id', productIds)
+      if (pErr) return mapError(pErr)
+      const byId = Object.fromEntries((products || []).map((p) => [p.id, p]))
+      for (const line of cleaned) {
+        const p = byId[line.product_id]
+        if (!p) {
+          return { data: null, error: { message: 'One of the products was not found.' } }
+        }
+        if (p.active === false) {
+          return {
+            data: null,
+            error: { message: `${p.sku} is inactive and cannot be used in a bundle.` },
+          }
+        }
+        const kind = p.product_kind || (p.tracks_stock ? 'hardware' : 'monthly_fee')
+        if (kind === 'usage') {
+          return {
+            data: null,
+            error: {
+              message: `${p.sku} is a usage charge — add it on invoices when it occurs, not in catalog bundles.`,
+            },
+          }
+        }
+        if (kind !== 'hardware' && kind !== 'monthly_fee') {
+          return {
+            data: null,
+            error: { message: `${p.sku} cannot be used in a catalog bundle.` },
+          }
+        }
+      }
+    }
+
     const { error: delErr } = await supabase
       .from('trackable_item_components')
       .delete()
@@ -554,10 +613,19 @@ const directOpsApi = {
           }
         }
         const qty = Math.round(Number(comp.quantity) * pick.quantity * 100) / 100
-        const isFee = product.tracks_stock === false
-        const description = isFee
-          ? `${item.name} — ${product.name}`
-          : `${item.name} - Tracker Installation`
+        const kind = product.product_kind
+          ? product.product_kind
+          : product.tracks_stock
+            ? 'hardware'
+            : 'monthly_fee'
+        let description
+        if (kind === 'monthly_fee') {
+          description = `${item.name} — ${product.name}`
+        } else if (kind === 'usage') {
+          description = product.name
+        } else {
+          description = `${item.name} - Tracker Installation`
+        }
         lines.push({
           product_id: product.id,
           trackable_item_id: item.id,

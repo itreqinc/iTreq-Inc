@@ -11,8 +11,9 @@ const navItems = [
   { to: '/admin/clients', label: 'Clients' },
   { to: '/admin/staff', label: 'Staff', adminOnly: true },
   { to: '/admin/stock', label: 'Stock', adminOnly: true },
-  { to: '/admin/products', label: 'Products' },
-  { to: '/admin/tracking-catalog', label: 'Tracking catalog', adminOnly: true },
+  { type: 'heading', label: 'Catalog' },
+  { to: '/admin/tracking-catalog', label: 'What clients request' },
+  { to: '/admin/products', label: 'SKUs & pricing' },
   { to: '/admin/quotations', label: 'Quotations' },
   { to: '/admin/invoices', label: 'Invoices' },
   { to: '/admin/monthly-fees', label: 'Monthly fees' },
@@ -66,7 +67,9 @@ export function AdminLayout() {
     setViewMode,
   } = useAuth()
 
-  const nav = navItems.filter((item) => !item.adminOnly || isAdmin(user?.role))
+  const nav = navItems.filter(
+    (item) => item.type === 'heading' || !item.adminOnly || isAdmin(user?.role),
+  )
 
   useEffect(() => {
     setNavOpen(false)
@@ -162,17 +165,26 @@ export function AdminLayout() {
             />
             <nav className="relative z-50 max-h-[min(70vh,28rem)] overflow-y-auto border-t border-white/10 bg-ink-900/98 px-4 py-3 lg:hidden">
               <div className="space-y-1">
-                {nav.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={() => setNavOpen(false)}
-                    className={({ isActive }) => navLinkClass(isActive)}
-                  >
-                    <span>{item.label}</span>
-                  </NavLink>
-                ))}
+                {nav.map((item) =>
+                  item.type === 'heading' ? (
+                    <p
+                      key={`heading-${item.label}`}
+                      className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500 first:pt-0"
+                    >
+                      {item.label}
+                    </p>
+                  ) : (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.end}
+                      onClick={() => setNavOpen(false)}
+                      className={({ isActive }) => navLinkClass(isActive)}
+                    >
+                      <span>{item.label}</span>
+                    </NavLink>
+                  ),
+                )}
               </div>
             </nav>
           </>
@@ -188,16 +200,25 @@ export function AdminLayout() {
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:grid lg:grid-cols-[220px_1fr] lg:gap-0">
         <nav className="hidden space-y-1 lg:sticky lg:top-6 lg:block lg:self-start lg:border-r lg:border-white/10 lg:pr-6">
-          {nav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => navLinkClass(isActive)}
-            >
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+          {nav.map((item) =>
+            item.type === 'heading' ? (
+              <p
+                key={`heading-${item.label}`}
+                className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500 first:pt-0"
+              >
+                {item.label}
+              </p>
+            ) : (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => navLinkClass(isActive)}
+              >
+                <span>{item.label}</span>
+              </NavLink>
+            ),
+          )}
         </nav>
 
         <main className="min-w-0 lg:pl-6">
