@@ -89,7 +89,7 @@ export function AdminLayout() {
               <div className="flex min-w-0 items-center gap-3">
                 <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
                   <Logo className="h-9 shrink-0" />
-                  <span className="font-display text-sm font-semibold text-white">Ops</span>
+                  <span className="font-display text-sm font-semibold text-white">Operations</span>
                 </Link>
                 <Link
                   to="/"

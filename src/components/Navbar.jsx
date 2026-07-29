@@ -14,7 +14,7 @@ export function Navbar() {
   const account = user
     ? {
         to: normalizeRole(user.role) === ROLES.client ? '/portal' : '/admin',
-        label: normalizeRole(user.role) === ROLES.client ? 'My portal' : 'Ops',
+        label: normalizeRole(user.role) === ROLES.client ? 'My portal' : 'Operations',
       }
     : { to: '/login', label: 'Sign in' }
 
