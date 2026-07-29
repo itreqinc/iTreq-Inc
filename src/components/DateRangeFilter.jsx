@@ -1,6 +1,6 @@
 import { YearMonthDaySelect } from './YearMonthDaySelect'
 import { adminBtnSecondary, adminTableShellClass } from '../admin/ui'
-import { dateRangeIsBackwards, todayIso } from '../lib/dateRange'
+import { dateRangeIsBackwards, endOfNextMonthIso, todayIso } from '../lib/dateRange'
 
 /**
  * From/To toolbar + list table in one bordered shell.
@@ -19,6 +19,7 @@ export function DateRangeFilter({
 }) {
   const active = Boolean(from || to)
   const backwards = dateRangeIsBackwards(from, to)
+  const toMax = endOfNextMonthIso()
 
   function clear() {
     onFromChange('')
@@ -34,7 +35,7 @@ export function DateRangeFilter({
           onChange={onFromChange}
           maxYmd={todayIso()}
         />
-        <YearMonthDaySelect label="To" value={to} onChange={onToChange} maxYmd={todayIso()} />
+        <YearMonthDaySelect label="To" value={to} onChange={onToChange} maxYmd={toMax} />
         <button type="button" onClick={clear} disabled={!active} className={adminBtnSecondary}>
           Clear
         </button>

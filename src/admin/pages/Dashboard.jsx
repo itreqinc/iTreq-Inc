@@ -118,7 +118,13 @@ export default function AdminDashboard() {
       return
     }
     showSuccess('Report dismissed.')
-    await load()
+    setSummary((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        paymentNotifications: (prev.paymentNotifications || []).filter((n) => n.id !== row.id),
+      }
+    })
   }
 
   const notifications = summary?.paymentNotifications || []

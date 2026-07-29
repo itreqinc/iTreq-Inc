@@ -6,10 +6,11 @@ import { AUTH_BYPASS, ROLES, VIEW_MODES } from '../lib/authConfig'
 import { getPortalClientId, setPortalClientId } from '../lib/portalClient'
 import { opsApi } from '../lib/opsApi'
 import { OpsAlertProvider, useOpsAlert } from '../admin/OpsAlertContext'
+import { SignOutButton } from '../components/SignOutButton'
 
 function PortalShell() {
   const navigate = useNavigate()
-  const { user, authBypass, setBypassRole, logout, dualRole, setViewMode, opsAllowed } =
+  const { user, authBypass, setBypassRole, dualRole, setViewMode, opsAllowed } =
     useAuth()
   const { showError } = useOpsAlert()
   const [clients, setClients] = useState([])
@@ -212,16 +213,7 @@ function PortalShell() {
                 >
                   Profile
                 </Link>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await logout()
-                    navigate('/login', { replace: true })
-                  }}
-                  className="font-semibold text-ink-400 hover:text-ink-200"
-                >
-                  Sign out
-                </button>
+                <SignOutButton className="font-semibold text-ink-400 hover:text-ink-200" />
               </>
             ) : null}
             <Link to="/" className="text-ink-400 hover:text-ink-200">

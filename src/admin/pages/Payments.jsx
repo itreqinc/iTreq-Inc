@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
+import { upsertById, removeById } from '../../lib/listState'
 import {
   autoAllocatePayment,
   invoiceBalanceDue,
@@ -22,6 +23,7 @@ import {
   filterByDateRange,
   todayIso as rangeTodayIso,
 } from '../../lib/dateRange'
+import { ClientSelect } from '../ClientSelect'
 import { AdminIconAction } from '../AdminIconAction'
 import {
   adminBtnDanger,
@@ -377,8 +379,14 @@ export default function PaymentsPage() {
           ? 'Payment updated.'
           : 'Payment recorded.',
     )
+    const paymentId = result.data?.id
     closeForm()
-    await load()
+    if (paymentId) {
+      const refreshed = await opsApi.getPayment(paymentId)
+      if (!refreshed.error && refreshed.data) {
+        setRows((prev) => upsertById(prev, refreshed.data))
+      }
+    }
   }
 
   async function handleDelete(row) {
@@ -397,7 +405,7 @@ export default function PaymentsPage() {
     }
     showSuccess('Payment deleted.')
     if (editingId === row.id) closeForm()
-    await load()
+    setRows((prev) => removeById(prev, row.id))
   }
 
   return (
@@ -477,24 +485,16 @@ export default function PaymentsPage() {
 
           <label className="block">
             <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Client *</span>
-            <select
+            <ClientSelect
               required
               disabled={Boolean(editingId)}
-              className={adminFieldClass}
+              clients={clients}
               value={form.client_id}
-              onChange={(e) => {
-                const client_id = e.target.value
+              onChange={(client_id) => {
                 setForm((f) => ({ ...f, client_id, amount: '', selectedIds: [] }))
                 loadOpenInvoices(client_id)
               }}
-            >
-              <option value="">Select client…</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            />
             {editingId ? (
               <span className="mt-1 block text-xs text-ink-500">
                 Client cannot be changed when editing a payment.

@@ -6,6 +6,7 @@ import {
 import { useNavigate,
   useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
+import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
   mapDocLinesForEditor } from '../../lib/billing'
 import { portalQuoteAwaitingApproval,
@@ -127,6 +128,12 @@ export default function QuotationsPage() {
     setShowForm(true)
   }
 
+  function closeForm() {
+    setShowForm(false)
+    setEditingId(null)
+    setBaseline('')
+  }
+
   async function openRow(id) {
     const { data, error: err } = await opsApi.getQuotation(id)
     if (err) {
@@ -232,7 +239,7 @@ export default function QuotationsPage() {
     if (!ok) return
 
     setSaving(true)
-    const { error: err } = await opsApi.saveQuotation({
+    const { data: saved, error: err } = await opsApi.saveQuotation({
       id: editingId,
       ...form,
     })
@@ -242,9 +249,8 @@ export default function QuotationsPage() {
       return
     }
     showSuccess('Quotation saved.')
-    setShowForm(false)
-    setBaseline('')
-    await load()
+    if (saved?.id) setRows((prev) => upsertById(prev, saved))
+    closeForm()
   }
 
   async function handleApprove() {
@@ -260,7 +266,7 @@ export default function QuotationsPage() {
     if (!ok) return
 
     setSaving(true)
-    const { error: err } = await opsApi.saveQuotation({
+    const { data: saved, error: err } = await opsApi.saveQuotation({
       id: editingId,
       ...form,
       status: 'accepted',
@@ -271,9 +277,8 @@ export default function QuotationsPage() {
       return
     }
     showSuccess('Quotation approved.')
-    setShowForm(false)
-    setBaseline('')
-    await load()
+    if (saved?.id) setRows((prev) => upsertById(prev, saved))
+    closeForm()
   }
 
   async function convertToInvoice() {
@@ -307,16 +312,15 @@ export default function QuotationsPage() {
     if (!ok) return
 
     setSaving(true)
-    const { error: err } = await opsApi.setQuotationStatus(editingId, 'cancelled')
+    const { data, error: err } = await opsApi.setQuotationStatus(editingId, 'cancelled')
     setSaving(false)
     if (err) {
       showError(err.message)
       return
     }
     showSuccess('Quotation cancelled.')
-    setShowForm(false)
-    setBaseline('')
-    await load()
+    if (data?.id) setRows((prev) => upsertById(prev, data))
+    closeForm()
   }
 
   async function handleDeclineQuotation() {
@@ -332,16 +336,15 @@ export default function QuotationsPage() {
     if (!reason) return
 
     setSaving(true)
-    const { error: err } = await opsApi.declineQuotation(editingId, reason)
+    const { data, error: err } = await opsApi.declineQuotation(editingId, reason)
     setSaving(false)
     if (err) {
       showError(err.message)
       return
     }
     showSuccess('Quotation declined. The client can see your reason.')
-    setShowForm(false)
-    setBaseline('')
-    await load()
+    if (data?.id) setRows((prev) => upsertById(prev, data))
+    closeForm()
   }
 
   async function handleDeleteQuotation() {
@@ -353,6 +356,7 @@ export default function QuotationsPage() {
     })
     if (!ok) return
     setSaving(true)
+    const deletedId = editingId
     const { error: err } = await opsApi.deleteQuotation(editingId)
     setSaving(false)
     if (err) {
@@ -360,10 +364,8 @@ export default function QuotationsPage() {
       return
     }
     showSuccess('Quotation deleted.')
-    setShowForm(false)
-    setEditingId(null)
-    setBaseline('')
-    await load()
+    setRows((prev) => removeById(prev, deletedId))
+    closeForm()
   }
 
   return (
@@ -414,10 +416,7 @@ export default function QuotationsPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                setShowForm(false)
-                setBaseline('')
-              }}
+              onClick={closeForm}
               className={adminBtnSecondary}
             >
               Close
@@ -519,7 +518,7 @@ export default function QuotationsPage() {
                 if (row?.status) {
                   setForm((f) => ({ ...f, status: row.status }))
                 }
-                load()
+                if (row?.id) setRows((prev) => upsertById(prev, row))
               }}
             />
             <button

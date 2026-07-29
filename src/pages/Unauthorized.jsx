@@ -2,10 +2,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { isStaffLike, ROLES } from '../lib/authConfig'
 import { adminBtnPrimary, adminBtnSecondary } from '../admin/ui'
+import { OpsAlertProvider } from '../admin/OpsAlertContext'
+import { SignOutButton } from '../components/SignOutButton'
 
-export default function Unauthorized() {
+function UnauthorizedInner() {
   const navigate = useNavigate()
-  const { user, authBypass, setBypassRole, logout } = useAuth()
+  const { user, authBypass, setBypassRole } = useAuth()
   const role = user?.role
 
   return (
@@ -57,16 +59,7 @@ export default function Unauthorized() {
         </div>
       ) : (
         <div className="mt-6 flex flex-wrap justify-center gap-4">
-          <button
-            type="button"
-            onClick={async () => {
-              await logout()
-              navigate('/login', { replace: true })
-            }}
-            className={adminBtnPrimary}
-          >
-            Sign out
-          </button>
+          <SignOutButton className={adminBtnPrimary} />
           <Link
             to={
               role === ROLES.client
@@ -93,5 +86,13 @@ export default function Unauthorized() {
         Public site
       </Link>
     </div>
+  )
+}
+
+export default function Unauthorized() {
+  return (
+    <OpsAlertProvider>
+      <UnauthorizedInner />
+    </OpsAlertProvider>
   )
 }

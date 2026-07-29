@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
+import { upsertById, removeById } from '../../lib/listState'
 import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
@@ -171,7 +172,7 @@ export default function ExpensesPage() {
     if (!ok) return
 
     setSaving(true)
-    const { error } = await opsApi.saveExpense({
+    const { data: saved, error } = await opsApi.saveExpense({
       id: editingId,
       ...form,
     })
@@ -182,7 +183,7 @@ export default function ExpensesPage() {
     }
     showSuccess(editingId ? 'Expense updated.' : 'Expense recorded.')
     closeForm()
-    await load()
+    if (saved?.id) setRows((prev) => upsertById(prev, saved))
   }
 
   async function handleDelete(row) {
@@ -201,7 +202,7 @@ export default function ExpensesPage() {
     }
     showSuccess('Expense deleted.')
     if (editingId === row.id) closeForm()
-    await load()
+    setRows((prev) => removeById(prev, row.id))
   }
 
   return (

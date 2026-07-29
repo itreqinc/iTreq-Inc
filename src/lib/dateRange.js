@@ -16,6 +16,14 @@ export function currentMonthStartIso() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 }
 
+/** Last calendar day of the month after today (YYYY-MM-DD). */
+export function endOfNextMonthIso(from = new Date()) {
+  const d = from instanceof Date ? from : new Date()
+  // Day 0 of month+2 is the last day of month+1.
+  const end = new Date(d.getFullYear(), d.getMonth() + 2, 0)
+  return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+}
+
 /** Blank bounds mean "unbounded"; rows with no date drop out once a bound is set. */
 export function withinDateRange(value, from, to) {
   const day = String(value ?? '').slice(0, 10)

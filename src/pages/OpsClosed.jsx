@@ -5,7 +5,7 @@ import { adminBtnPrimary, adminBtnSecondary } from '../admin/ui'
 
 export default function OpsClosed() {
   const navigate = useNavigate()
-  const { setViewMode } = useAuth()
+  const { dualRole, setViewMode } = useAuth()
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-ink-950 px-4 text-center">
@@ -18,17 +18,19 @@ export default function OpsClosed() {
       </p>
 
       <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <button
-          type="button"
-          className={adminBtnPrimary}
-          onClick={() => {
-            setViewMode(VIEW_MODES.client)
-            navigate('/portal', { replace: true })
-          }}
-        >
-          Back to portal
-        </button>
-        <Link to="/" className={adminBtnSecondary}>
+        {dualRole ? (
+          <button
+            type="button"
+            className={adminBtnPrimary}
+            onClick={() => {
+              setViewMode(VIEW_MODES.client)
+              navigate('/portal', { replace: true })
+            }}
+          >
+            Back to portal
+          </button>
+        ) : null}
+        <Link to="/" className={dualRole ? adminBtnSecondary : adminBtnPrimary}>
           Public Site
         </Link>
       </div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { opsApi } from '../../lib/opsApi'
+import { upsertById, removeById } from '../../lib/listState'
 import { useOpsAlert } from '../OpsAlertContext'
 import { adminBtnDanger, adminBtnPrimary, adminBtnSecondary, adminFieldClass, formatPula } from '../ui'
 
@@ -94,15 +95,14 @@ export default function TrackingCatalogPage() {
       return
     }
     showSuccess(selectedId ? 'Item updated.' : 'Item created.')
-    await load()
-    if (data?.id) {
-      const refreshed = (await opsApi.listTrackableItems({ withComponents: true })).data || []
-      const next = refreshed.find((i) => i.id === data.id)
-      if (next) selectItem(next)
-      else {
-        setSelectedId(data.id)
-      }
+    const next = {
+      ...data,
+      components: selectedId
+        ? items.find((i) => i.id === selectedId)?.components || []
+        : [],
     }
+    setItems((prev) => upsertById(prev, next))
+    if (data?.id) selectItem(next)
   }
 
   async function savePackage() {
@@ -111,16 +111,16 @@ export default function TrackingCatalogPage() {
       return
     }
     setSavingPackage(true)
-    const { error } = await opsApi.saveTrackableItemComponents(selectedId, components)
+    const { data, error } = await opsApi.saveTrackableItemComponents(selectedId, components)
     setSavingPackage(false)
     if (error) {
       showError(error.message)
       return
     }
     showSuccess('Package mapping saved.')
-    await load()
-    const refreshed = (await opsApi.listTrackableItems({ withComponents: true })).data || []
-    const next = refreshed.find((i) => i.id === selectedId)
+    const list = data || []
+    setItems(list)
+    const next = list.find((i) => i.id === selectedId)
     if (next) selectItem(next)
   }
 
@@ -132,6 +132,7 @@ export default function TrackingCatalogPage() {
       confirmLabel: 'Delete',
     })
     if (!ok) return
+    const deletedId = selectedId
     const { error } = await opsApi.deleteTrackableItem(selectedId)
     if (error) {
       showError(error.message)
@@ -139,7 +140,7 @@ export default function TrackingCatalogPage() {
     }
     showSuccess('Item deleted.')
     clearRight()
-    await load()
+    setItems((prev) => removeById(prev, deletedId))
   }
 
   const selected = items.find((i) => i.id === selectedId)

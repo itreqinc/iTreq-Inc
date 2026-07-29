@@ -1,5 +1,6 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { payrollApi } from '../../lib/payrollApi'
+import { upsertById, removeById } from '../../lib/listState'
 import { openPayslipPrintWindow } from '../../lib/payslipDocument'
 import { useAuth } from '../../contexts/AuthContext'
 import { AUTH_BYPASS, isAfterHoursActive, privilegeRoleLabel } from '../../lib/authConfig'
@@ -78,6 +79,7 @@ export default function StaffPage() {
 
   const [staff, setStaff] = useState([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
@@ -107,6 +109,26 @@ export default function StaffPage() {
   const editingAdvance = editingAdvanceId
     ? advances.find((a) => a.id === editingAdvanceId)
     : null
+
+  const filteredStaff = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return staff
+    return staff.filter((row) => {
+      const hay = [
+        row.name,
+        row.first_name,
+        row.middle_name,
+        row.surname,
+        row.email,
+        row.phone,
+        row.employment?.job_title,
+        privilegeRoleLabel(row.role),
+      ]
+        .map((v) => String(v || '').toLowerCase())
+        .join(' ')
+      return hay.includes(q)
+    })
+  }, [staff, searchQuery])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -275,8 +297,10 @@ export default function StaffPage() {
         : 'Staff updated.',
     )
     setShowForm(false)
-    await load()
-    if (data.staff?.id) setSelectedId(data.staff.id)
+    if (data.staff?.id) {
+      setStaff((prev) => upsertById(prev, data.staff))
+      setSelectedId(data.staff.id)
+    }
   }
 
   async function toggleActive(row) {
@@ -295,7 +319,17 @@ export default function StaffPage() {
       return
     }
     showSuccess(next ? 'Staff enabled.' : 'Staff disabled.')
-    await load()
+    setStaff((prev) =>
+      upsertById(prev, {
+        ...row,
+        is_active: next,
+        ...(data?.user || {}),
+        employment: {
+          ...row.employment,
+          employment_status: next ? row.employment?.employment_status || 'active' : 'terminated',
+        },
+      }),
+    )
   }
 
   async function removeStaff(row) {
@@ -317,7 +351,7 @@ export default function StaffPage() {
     if (selectedId === row.id) setSelectedId(null)
     if (viewId === row.id) setViewId(null)
     if (form.user_id === row.id) setShowForm(false)
-    await load()
+    setStaff((prev) => removeById(prev, row.id))
   }
 
   async function resetPassword(row) {
@@ -576,7 +610,13 @@ export default function StaffPage() {
       }
       showSuccess(clear ? 'After-hours access cleared.' : 'After-hours access updated.')
       if (clear) setAfterHoursUntil('')
-      await load()
+      const until = clear ? null : data?.user?.after_hours_until ?? (value ? new Date(value).toISOString() : null)
+      setStaff((prev) =>
+        upsertById(prev, {
+          id: selectedId,
+          after_hours_until: until,
+        }),
+      )
     } finally {
       setAfterHoursBusy(false)
     }
@@ -885,6 +925,18 @@ export default function StaffPage() {
         </section>
       ) : null}
 
+      <div className="space-y-3">
+        <label className="block max-w-md">
+          <span className="sr-only">Search staff</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, email, phone, or job title…"
+            className={adminFieldClass}
+            autoComplete="off"
+          />
+        </label>
       <div className={adminTableShellClass}>
         <table className="w-full text-left text-sm">
           <thead className="border-b border-white/10 text-ink-400">
@@ -910,8 +962,14 @@ export default function StaffPage() {
                   No staff yet.
                 </td>
               </tr>
+            ) : !filteredStaff.length ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-4 text-ink-500">
+                  No staff match your search.
+                </td>
+              </tr>
             ) : (
-              staff.map((row) => {
+              filteredStaff.map((row) => {
                 const isSelected = selectedId === row.id
                 return (
                   <Fragment key={row.id}>
@@ -1183,6 +1241,7 @@ export default function StaffPage() {
             )}
           </tbody>
         </table>
+      </div>
       </div>
 
       <StaffPayslipsPanel userId={selectedId} />

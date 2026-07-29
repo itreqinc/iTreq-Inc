@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { isAdmin } from '../../lib/authConfig'
 import { opsApi } from '../../lib/opsApi'
+import { upsertById, removeById } from '../../lib/listState'
 import { clientToForm,
   emptyClientForm } from '../../lib/clientRegistration'
 import { validateClientForm } from '../../lib/clientValidation'
@@ -88,6 +89,24 @@ export default function ClientsPage() {
   const [statement, setStatement] = useState(null)
   const [stmtLoading, setStmtLoading] = useState(false)
   const [showAllTx, setShowAllTx] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const filteredClients = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return clients
+    return clients.filter((c) => {
+      const hay = [
+        c.name,
+        c.email,
+        c.phone,
+        c.cellphone,
+        c.id_number,
+      ]
+        .map((v) => String(v || '').toLowerCase())
+        .join(' ')
+      return hay.includes(q)
+    })
+  }, [clients, searchQuery])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -153,14 +172,14 @@ export default function ClientsPage() {
 
   useEffect(() => {
     if (view !== 'accounts') return
-    if (!clients.length) {
+    if (!filteredClients.length) {
       if (selectedId) setSelectedId(null)
       return
     }
-    if (!selectedId || !clients.some((c) => c.id === selectedId)) {
-      setSelectedId(clients[0]?.id || null)
+    if (!selectedId || !filteredClients.some((c) => c.id === selectedId)) {
+      setSelectedId(filteredClients[0]?.id || null)
     }
-  }, [view, clients, selectedId])
+  }, [view, filteredClients, selectedId])
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -261,13 +280,21 @@ export default function ClientsPage() {
     })
     if (!ok) return
 
-    const { error } = await opsApi.setClientActive(client.id, next)
+    const { data, error } = await opsApi.setClientActive(client.id, next)
     if (error) {
       showError(error.message)
       return
     }
     showSuccess(next ? 'Client activated.' : 'Client deactivated.')
-    await load()
+    if (!showAllClients && !next) {
+      setClients((prev) => removeById(prev, client.id))
+      if (selectedId === client.id) {
+        setSelectedId(null)
+        setStatement(null)
+      }
+      return
+    }
+    setClients((prev) => upsertById(prev, { ...client, ...data, is_active: next }))
   }
 
   async function removeClient(client) {
@@ -291,7 +318,7 @@ export default function ClientsPage() {
       setSelectedId(null)
       setStatement(null)
     }
-    await load()
+    setClients((prev) => removeById(prev, client.id))
   }
 
   function clientMenuItems(client) {
@@ -403,7 +430,16 @@ export default function ClientsPage() {
         : 'A new Client has been added to the system.',
     )
     closeForm()
-    await load()
+    const saved = result.data
+    if (!saved?.id) return
+    setClients((prev) => {
+      const existing = prev.find((c) => c.id === saved.id)
+      return upsertById(prev, {
+        ...saved,
+        balance: existing?.balance ?? 0,
+        has_financial_records: existing?.has_financial_records ?? false,
+      })
+    })
   }
 
   const selectedClient = clients.find((c) => c.id === selectedId)
@@ -654,7 +690,19 @@ export default function ClientsPage() {
       ) : null}
 
       {view === 'directory' ? (
-        <div className={adminTableShellClass}>
+        <div className="space-y-3">
+          <label className="block max-w-md">
+            <span className="sr-only">Search clients</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, phone, email, or ID…"
+              className={adminFieldClass}
+              autoComplete="off"
+            />
+          </label>
+          <div className={adminTableShellClass}>
           <table className={adminTableClass}>
             <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
               <tr>
@@ -678,8 +726,14 @@ export default function ClientsPage() {
                     No clients yet.
                   </td>
                 </tr>
+              ) : filteredClients.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-ink-400">
+                    No clients match your search.
+                  </td>
+                </tr>
               ) : (
-                clients.map((c) => {
+                filteredClients.map((c) => {
                   const open = () => openClientDetails(c)
                   return (
                     <tr
@@ -717,8 +771,21 @@ export default function ClientsPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       ) : (
+        <div className="space-y-3">
+          <label className="block max-w-md">
+            <span className="sr-only">Search clients</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, phone, email, or ID…"
+              className={adminFieldClass}
+              autoComplete="off"
+            />
+          </label>
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:grid-cols-[minmax(0,17rem)_1fr]">
           <aside className="admin-scroll max-h-[70vh] overflow-y-auto border-b border-white/10 lg:border-b-0">
             <div className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
@@ -728,9 +795,11 @@ export default function ClientsPage() {
               <p className="px-3 py-6 text-sm text-ink-400">Loading…</p>
             ) : clients.length === 0 ? (
               <p className="px-3 py-6 text-sm text-ink-400">No clients yet.</p>
+            ) : filteredClients.length === 0 ? (
+              <p className="px-3 py-6 text-sm text-ink-400">No clients match your search.</p>
             ) : (
               <ul className="py-3">
-                {clients.map((c) => {
+                {filteredClients.map((c) => {
                   const active = c.id === selectedId
                   return (
                     <li key={c.id}>
@@ -911,6 +980,7 @@ export default function ClientsPage() {
               </div>
             )}
           </section>
+        </div>
         </div>
       )}
 

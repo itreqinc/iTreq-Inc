@@ -16,11 +16,13 @@ import {
 } from '../../lib/dateRange'
 import { withUnreadRows } from '../../lib/invoiceDisputes'
 import { opsApi } from '../../lib/opsApi'
+import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
   mapDocLinesForEditor } from '../../lib/billing'
 import { invoiceBalanceDue,
   dueDateFromIssueDate,
   invoiceDisplayStatus } from '../../lib/payments'
+import { ClientSelect } from '../ClientSelect'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import {
@@ -274,6 +276,13 @@ export default function InvoicesPage() {
     setShowForm(true)
   }
 
+  function closeForm() {
+    setShowForm(false)
+    setEditingId(null)
+    setBaseline('')
+    setAccountCredit(0)
+  }
+
   const balanceDue = useMemo(() => invoiceBalanceDue(form), [form])
   const canApplyCredit =
     editingId &&
@@ -327,7 +336,7 @@ export default function InvoicesPage() {
     if (!ok) return
 
     setSaving(true)
-    const { error: err } = await opsApi.saveInvoice({
+    const { data: saved, error: err } = await opsApi.saveInvoice({
       id: editingId,
       ...form,
     })
@@ -337,9 +346,8 @@ export default function InvoicesPage() {
       return
     }
     showSuccess('A draft Invoice has been saved.')
-    setShowForm(false)
-    setBaseline('')
-    await load()
+    if (saved?.id) setRows((prev) => upsertById(prev, saved))
+    closeForm()
   }
 
   async function handleIssue(invoiceId = editingId) {
@@ -406,22 +414,8 @@ export default function InvoicesPage() {
     }
 
     showSuccess(successMessage)
-
-    if (invoiceId === editingId) {
-      const nextForm = {
-        ...form,
-        status: issued.status,
-        number: issued.number || '',
-        issue_date: issued.issue_date || form.issue_date,
-        total: Number(issued.total) || form.total,
-        amount_paid: Number(issued.amount_paid) || 0,
-      }
-      setForm(nextForm)
-      setBaseline(snapshotInvoiceForm(nextForm))
-      const creditLeft = await opsApi.getClientCreditBalance(form.client_id)
-      setAccountCredit(creditLeft.data?.balance ?? 0)
-    }
-    await load()
+    if (issued?.id) setRows((prev) => upsertById(prev, issued))
+    if (invoiceId === editingId) closeForm()
   }
 
   async function handleVoid(invoiceId = editingId) {
@@ -449,7 +443,7 @@ export default function InvoicesPage() {
       setForm(nextForm)
       setBaseline(snapshotInvoiceForm(nextForm))
     }
-    await load()
+    if (data?.id) setRows((prev) => upsertById(prev, data))
   }
 
   async function handleDelete(invoiceId = editingId, status = form.status, row) {
@@ -487,12 +481,8 @@ export default function InvoicesPage() {
         ? 'Invoice deleted. The linked quotation is back to draft.'
         : 'Invoice deleted.',
     )
-    if (invoiceId === editingId) {
-      setShowForm(false)
-      setEditingId(null)
-      setBaseline('')
-    }
-    await load()
+    setRows((prev) => removeById(prev, invoiceId))
+    if (invoiceId === editingId) closeForm()
   }
 
   async function handleVoidOrDelete(invoiceId = editingId, row) {
@@ -557,12 +547,15 @@ export default function InvoicesPage() {
           total: Number(data.total) || 0,
           number: data.number || f.number,
         }))
+        setRows((prev) => upsertById(prev, data))
       }
       const creditLeft = await opsApi.getClientCreditBalance(invoice.client_id)
       setAccountCredit(creditLeft.data?.balance ?? 0)
+    } else {
+      const reload = await opsApi.getInvoice(invoiceId)
+      if (!reload.error) setRows((prev) => upsertById(prev, reload.data))
     }
     showSuccess(`${formatPula(applyRes.data.applied)} applied from account credit.`)
-    await load()
   }
 
   async function printInvoice(invoiceId) {
@@ -717,10 +710,7 @@ export default function InvoicesPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setShowForm(false)
-                  setBaseline('')
-                }}
+                onClick={closeForm}
                 className={adminBtnSecondary}
               >
                 Close
@@ -733,20 +723,13 @@ export default function InvoicesPage() {
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
                 Client *
               </span>
-              <select
+              <ClientSelect
                 required
                 disabled={readOnly}
-                className={adminFieldClass}
+                clients={clients}
                 value={form.client_id}
-                onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))}
-              >
-                <option value="">Select client…</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(client_id) => setForm((f) => ({ ...f, client_id }))}
+              />
             </label>
             <YearMonthDaySelect
               label="Issue date"

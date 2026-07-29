@@ -3,6 +3,7 @@ import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-do
 import { useAuth } from '../contexts/AuthContext'
 import { ROLES, VIEW_MODES, isAdmin, privilegeRoleLabel } from '../lib/authConfig'
 import { Logo } from '../components/Logo'
+import { SignOutButton } from '../components/SignOutButton'
 import { OpsAlertProvider } from './OpsAlertContext'
 
 const navItems = [
@@ -61,7 +62,6 @@ export function AdminLayout() {
     user,
     authBypass,
     setBypassRole,
-    logout,
     dualRole,
     setViewMode,
   } = useAuth()
@@ -141,16 +141,7 @@ export function AdminLayout() {
                 >
                   Profile
                 </Link>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await logout()
-                    navigate('/login', { replace: true })
-                  }}
-                  className="font-semibold text-ink-400 hover:text-ink-200"
-                >
-                  Sign out
-                </button>
+                <SignOutButton className="font-semibold text-ink-400 hover:text-ink-200" />
               </>
             )}
             <span className="text-ink-400">
