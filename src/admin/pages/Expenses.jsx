@@ -6,11 +6,8 @@ import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
-import {
-  currentMonthStartIso,
-  filterByDateRange,
-  todayIso as rangeTodayIso,
-} from '../../lib/dateRange'
+import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
+import { filterByDateRange } from '../../lib/dateRange'
 import {
   adminBtnDanger,
   adminBtnPrimary,
@@ -71,8 +68,7 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState(null)
   const [baseline, setBaseline] = useState('')
   const [form, setForm] = useState(emptyExpenseForm)
-  const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
-  const [dateTo, setDateTo] = useState(rangeTodayIso)
+  const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.expenses')
 
   const load = useCallback(async () => {
     setLoading(true)

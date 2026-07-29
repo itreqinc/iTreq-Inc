@@ -11,6 +11,7 @@ import {
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
+import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import { PaymentDocumentButtons } from '../PaymentDocumentButtons'
 import {
   openPaymentDocumentPrintWindow,
@@ -19,11 +20,7 @@ import {
 } from '../../lib/paymentDocument'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
-import {
-  currentMonthStartIso,
-  filterByDateRange,
-  todayIso as rangeTodayIso,
-} from '../../lib/dateRange'
+import { filterByDateRange } from '../../lib/dateRange'
 import { ClientSelect } from '../ClientSelect'
 import { AdminIconAction } from '../AdminIconAction'
 import {
@@ -84,8 +81,7 @@ export default function PaymentsPage() {
   const [form, setForm] = useState(emptyPaymentForm)
   /** Set when staff arrive from a client's "I've paid" report; closed off on save. */
   const [fromNotification, setFromNotification] = useState(null)
-  const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
-  const [dateTo, setDateTo] = useState(rangeTodayIso)
+  const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.payments')
 
   const load = useCallback(async () => {
     setLoading(true)

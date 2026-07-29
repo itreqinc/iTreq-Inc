@@ -9,12 +9,18 @@ import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import { useAuth } from '../../contexts/AuthContext'
 import { isAdmin } from '../../lib/authConfig'
+import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
+import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import {
-  currentMonthStartIso,
   documentFilterDate,
   filterByDateRange,
   todayIso,
 } from '../../lib/dateRange'
+import {
+  clearDefaultNewInvoiceIssueDate,
+  getDefaultNewInvoiceIssueDate,
+  setDefaultNewInvoiceIssueDate,
+} from '../../lib/invoiceDefaults'
 import { withUnreadRows } from '../../lib/invoiceDisputes'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
@@ -36,6 +42,12 @@ import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
+import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
+import {
+  clearDefaultNewInvoiceIssueDate,
+  getDefaultNewInvoiceIssueDate,
+  setDefaultNewInvoiceIssueDate,
+} from '../../lib/invoiceDefaults'
 import { adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
@@ -84,6 +96,24 @@ function invoiceStatusClass(status) {
   }
 }
 
+function newInvoiceForm(clientId = '') {
+  const issue = getDefaultNewInvoiceIssueDate()
+  return {
+    client_id: clientId,
+    issue_date: issue,
+    due_date: dueDateFromIssueDate(issue),
+    notes: '',
+    status: 'draft',
+    billing_period: '',
+    number: '',
+    total: 0,
+    amount_paid: 0,
+    discount_amount: 0,
+    quotation_id: '',
+    lines: [emptyLine()],
+  }
+}
+
 function snapshotInvoiceForm(form) {
   return JSON.stringify({
     client_id: form.client_id || '',
@@ -118,29 +148,12 @@ export default function InvoicesPage() {
   const [baseline, setBaseline] = useState('')
   const [accountCredit, setAccountCredit] = useState(0)
   const [taxRate, setTaxRate] = useState(0)
-  const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
-  const [dateTo, setDateTo] = useState(todayIso)
+  const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.invoices')
   const [unreadByInvoice, setUnreadByInvoice] = useState({})
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [issueSelectedIds, setIssueSelectedIds] = useState([])
   const masterIssueCheckboxRef = useRef(null)
-  const [form, setForm] = useState(() => {
-    const issue = todayIso()
-    return {
-      client_id: '',
-      issue_date: issue,
-      due_date: dueDateFromIssueDate(issue),
-      notes: '',
-      status: 'draft',
-      billing_period: '',
-      number: '',
-      total: 0,
-      amount_paid: 0,
-      discount_amount: 0,
-      quotation_id: '',
-      lines: [emptyLine()],
-    }
-  })
+  const [form, setForm] = useState(() => newInvoiceForm())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -234,21 +247,7 @@ export default function InvoicesPage() {
     }
     const clientId = params.get('client')
     if (clientId) {
-      const issue = todayIso()
-      const nextForm = {
-        client_id: clientId,
-        issue_date: issue,
-        due_date: dueDateFromIssueDate(issue),
-        notes: '',
-        status: 'draft',
-        billing_period: '',
-        number: '',
-        total: 0,
-        amount_paid: 0,
-        discount_amount: 0,
-        quotation_id: '',
-        lines: [emptyLine()],
-      }
+      const nextForm = newInvoiceForm(clientId)
       setEditingId(null)
       setAccountCredit(0)
       setForm(nextForm)
@@ -260,21 +259,7 @@ export default function InvoicesPage() {
   }, [params, setParams, openRow])
 
   function startNew() {
-    const issue = todayIso()
-    const nextForm = {
-      client_id: '',
-      issue_date: issue,
-      due_date: dueDateFromIssueDate(issue),
-      notes: '',
-      status: 'draft',
-      billing_period: '',
-      number: '',
-      total: 0,
-      amount_paid: 0,
-      discount_amount: 0,
-      quotation_id: '',
-      lines: [emptyLine()],
-    }
+    const nextForm = newInvoiceForm()
     setEditingId(null)
     setAccountCredit(0)
     setForm(nextForm)
@@ -380,6 +365,9 @@ export default function InvoicesPage() {
       return
     }
     showSuccess('A draft Invoice has been saved.')
+    if (!editingId && saved?.issue_date) {
+      setDefaultNewInvoiceIssueDate(saved.issue_date)
+    }
     if (saved?.id) setRows((prev) => upsertById(prev, saved))
     closeForm(saved?.id || editingId)
   }
@@ -807,7 +795,10 @@ export default function InvoicesPage() {
               label="Issue date"
               disabled={readOnly}
               value={form.issue_date}
-              onChange={(issue_date) =>
+              onChange={(issue_date) => {
+                if (!editingId && issue_date === todayIso()) {
+                  clearDefaultNewInvoiceIssueDate()
+                }
                 setForm((f) => ({
                   ...f,
                   issue_date,
@@ -816,7 +807,7 @@ export default function InvoicesPage() {
                       ? f.due_date
                       : dueDateFromIssueDate(issue_date),
                 }))
-              }
+              }}
             />
             <YearMonthDaySelect
               label="Due date"

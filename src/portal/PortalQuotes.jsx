@@ -11,11 +11,10 @@ import {
   portalQuoteAwaitingApproval,
   quotationDisplayStatus,
   } from '../lib/portalQuote'
+import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import {
-  currentMonthStartIso,
   documentFilterDate,
   filterByDateRange,
-  todayIso,
 } from '../lib/dateRange'
 import { DateRangeFilter } from '../components/DateRangeFilter'
 import { useOpsAlert } from '../admin/OpsAlertContext'
@@ -54,8 +53,7 @@ export default function PortalQuotes() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState(null)
-  const [from, setFrom] = useState(currentMonthStartIso)
-  const [to, setTo] = useState(todayIso)
+  const [from, setFrom, to, setTo] = usePersistedDateRange(`portal.quotes.${clientId}`)
 
   useEffect(() => {
     let cancelled = false

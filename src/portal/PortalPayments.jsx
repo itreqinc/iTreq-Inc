@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
 import { paymentMethodLabel } from '../lib/payments'
-import { currentMonthStartIso, filterByDateRange, todayIso } from '../lib/dateRange'
+import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
+import { filterByDateRange } from '../lib/dateRange'
 import { DateRangeFilter } from '../components/DateRangeFilter'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
@@ -20,8 +21,7 @@ export default function PortalPayments() {
   const { showError } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
-  const [from, setFrom] = useState(currentMonthStartIso)
-  const [to, setTo] = useState(todayIso)
+  const [from, setFrom, to, setTo] = usePersistedDateRange(`portal.payments.${clientId}`)
 
   useEffect(() => {
     let cancelled = false

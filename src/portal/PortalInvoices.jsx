@@ -9,11 +9,10 @@ import { opsApi } from '../lib/opsApi'
 import { invoiceBalanceDue,
   invoiceDisplayStatus } from '../lib/payments'
 import { clientInvoiceBillingDisplay } from '../lib/invoiceDates'
+import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import {
-  currentMonthStartIso,
   documentFilterDate,
   filterByDateRange,
-  todayIso,
 } from '../lib/dateRange'
 import { withUnreadRows } from '../lib/invoiceDisputes'
 import { DateRangeFilter } from '../components/DateRangeFilter'
@@ -54,8 +53,7 @@ export default function PortalInvoices() {
   const [rows, setRows] = useState([])
   const [unreadByInvoice, setUnreadByInvoice] = useState({})
   const [loading, setLoading] = useState(true)
-  const [from, setFrom] = useState(currentMonthStartIso)
-  const [to, setTo] = useState(todayIso)
+  const [from, setFrom, to, setTo] = usePersistedDateRange(`portal.invoices.${clientId}`)
 
   useEffect(() => {
     let cancelled = false

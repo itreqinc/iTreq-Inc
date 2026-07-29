@@ -18,10 +18,10 @@ import { ClientSelect } from '../ClientSelect'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
+import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import {
-  currentMonthStartIso,
   documentFilterDate,
   filterByDateRange,
   todayIso,
@@ -63,8 +63,7 @@ export default function QuotationsPage() {
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm, prompt } = useOpsAlert()
   const [rows, setRows] = useState([])
-  const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
-  const [dateTo, setDateTo] = useState(todayIso)
+  const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.quotations')
   const [clients, setClients] = useState([])
   const [products, setProducts] = useState([])
   const [trackableItems, setTrackableItems] = useState([])

@@ -20,6 +20,8 @@ export function PortalInvitesPanel() {
   const [notified, setNotified] = useState([])
   const [loading, setLoading] = useState(!AUTH_BYPASS)
   const [busyId, setBusyId] = useState(null)
+  const [pendingOpen, setPendingOpen] = useState(false)
+  const [notifiedOpen, setNotifiedOpen] = useState(false)
 
   const load = useCallback(async () => {
     if (AUTH_BYPASS) {
@@ -84,80 +86,98 @@ export function PortalInvitesPanel() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-ink-200">Yet to notify</h3>
-            <div className={adminTableShellClass}>
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-white/10 text-ink-400">
-                  <tr>
-                    <th className="px-3 py-2">Client</th>
-                    <th className="px-3 py-2">Email</th>
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {pending.map((row) => (
-                    <tr key={row.client_id} className="border-b border-white/5">
-                      <td className="px-3 py-2 text-white">{row.client_name}</td>
-                      <td className="px-3 py-2 text-ink-300">{row.email}</td>
-                      <td className="px-3 py-2 text-right">
-                        <AdminIconAction
-                          label="Invite"
-                          icon="mail"
-                          disabled={busyId === row.client_id}
-                          onClick={() => invite(row.client_id)}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                  {!pending.length ? (
+            <button
+              type="button"
+              onClick={() => setPendingOpen((o) => !o)}
+              className="mb-2 flex w-full items-center justify-between text-left text-sm font-semibold text-ink-200"
+            >
+              <span>Yet to notify</span>
+              <span className="text-xs text-ink-400">{pendingOpen ? 'Hide' : 'Show'}</span>
+            </button>
+            {pendingOpen ? (
+              <div className={adminTableShellClass}>
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-white/10 text-ink-400">
                     <tr>
-                      <td colSpan={3} className="px-3 py-4 text-ink-500">
-                        No clients waiting for an invite.
-                      </td>
+                      <th className="px-3 py-2">Client</th>
+                      <th className="px-3 py-2">Email</th>
+                      <th className="px-3 py-2" />
                     </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {pending.map((row) => (
+                      <tr key={row.client_id} className="border-b border-white/5">
+                        <td className="px-3 py-2 text-white">{row.client_name}</td>
+                        <td className="px-3 py-2 text-ink-300">{row.email}</td>
+                        <td className="px-3 py-2 text-right">
+                          <AdminIconAction
+                            label="Invite"
+                            icon="mail"
+                            disabled={busyId === row.client_id}
+                            onClick={() => invite(row.client_id)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                    {!pending.length ? (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-4 text-ink-500">
+                          No clients waiting for an invite.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-ink-200">Notified (awaiting first login)</h3>
-            <div className={adminTableShellClass}>
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-white/10 text-ink-400">
-                  <tr>
-                    <th className="px-3 py-2">Client</th>
-                    <th className="px-3 py-2">Notified</th>
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {notified.map((row) => (
-                    <tr key={row.client_id} className="border-b border-white/5">
-                      <td className="px-3 py-2 text-white">{row.client_name}</td>
-                      <td className="px-3 py-2 text-ink-300">{formatWhen(row.invited_at)}</td>
-                      <td className="px-3 py-2 text-right">
-                        <AdminIconAction
-                          label="Resend invite"
-                          icon="mail"
-                          tone="muted"
-                          disabled={busyId === row.client_id}
-                          onClick={() => invite(row.client_id)}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                  {!notified.length ? (
+            <button
+              type="button"
+              onClick={() => setNotifiedOpen((o) => !o)}
+              className="mb-2 flex w-full items-center justify-between text-left text-sm font-semibold text-ink-200"
+            >
+              <span>Notified (awaiting first login)</span>
+              <span className="text-xs text-ink-400">{notifiedOpen ? 'Hide' : 'Show'}</span>
+            </button>
+            {notifiedOpen ? (
+              <div className={adminTableShellClass}>
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-white/10 text-ink-400">
                     <tr>
-                      <td colSpan={3} className="px-3 py-4 text-ink-500">
-                        No pending activations.
-                      </td>
+                      <th className="px-3 py-2">Client</th>
+                      <th className="px-3 py-2">Notified</th>
+                      <th className="px-3 py-2" />
                     </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {notified.map((row) => (
+                      <tr key={row.client_id} className="border-b border-white/5">
+                        <td className="px-3 py-2 text-white">{row.client_name}</td>
+                        <td className="px-3 py-2 text-ink-300">{formatWhen(row.invited_at)}</td>
+                        <td className="px-3 py-2 text-right">
+                          <AdminIconAction
+                            label="Resend invite"
+                            icon="mail"
+                            tone="muted"
+                            disabled={busyId === row.client_id}
+                            onClick={() => invite(row.client_id)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                    {!notified.length ? (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-4 text-ink-500">
+                          No pending activations.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
