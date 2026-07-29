@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState } from 'react'
 import { useNavigate,
   useSearchParams } from 'react-router-dom'
@@ -16,6 +17,7 @@ import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import { ClientSelect } from '../ClientSelect'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
+import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import {
@@ -71,6 +73,7 @@ export default function QuotationsPage() {
   const [editingId, setEditingId] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [baseline, setBaseline] = useState('')
+  const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [form, setForm] = useState({
     number: '',
     client_id: '',
@@ -126,12 +129,14 @@ export default function QuotationsPage() {
     setForm(nextForm)
     setBaseline(snapshotQuotationForm(nextForm))
     setShowForm(true)
+    scrollToForm()
   }
 
-  function closeForm() {
+  function closeForm(savedId) {
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
+    if (savedId) highlightRow(savedId)
   }
 
   async function openRow(id) {
@@ -169,6 +174,7 @@ export default function QuotationsPage() {
     setForm(nextForm)
     setBaseline(snapshotQuotationForm(nextForm))
     setShowForm(true)
+    scrollToForm()
   }
 
   useEffect(() => {
@@ -250,7 +256,7 @@ export default function QuotationsPage() {
     }
     showSuccess('Quotation saved.')
     if (saved?.id) setRows((prev) => upsertById(prev, saved))
-    closeForm()
+    closeForm(saved?.id || editingId)
   }
 
   async function handleApprove() {
@@ -278,7 +284,7 @@ export default function QuotationsPage() {
     }
     showSuccess('Quotation approved.')
     if (saved?.id) setRows((prev) => upsertById(prev, saved))
-    closeForm()
+    closeForm(saved?.id || editingId)
   }
 
   async function convertToInvoice() {
@@ -320,7 +326,7 @@ export default function QuotationsPage() {
     }
     showSuccess('Quotation cancelled.')
     if (data?.id) setRows((prev) => upsertById(prev, data))
-    closeForm()
+    closeForm(data?.id || editingId)
   }
 
   async function handleDeclineQuotation() {
@@ -344,7 +350,7 @@ export default function QuotationsPage() {
     }
     showSuccess('Quotation declined. The client can see your reason.')
     if (data?.id) setRows((prev) => upsertById(prev, data))
-    closeForm()
+    closeForm(data?.id || editingId)
   }
 
   async function handleDeleteQuotation() {
@@ -365,7 +371,7 @@ export default function QuotationsPage() {
     }
     showSuccess('Quotation deleted.')
     setRows((prev) => removeById(prev, deletedId))
-    closeForm()
+    closeForm(null)
   }
 
   return (
@@ -387,6 +393,7 @@ export default function QuotationsPage() {
 
       {showForm ? (
         <form
+          ref={formRef}
           onSubmit={handleSave}
           className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
         >
@@ -635,9 +642,10 @@ export default function QuotationsPage() {
                 return (
                 <tr
                   key={row.id}
+                  data-row-id={row.id}
                   role="link"
                   tabIndex={0}
-                  className={`group bg-ink-900/20 ${clickableRowClass}`}
+                  className={`group bg-ink-900/20 ${clickableRowClass}${highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''}`}
                   onClick={open}
                   onKeyDown={(e) => activateRowKey(e, open)}
                 >

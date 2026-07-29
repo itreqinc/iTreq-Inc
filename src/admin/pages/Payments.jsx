@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
@@ -10,6 +10,7 @@ import {
 } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
+import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { PaymentDocumentButtons } from '../PaymentDocumentButtons'
 import {
   openPaymentDocumentPrintWindow,
@@ -77,6 +78,7 @@ export default function PaymentsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [baseline, setBaseline] = useState('')
+  const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [openInvoices, setOpenInvoices] = useState([])
   const [accountCredit, setAccountCredit] = useState(0)
   const [form, setForm] = useState(emptyPaymentForm)
@@ -159,6 +161,7 @@ export default function PaymentsPage() {
       }
       setForm(nextForm)
       setShowForm(true)
+      scrollToForm()
       const appliedIds = await loadOpenInvoices(data.client_id, data.id, selectedIds)
       setBaseline(
         snapshotPaymentForm({
@@ -194,6 +197,7 @@ export default function PaymentsPage() {
         amount: String(data.amount ?? ''),
       })
       setShowForm(true)
+      scrollToForm()
       await loadOpenInvoices(
         data.client_id,
         null,
@@ -225,19 +229,21 @@ export default function PaymentsPage() {
       setEditingId(null)
       setForm({ ...emptyPaymentForm(), client_id: clientId })
       setShowForm(true)
+      scrollToForm()
       loadOpenInvoices(clientId)
       params.delete('client')
       setParams(params, { replace: true })
     }
   }, [params, setParams, startEdit, startFromNotification, loadOpenInvoices])
 
-  function closeForm() {
+  function closeForm(savedId) {
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
     setOpenInvoices([])
     setAccountCredit(0)
     setForm(emptyPaymentForm())
+    if (savedId) highlightRow(savedId)
     setFromNotification(null)
   }
 
@@ -249,6 +255,7 @@ export default function PaymentsPage() {
     setAccountCredit(0)
     setFromNotification(null)
     setShowForm(true)
+    scrollToForm()
   }
 
   const isDirty = useMemo(
@@ -379,8 +386,8 @@ export default function PaymentsPage() {
           ? 'Payment updated.'
           : 'Payment recorded.',
     )
-    const paymentId = result.data?.id
-    closeForm()
+    const paymentId = result.data?.id || editingId
+    closeForm(paymentId)
     if (paymentId) {
       const refreshed = await opsApi.getPayment(paymentId)
       if (!refreshed.error && refreshed.data) {
@@ -404,7 +411,7 @@ export default function PaymentsPage() {
       return
     }
     showSuccess('Payment deleted.')
-    if (editingId === row.id) closeForm()
+    if (editingId === row.id) closeForm(null)
     setRows((prev) => removeById(prev, row.id))
   }
 
@@ -427,6 +434,7 @@ export default function PaymentsPage() {
 
       {showForm ? (
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
           className="max-w-2xl space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
         >
@@ -714,9 +722,10 @@ export default function PaymentsPage() {
                 return (
                 <tr
                   key={row.id}
+                  data-row-id={row.id}
                   role="link"
                   tabIndex={0}
-                  className={`group bg-ink-900/20 ${clickableRowClass}`}
+                  className={`group bg-ink-900/20 ${clickableRowClass}${highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''}`}
                   onClick={open}
                   onKeyDown={(e) => activateRowKey(e, open)}
                 >

@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -23,6 +24,7 @@ import { CountryPhoneInput } from '../../components/CountryPhoneInput'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
+import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { PortalInvitesPanel } from '../components/PortalInvitesPanel'
 import { adminBtnPrimary,
   adminBtnSecondary,
@@ -79,6 +81,7 @@ export default function ClientsPage() {
   const [editingId, setEditingId] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [printingStmt, setPrintingStmt] = useState(false)
   const [stmtModalClient, setStmtModalClient] = useState(null)
   const [stmtFrom, setStmtFrom] = useState(monthStartIso)
@@ -190,6 +193,7 @@ export default function ClientsPage() {
     setForm(emptyClientForm())
     setShowForm(true)
     setView('directory')
+    scrollToForm()
   }
 
   function startEdit(client) {
@@ -197,12 +201,14 @@ export default function ClientsPage() {
     setForm(clientToForm(client))
     setShowForm(true)
     setView('directory')
+    scrollToForm()
   }
 
-  function closeForm() {
+  function closeForm(savedId) {
     setEditingId(null)
     setForm(emptyClientForm())
     setShowForm(false)
+    if (savedId) highlightRow(savedId)
   }
 
   function openStatementRangeModal(client) {
@@ -429,8 +435,8 @@ export default function ClientsPage() {
         ? "The Client's details have been updated."
         : 'A new Client has been added to the system.',
     )
-    closeForm()
     const saved = result.data
+    closeForm(saved?.id || editingId)
     if (!saved?.id) return
     setClients((prev) => {
       const existing = prev.find((c) => c.id === saved.id)
@@ -538,6 +544,7 @@ export default function ClientsPage() {
 
       {showForm && view === 'directory' ? (
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
           className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
         >
@@ -738,11 +745,12 @@ export default function ClientsPage() {
                   return (
                     <tr
                       key={c.id}
+                      data-row-id={c.id}
                       role="link"
                       tabIndex={0}
                       className={`group bg-ink-900/20 ${clickableRowClass} ${
                         c.is_active === false ? 'opacity-60' : ''
-                      }`}
+                      }${highlightId === c.id ? ' ring-2 ring-amber-400/60' : ''}`}
                       onClick={open}
                       onKeyDown={(e) => activateRowKey(e, open)}
                     >

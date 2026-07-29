@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
@@ -34,6 +35,7 @@ import { ActionsMenu } from '../ActionsMenu'
 import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
+import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
@@ -119,6 +121,9 @@ export default function InvoicesPage() {
   const [dateFrom, setDateFrom] = useState(currentMonthStartIso)
   const [dateTo, setDateTo] = useState(todayIso)
   const [unreadByInvoice, setUnreadByInvoice] = useState({})
+  const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
+  const [issueSelectedIds, setIssueSelectedIds] = useState([])
+  const masterIssueCheckboxRef = useRef(null)
   const [form, setForm] = useState(() => {
     const issue = todayIso()
     return {
@@ -206,6 +211,7 @@ export default function InvoicesPage() {
       setForm(nextForm)
       setBaseline(snapshotInvoiceForm(nextForm))
       setShowForm(true)
+      scrollToForm()
 
       if (['issued', 'partial', 'paid'].includes(data.status) && data.client_id) {
         const creditRes = await opsApi.getClientCreditBalance(data.client_id)
@@ -274,13 +280,15 @@ export default function InvoicesPage() {
     setForm(nextForm)
     setBaseline(snapshotInvoiceForm(nextForm))
     setShowForm(true)
+    scrollToForm()
   }
 
-  function closeForm() {
+  function closeForm(savedId) {
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
     setAccountCredit(0)
+    if (savedId) highlightRow(savedId)
   }
 
   const balanceDue = useMemo(() => invoiceBalanceDue(form), [form])
@@ -300,6 +308,32 @@ export default function InvoicesPage() {
     const filtered = filterByDateRange(rows, dateFrom, dateTo, documentFilterDate)
     return withUnreadRows(filtered, rows, unreadByInvoice)
   }, [rows, dateFrom, dateTo, unreadByInvoice])
+
+  const issueableDraftIds = useMemo(() => {
+    // If a draft invoice is currently being edited with unsaved changes,
+    // it is "blocked" and should not be issued in bulk.
+    return visibleRows
+      .filter((r) => r.status === 'draft')
+      .filter((r) => !(r.id === editingId && isDirty))
+      .map((r) => r.id)
+  }, [visibleRows, editingId, isDirty])
+
+  const issueSelectedSet = useMemo(() => new Set(issueSelectedIds), [issueSelectedIds])
+  const allIssueableSelected =
+    issueableDraftIds.length > 0 &&
+    issueableDraftIds.every((id) => issueSelectedSet.has(id))
+  const someIssueableSelected = issueableDraftIds.some((id) => issueSelectedSet.has(id))
+
+  useEffect(() => {
+    if (!masterIssueCheckboxRef.current) return
+    masterIssueCheckboxRef.current.indeterminate =
+      someIssueableSelected && !allIssueableSelected
+  }, [someIssueableSelected, allIssueableSelected])
+
+  useEffect(() => {
+    const allowed = new Set(issueableDraftIds)
+    setIssueSelectedIds((prev) => prev.filter((id) => allowed.has(id)))
+  }, [issueableDraftIds])
 
   const readOnly = form.status !== 'draft'
   /** New invoices always; existing drafts only after a change. */
@@ -347,7 +381,7 @@ export default function InvoicesPage() {
     }
     showSuccess('A draft Invoice has been saved.')
     if (saved?.id) setRows((prev) => upsertById(prev, saved))
-    closeForm()
+    closeForm(saved?.id || editingId)
   }
 
   async function handleIssue(invoiceId = editingId) {
@@ -415,7 +449,44 @@ export default function InvoicesPage() {
 
     showSuccess(successMessage)
     if (issued?.id) setRows((prev) => upsertById(prev, issued))
-    if (invoiceId === editingId) closeForm()
+    if (invoiceId === editingId) closeForm(invoiceId)
+  }
+
+  async function handleIssueSelected() {
+    if (!issueSelectedIds.length) return
+
+    const idsToIssue = issueSelectedIds.filter((id) => issueableDraftIds.includes(id))
+    if (!idsToIssue.length) return
+
+    const ok = await confirm({
+      title: `Issue ${idsToIssue.length} invoice(s)?`,
+      message:
+        'Issuing assigns invoice numbers and deducts stock levels for each selected draft invoice. This action cannot be undone. Continue?',
+      confirmLabel: 'Issue selected',
+    })
+    if (!ok) return
+
+    setSaving(true)
+    const issued = []
+    for (const id of idsToIssue) {
+      const { data, error } = await opsApi.issueInvoice(id)
+      if (error) {
+        setSaving(false)
+        showError(error.message)
+        return
+      }
+      if (data?.id) issued.push(data)
+    }
+    setSaving(false)
+
+    setRows((prev) => {
+      let next = prev
+      for (const inv of issued) next = upsertById(next, inv)
+      return next
+    })
+    if (issued[0]?.id) highlightRow(issued[0].id)
+    setIssueSelectedIds([])
+    showSuccess(`Issued ${issued.length} invoice(s).`)
   }
 
   async function handleVoid(invoiceId = editingId) {
@@ -482,7 +553,7 @@ export default function InvoicesPage() {
         : 'Invoice deleted.',
     )
     setRows((prev) => removeById(prev, invoiceId))
-    if (invoiceId === editingId) closeForm()
+    if (invoiceId === editingId) closeForm(null)
   }
 
   async function handleVoidOrDelete(invoiceId = editingId, row) {
@@ -698,6 +769,7 @@ export default function InvoicesPage() {
 
       {showForm ? (
         <form
+          ref={formRef}
           onSubmit={handleSave}
           className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
         >
@@ -872,9 +944,35 @@ export default function InvoicesPage() {
         shown={visibleRows.length}
         total={rows.length}
       >
+        <div className="flex flex-wrap items-center justify-end gap-3 pb-2">
+          <button
+            type="button"
+            disabled={saving || issueSelectedIds.length === 0}
+            onClick={handleIssueSelected}
+            className={adminBtnPrimary}
+            title={issueSelectedIds.length ? undefined : 'Select draft invoices to issue'}
+          >
+            {saving ? 'Issuing…' : `Issue selected (${issueSelectedIds.length})`}
+          </button>
+        </div>
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
+              <th className="px-4 py-3 w-10">
+                <input
+                  ref={masterIssueCheckboxRef}
+                  type="checkbox"
+                  aria-label="Select all draft invoices"
+                  checked={allIssueableSelected}
+                  disabled={saving || issueableDraftIds.length === 0}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    if (saving) return
+                    if (e.target.checked) setIssueSelectedIds(issueableDraftIds)
+                    else setIssueSelectedIds([])
+                  }}
+                />
+              </th>
               <th className="px-4 py-3">Number</th>
               <th className="px-4 py-3">Client</th>
               <th className={`px-4 py-3 ${adminColSecondary}`}>Issued</th>
@@ -887,13 +985,13 @@ export default function InvoicesPage() {
           <tbody className="divide-y divide-white/5">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-ink-400">
+                <td colSpan={8} className="px-4 py-6 text-ink-400">
                   Loading…
                 </td>
               </tr>
             ) : visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-ink-400">
+                <td colSpan={8} className="px-4 py-6 text-ink-400">
                   {rows.length === 0
                     ? 'No invoices yet.'
                     : 'No invoices in the selected date range.'}
@@ -907,12 +1005,33 @@ export default function InvoicesPage() {
                 return (
                   <tr
                     key={row.id}
+                    data-row-id={row.id}
                     role="link"
                     tabIndex={0}
-                    className={`group ${invoiceRowClass(displayStatus)} ${clickableRowClass}`}
+                    className={`group ${invoiceRowClass(displayStatus)} ${clickableRowClass}${highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''}`}
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
+                    <td className="px-4 py-3">
+                      {row.status === 'draft' ? (
+                        <input
+                          type="checkbox"
+                          checked={issueSelectedSet.has(row.id)}
+                          disabled={saving || rowBlocked(row.id)}
+                          aria-label={`Select invoice ${row.number || row.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            const checked = e.target.checked
+                            setIssueSelectedIds((prev) => {
+                              if (checked)
+                                return prev.includes(row.id) ? prev : [...prev, row.id]
+                              return prev.filter((id) => id !== row.id)
+                            })
+                          }}
+                        />
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={clickableDocClass}>{row.number || 'Draft'}</span>
                       {unread > 0 ? (
