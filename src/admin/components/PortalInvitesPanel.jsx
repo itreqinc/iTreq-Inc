@@ -152,16 +152,13 @@ export function PortalInvitesPanel() {
     })
     if (!inviteable.length || bulkBusy) {
       if (ids.length && !inviteable.length) {
-        showWarning('Selected clients use the office email and were skipped.')
+        showWarning('No inviteable clients in the selection.')
       }
       return
     }
-    const skipped = ids.length - inviteable.length
     const ok = await confirm({
       title: resend ? 'Resend selected invites?' : 'Invite selected clients?',
-      message:
-        `${inviteable.length} client${inviteable.length === 1 ? '' : 's'} will receive portal login details.` +
-        (skipped ? ` ${skipped} with the office email will be skipped.` : ''),
+      message: `${inviteable.length} client${inviteable.length === 1 ? '' : 's'} will receive portal login details.`,
       confirmLabel: resend ? 'Resend invites' : 'Send invites',
     })
     if (!ok) return
@@ -213,8 +210,7 @@ export function PortalInvitesPanel() {
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-lg font-semibold text-white">Portal invites</h2>
           <p className="mt-1 text-sm text-ink-400">
-            Send portal login details and track who still needs to sign in. Clients on the office
-            email stay listed but cannot be invited until they have a real address.
+            Send portal login details and track who still needs to sign in.
           </p>
         </div>
         <DetailsChevron className="mt-1" />
@@ -295,11 +291,6 @@ export function PortalInvitesPanel() {
                                 aria-label={`Select ${row.client_name}`}
                                 checked={checked}
                                 disabled={anyBusy || !inviteable}
-                                title={
-                                  inviteable
-                                    ? undefined
-                                    : 'Office email — add the client’s real email to invite'
-                                }
                                 onChange={(e) =>
                                   setSelectedPending((prev) =>
                                     toggleId(prev, row.client_id, e.target.checked),
@@ -308,14 +299,7 @@ export function PortalInvitesPanel() {
                               />
                             </td>
                             <td className="px-3 py-2 text-white">{row.client_name}</td>
-                            <td className="break-all px-3 py-2 text-ink-300">
-                              {row.email}
-                              {!inviteable ? (
-                                <span className="mt-0.5 block text-xs text-ink-500">
-                                  Office placeholder — update email to invite
-                                </span>
-                              ) : null}
-                            </td>
+                            <td className="break-all px-3 py-2 text-ink-300">{row.email}</td>
                             <td className="px-3 py-2 text-right">
                               {inviteable ? (
                                 <AdminIconAction
@@ -406,11 +390,6 @@ export function PortalInvitesPanel() {
                                 aria-label={`Select ${row.client_name}`}
                                 checked={checked}
                                 disabled={anyBusy || !inviteable}
-                                title={
-                                  inviteable
-                                    ? undefined
-                                    : 'Office email — add the client’s real email to invite'
-                                }
                                 onChange={(e) =>
                                   setSelectedNotified((prev) =>
                                     toggleId(prev, row.client_id, e.target.checked),
@@ -419,14 +398,7 @@ export function PortalInvitesPanel() {
                               />
                             </td>
                             <td className="px-3 py-2 text-white">{row.client_name}</td>
-                            <td className="px-3 py-2 text-ink-300">
-                              {formatWhen(row.invited_at)}
-                              {!inviteable ? (
-                                <span className="mt-0.5 block text-xs text-ink-500">
-                                  Office placeholder — update email to invite
-                                </span>
-                              ) : null}
-                            </td>
+                            <td className="px-3 py-2 text-ink-300">{formatWhen(row.invited_at)}</td>
                             <td className="px-3 py-2 text-right">
                               {inviteable ? (
                                 <AdminIconAction
