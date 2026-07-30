@@ -254,7 +254,9 @@ export default function PortalStatement() {
                     const label =
                       line.type === 'invoice'
                         ? `Invoice ${line.label}`
-                        : `Payment ${line.label}`
+                        : line.type === 'opening_balance'
+                          ? line.label || 'Opening balance'
+                          : `Payment ${line.label}`
                     return (
                     <tr
                       key={`${line.type}-${line.id}`}

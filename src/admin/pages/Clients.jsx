@@ -22,6 +22,13 @@ import {
   } from '../../lib/statementDocument'
 import { ClientRegistrationFields } from '../../components/ClientRegistrationFields'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
+import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
+import {
+  dateRangeIsBackwards,
+  dayBeforeIso,
+  endOfNextMonthIso,
+  todayIso as rangeTodayIso,
+} from '../../lib/dateRange'
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
@@ -92,6 +99,12 @@ export default function ClientsPage() {
   const [stmtLoading, setStmtLoading] = useState(false)
   const [showAllTx, setShowAllTx] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [txFrom, setTxFrom, txTo, setTxTo] = usePersistedDateRange(
+    'admin.clients.accounts.all',
+    { defaultFrom: '', defaultTo: '' },
+  )
+  const txRangeBackwards = dateRangeIsBackwards(txFrom, txTo)
+  const openingAsOf = txFrom ? dayBeforeIso(txFrom) : ''
 
   const filteredClients = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -154,23 +167,34 @@ export default function ClientsPage() {
       setShowAllTx(false)
       return
     }
+    if (txRangeBackwards) {
+      setStatement(null)
+      setStmtLoading(false)
+      return
+    }
     let cancelled = false
     setStmtLoading(true)
     setShowAllTx(false)
-    opsApi.getClientStatement({ client_id: selectedId }).then(({ data, error }) => {
-      if (cancelled) return
-      setStmtLoading(false)
-      if (error) {
-        showError(error.message)
-        setStatement(null)
-        return
-      }
-      setStatement(data)
-    })
+    opsApi
+      .getClientStatement({
+        client_id: selectedId,
+        from: txFrom || undefined,
+        to: txTo || undefined,
+      })
+      .then(({ data, error }) => {
+        if (cancelled) return
+        setStmtLoading(false)
+        if (error) {
+          showError(error.message)
+          setStatement(null)
+          return
+        }
+        setStatement(data)
+      })
     return () => {
       cancelled = true
     }
-  }, [view, selectedId, showError])
+  }, [view, selectedId, txFrom, txTo, txRangeBackwards, showError])
 
   useEffect(() => {
     if (view !== 'accounts') return
@@ -406,6 +430,13 @@ export default function ClientsPage() {
       showWarning(check.message)
       return
     }
+    if (admin) {
+      const opening = Math.round((Number(form.opening_balance) || 0) * 100) / 100
+      if (opening !== 0 && !String(form.opening_balance_date || '').trim()) {
+        showWarning('Choose an opening balance date when the amount is not zero.')
+        return
+      }
+    }
 
     const ok = await confirm({
       title: editingId ? 'Save client changes?' : 'Add this client?',
@@ -552,6 +583,55 @@ export default function ClientsPage() {
             </button>
           </div>
           <ClientRegistrationFields form={form} setForm={setForm} fieldClass={adminFieldClass} />
+          {admin ? (
+            <div className="space-y-3 rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Opening balance</p>
+                <p className="mt-1 text-xs text-ink-400">
+                  Carry-in amount as of a date. Positive means the client owes iTreq (same as an
+                  invoice). Only admins can edit this.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                    Amount (P)
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className={adminFieldClass}
+                    value={form.opening_balance}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, opening_balance: e.target.value }))
+                    }
+                    placeholder="0.00"
+                  />
+                </label>
+                <div className="block text-sm text-ink-300">
+                  <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                    As of date
+                  </span>
+                  <YearMonthDaySelect
+                    value={form.opening_balance_date || ''}
+                    onChange={(next) =>
+                      setForm((f) => ({ ...f, opening_balance_date: next }))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          ) : Number(form.opening_balance) ? (
+            <p className="rounded-xl border border-white/10 bg-ink-950/40 px-3 py-2 text-sm text-ink-300">
+              Opening balance:{' '}
+              <span className="font-semibold text-white">
+                {formatPula(form.opening_balance)}
+              </span>
+              {form.opening_balance_date ? (
+                <span className="text-ink-500"> · as of {form.opening_balance_date}</span>
+              ) : null}
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <button type="submit" disabled={saving} className={adminBtnPrimary}>
               {saving ? 'Saving…' : editingId ? 'Update client' : 'Add client'}
@@ -650,17 +730,45 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <label className="block max-w-md">
-            <span className="sr-only">Search clients</span>
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, phone, email, or ID…"
-              className={adminFieldClass}
-              autoComplete="off"
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block min-w-[12rem] max-w-md flex-1">
+              <span className="sr-only">Search clients</span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name, phone, email, or ID…"
+                className={adminFieldClass}
+                autoComplete="off"
+              />
+            </label>
+            <YearMonthDaySelect
+              label="From"
+              value={txFrom}
+              onChange={setTxFrom}
+              maxYmd={rangeTodayIso()}
             />
-          </label>
+            <YearMonthDaySelect
+              label="To"
+              value={txTo}
+              onChange={setTxTo}
+              maxYmd={endOfNextMonthIso()}
+            />
+            <button
+              type="button"
+              disabled={!txFrom && !txTo}
+              onClick={() => {
+                setTxFrom('')
+                setTxTo('')
+              }}
+              className={adminBtnSecondary}
+            >
+              Clear
+            </button>
+          </div>
+          {txRangeBackwards ? (
+            <p className="text-sm text-amber-200">The “From” date is after the “To” date.</p>
+          ) : null}
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:grid-cols-[minmax(0,17rem)_1fr]">
           <aside className="admin-scroll max-h-[70vh] overflow-y-auto border-b border-white/10 lg:border-b-0">
             <div className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
@@ -708,6 +816,8 @@ export default function ClientsPage() {
           >
             {!selectedId ? (
               <p className="text-sm text-ink-400">Select a client to view transactions.</p>
+            ) : txRangeBackwards ? (
+              <p className="text-sm text-ink-400">Fix the date range to load transactions.</p>
             ) : stmtLoading ? (
               <p className="text-sm text-ink-400">Loading transactions…</p>
             ) : !statement ? (
@@ -719,6 +829,28 @@ export default function ClientsPage() {
                     <h2 className="text-lg font-semibold text-white">
                       {selectedClient?.name || statement.client?.name}
                     </h2>
+                    {txFrom || txTo ? (
+                      <p className="mt-1 text-xs text-ink-500">
+                        Period:{' '}
+                        <span className="text-ink-300">
+                          {txFrom || '…'} → {txTo || '…'}
+                        </span>
+                      </p>
+                    ) : null}
+                    {txFrom ? (
+                      <p className="mt-1 text-sm text-ink-300">
+                        Opening balance
+                        {openingAsOf ? (
+                          <span className="text-ink-500"> (as of {openingAsOf})</span>
+                        ) : null}
+                        :{' '}
+                        <span
+                          className={`font-semibold ${balanceClass(statement.openingBalance)}`}
+                        >
+                          {formatPula(statement.openingBalance)}
+                        </span>
+                      </p>
+                    ) : null}
                     <p className="mt-1 text-sm text-ink-300">
                       Closing balance:{' '}
                       <span
@@ -764,21 +896,27 @@ export default function ClientsPage() {
                       {visibleLines.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="px-3 py-6 text-ink-400">
-                            {showAllTx
-                              ? 'No invoices, quotations, or payments for this client yet.'
-                              : 'No active transactions for this client.'}
+                            {txFrom || txTo
+                              ? showAllTx
+                                ? 'No invoices, quotations, or payments in this date range.'
+                                : 'No active transactions in this date range.'
+                              : showAllTx
+                                ? 'No invoices, quotations, or payments for this client yet.'
+                                : 'No active transactions for this client.'}
                           </td>
                         </tr>
                       ) : (
                         visibleLines.map((line, i) => {
-                          const openable = Boolean(line.id)
+                          const openable = Boolean(line.id) && line.type !== 'opening_balance'
                           const open = () => openTransaction(line)
                           const label =
                             line.type === 'invoice'
                               ? `Invoice ${line.label}`
                               : line.type === 'quotation'
                                 ? `Quotation ${line.label}`
-                                : `Payment ${line.label}`
+                                : line.type === 'opening_balance'
+                                  ? line.label || 'Opening balance'
+                                  : `Payment ${line.label}`
                           return (
                           <tr
                             key={`${line.type}-${line.id || i}`}

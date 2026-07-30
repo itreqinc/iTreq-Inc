@@ -13,55 +13,7 @@ export function buildClientDisplayName({ first_name, middle_name, surname, name 
   return String(name || '').trim()
 }
 
-export function emptyClientForm() {
-  return {
-    gender: '',
-    first_name: '',
-    middle_name: '',
-    surname: '',
-    id_number: '',
-    country: 'BW',
-    cellphone: '+267',
-    email: '',
-    landline: '',
-    postal_address: '',
-    physical_address: '',
-    notes: '',
-  }
-}
-
-export function clientToForm(client) {
-  const base = emptyClientForm()
-  if (!client) return base
-
-  const phone = client.cellphone || client.phone || ''
-  const country =
-    client.country ||
-    client.phone_country ||
-    inferCountryCodeFromPhone(phone) ||
-    base.country
-
-  return {
-    gender: client.gender || '',
-    first_name: client.first_name || '',
-    middle_name: client.middle_name || '',
-    surname: client.surname || '',
-    id_number: client.id_number || '',
-    country,
-    cellphone: phone || base.cellphone,
-    email: client.email || '',
-    landline: client.landline || '',
-    postal_address: client.postal_address || '',
-    physical_address: client.physical_address || client.address || '',
-    notes: client.notes || '',
-  }
-}
-
-/** Leads use the same registration shape as clients. */
-export const contactSubmissionToForm = clientToForm
-export const formToContactSubmissionRow = formToClientRow
-
-export function formToClientRow(form) {
+function formToPersonRow(form) {
   const displayName = buildClientDisplayName(form)
   const cellphone = form.cellphone?.trim() || null
   const physical = form.physical_address?.trim() || null
@@ -83,4 +35,83 @@ export function formToClientRow(form) {
     postal_address: form.postal_address?.trim() || null,
     physical_address: physical,
   }
+}
+
+export function emptyClientForm() {
+  return {
+    gender: '',
+    first_name: '',
+    middle_name: '',
+    surname: '',
+    id_number: '',
+    country: 'BW',
+    cellphone: '+267',
+    email: '',
+    landline: '',
+    postal_address: '',
+    physical_address: '',
+    notes: '',
+    opening_balance: '',
+    opening_balance_date: '',
+  }
+}
+
+export function clientToForm(client) {
+  const base = emptyClientForm()
+  if (!client) return base
+
+  const phone = client.cellphone || client.phone || ''
+  const country =
+    client.country ||
+    client.phone_country ||
+    inferCountryCodeFromPhone(phone) ||
+    base.country
+
+  const opening = Number(client.opening_balance)
+  return {
+    gender: client.gender || '',
+    first_name: client.first_name || '',
+    middle_name: client.middle_name || '',
+    surname: client.surname || '',
+    id_number: client.id_number || '',
+    country,
+    cellphone: phone || base.cellphone,
+    email: client.email || '',
+    landline: client.landline || '',
+    postal_address: client.postal_address || '',
+    physical_address: client.physical_address || client.address || '',
+    notes: client.notes || '',
+    opening_balance:
+      Number.isFinite(opening) && opening !== 0 ? String(opening) : opening === 0 ? '0' : '',
+    opening_balance_date: client.opening_balance_date
+      ? String(client.opening_balance_date).slice(0, 10)
+      : '',
+  }
+}
+
+/** Leads use the same registration shape as clients (without opening balance). */
+export const contactSubmissionToForm = clientToForm
+
+export function formToContactSubmissionRow(form) {
+  return formToPersonRow(form)
+}
+
+export function formToClientRow(form) {
+  const opening = Math.round((Number(form.opening_balance) || 0) * 100) / 100
+  const dateRaw = String(form.opening_balance_date || '').trim().slice(0, 10)
+  return {
+    ...formToPersonRow(form),
+    opening_balance: opening,
+    opening_balance_date: opening !== 0 && dateRaw ? dateRaw : null,
+  }
+}
+
+/** Absolute opening amount (client owes when positive). */
+export function clientOpeningBalanceAmount(clientOrForm) {
+  return Math.round((Number(clientOrForm?.opening_balance) || 0) * 100) / 100
+}
+
+export function clientOpeningBalanceDate(clientOrForm) {
+  const d = String(clientOrForm?.opening_balance_date || '').trim().slice(0, 10)
+  return d || ''
 }

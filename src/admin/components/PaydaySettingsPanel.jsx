@@ -8,7 +8,7 @@ import { adminBtnPrimary, adminBtnSecondary, adminFieldClass } from '../ui'
 import { opsApi } from '../../lib/opsApi'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 
-export function PaydaySettingsPanel() {
+export function PaydaySettingsPanel({ embedded = false }) {
   const { user } = useAuth()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [mode, setMode] = useState('auto_last_tue_thu')
@@ -94,14 +94,9 @@ export function PaydaySettingsPanel() {
     await load()
   }
 
-  return (
-    <section className="max-w-xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
-      <h2 className="font-display text-lg font-semibold text-white">Payroll payday</h2>
-      <p className="mt-1 text-sm text-ink-400">
-        Default: later of the month’s last Tuesday and last Thursday. An admin override replaces
-        that rule until reset.
-      </p>
-      <p className="mt-3 text-sm text-ink-200">
+  const body = (
+    <>
+      <p className="text-sm text-ink-200">
         Auto this month: <span className="text-white">{autoThisMonth || '—'}</span>
       </p>
       <p className="text-sm text-ink-200">
@@ -109,7 +104,7 @@ export function PaydaySettingsPanel() {
         <span className="ml-2 text-xs text-ink-500">({paydayLabel({ payroll_payday_mode: mode })})</span>
       </p>
 
-      <form onSubmit={save} className="mt-4 space-y-3">
+      <form onSubmit={save} className="mt-3 space-y-3">
         <label className="block text-sm text-ink-300">
           Mode
           <select
@@ -155,6 +150,19 @@ export function PaydaySettingsPanel() {
           </button>
         </div>
       </form>
+    </>
+  )
+
+  if (embedded) return body
+
+  return (
+    <section className="w-full max-w-xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+      <h2 className="font-display text-lg font-semibold text-white">Payroll payday</h2>
+      <p className="mt-1 text-sm text-ink-400">
+        Default: later of the month’s last Tuesday and last Thursday. An admin override replaces
+        that rule until reset.
+      </p>
+      <div className="mt-3">{body}</div>
     </section>
   )
 }

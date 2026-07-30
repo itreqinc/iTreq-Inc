@@ -1040,7 +1040,11 @@ export default function ReportsPage() {
                       <tr key={i} className="border-b border-black/10">
                         <td className="whitespace-nowrap py-2 pr-2">{line.sortDate}</td>
                         <td className="min-w-0 break-words py-2 pr-2">
-                          {line.type === 'invoice' ? `Invoice ${line.label}` : `Payment ${line.label}`}
+                          {line.type === 'invoice'
+                            ? `Invoice ${line.label}`
+                            : line.type === 'opening_balance'
+                              ? line.label || 'Opening balance'
+                              : `Payment ${line.label}`}
                           {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
                           <span className="mt-0.5 block text-xs text-black/55 sm:hidden">
                             {line.debit

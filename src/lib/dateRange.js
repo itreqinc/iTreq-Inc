@@ -66,6 +66,16 @@ export function dateRangeIsBackwards(from, to) {
   return Boolean(from && to && from > to)
 }
 
+/** Calendar day before YYYY-MM-DD (local). Empty input → ''. */
+export function dayBeforeIso(ymd) {
+  const day = String(ymd || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return ''
+  const [y, m, d] = day.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() - 1)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
 /** Documents keep their issue date; drafts have none yet, so fall back to capture time. */
 export function documentFilterDate(doc) {
   return doc?.issue_date || doc?.created_at || ''

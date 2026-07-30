@@ -6,7 +6,7 @@ import { AdminIconAction } from '../AdminIconAction'
 import { useOpsAlert } from '../OpsAlertContext'
 import { adminFieldClass, adminTableShellClass } from '../ui'
 
-export function AfterHoursPanel() {
+export function AfterHoursPanel({ embedded = false }) {
   const { user } = useAuth()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [staff, setStaff] = useState([])
@@ -95,22 +95,17 @@ export function AfterHoursPanel() {
     }
   }
 
-  return (
-    <section className="max-w-3xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
-      <h2 className="font-display text-lg font-semibold text-white">Staff after-hours access</h2>
-      <p className="mt-1 text-sm text-ink-400">
-        Staff ops is Mon–Fri 07:00–18:00 (Africa/Gaborone). Grant temporary access beyond that window.
-      </p>
-
+  const body = (
+    <>
       {AUTH_BYPASS ? (
-        <p className="mt-3 text-sm text-ink-400">
+        <p className="text-sm text-ink-400">
           After-hours controls need a real admin session. Set{' '}
           <code className="text-ink-300">VITE_AUTH_BYPASS=false</code> and sign in.
         </p>
       ) : loading ? (
-        <p className="mt-3 text-sm text-ink-400">Loading staff…</p>
+        <p className="text-sm text-ink-400">Loading staff…</p>
       ) : (
-        <div className={`${adminTableShellClass} mt-4`}>
+        <div className={adminTableShellClass}>
           <table className="w-full text-left text-sm">
             <thead className="border-b border-white/10 text-ink-400">
               <tr>
@@ -166,6 +161,18 @@ export function AfterHoursPanel() {
           </table>
         </div>
       )}
+    </>
+  )
+
+  if (embedded) return body
+
+  return (
+    <section className="w-full max-w-xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+      <h2 className="font-display text-lg font-semibold text-white">Staff after-hours access</h2>
+      <p className="mt-1 text-sm text-ink-400">
+        Staff ops is Mon–Fri 07:00–18:00 (Africa/Gaborone). Grant temporary access beyond that window.
+      </p>
+      <div className="mt-4">{body}</div>
     </section>
   )
 }

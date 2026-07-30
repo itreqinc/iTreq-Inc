@@ -34,7 +34,11 @@ export function buildStatementDocumentModel({ statement, settings }) {
     .filter((line) => !line.inactive)
     .map((line) => {
     const base =
-      line.type === 'invoice' ? `Invoice ${line.label}` : `Payment ${line.label}`
+      line.type === 'invoice'
+        ? `Invoice ${line.label}`
+        : line.type === 'opening_balance'
+          ? line.label || 'Opening balance'
+          : `Payment ${line.label}`
     const method = line.method ? ` (${paymentMethodLabel(line.method)})` : ''
     return {
       date: line.sortDate || '',

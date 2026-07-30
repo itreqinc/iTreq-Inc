@@ -197,7 +197,7 @@ function buildClientDisplayName(form: Record<string, unknown>) {
   return String(form.name || '').trim()
 }
 
-function formToClientRow(form: Record<string, unknown>) {
+function formToPersonRow(form: Record<string, unknown>) {
   const displayName = buildClientDisplayName(form)
   const cellphone = form.cellphone ? String(form.cellphone).trim() : null
   const physical = form.physical_address ? String(form.physical_address).trim() : null
@@ -221,11 +221,46 @@ function formToClientRow(form: Record<string, unknown>) {
   }
 }
 
+function formToClientRow(form: Record<string, unknown>) {
+  const opening = Math.round((Number(form.opening_balance) || 0) * 100) / 100
+  const dateRaw = String(form.opening_balance_date || '').trim().slice(0, 10)
+  return {
+    ...formToPersonRow(form),
+    opening_balance: opening,
+    opening_balance_date: opening !== 0 && dateRaw ? dateRaw : null,
+  }
+}
+
 function formToLeadRow(form: Record<string, unknown>) {
-  const base = formToClientRow(form)
+  const base = formToPersonRow(form)
   return {
     ...base,
     phone: base.phone || base.cellphone,
+  }
+}
+
+function clientOpeningBalanceAmount(client: Record<string, unknown> | null | undefined) {
+  return Math.round((Number(client?.opening_balance) || 0) * 100) / 100
+}
+
+function clientOpeningBalanceDate(client: Record<string, unknown> | null | undefined) {
+  const d = String(client?.opening_balance_date || '').trim().slice(0, 10)
+  return d || ''
+}
+
+function applyOpeningBalanceFields(
+  user: UserRow,
+  row: Record<string, unknown>,
+) {
+  if (!isAdmin(user)) {
+    delete row.opening_balance
+    delete row.opening_balance_date
+    return
+  }
+  const amount = clientOpeningBalanceAmount(row)
+  const date = clientOpeningBalanceDate(row)
+  if (amount !== 0 && !date) {
+    throw new OpsError('Choose an opening balance date when the amount is not zero.')
   }
 }
 
@@ -975,7 +1010,12 @@ handlers.list_clients_with_balances = async ({ sb }, args) => {
 
   return clients.map((c) => ({
     ...c,
-    balance: Math.round(((charges[String(c.id)] || 0) - (credits[String(c.id)] || 0)) * 100) / 100,
+    balance: Math.round(
+      ((charges[String(c.id)] || 0) -
+        (credits[String(c.id)] || 0) +
+        clientOpeningBalanceAmount(c as Record<string, unknown>)) *
+        100,
+    ) / 100,
   }))
 }
 
@@ -984,23 +1024,27 @@ handlers.get_client = async ({ sb }, args) => {
   return getClientInternal(sb, id)
 }
 
-handlers.create_client = async ({ sb }, args) => {
+handlers.create_client = async ({ user, sb }, args) => {
   const form = (args[0] || {}) as Record<string, unknown>
   const displayName = buildClientDisplayName(form)
   if (!displayName) throw new OpsError('First name or surname is required.')
-  const { data, error } = await sb.from('clients').insert(formToClientRow(form)).select().single()
+  const row = formToClientRow(form)
+  applyOpeningBalanceFields(user, row)
+  const { data, error } = await sb.from('clients').insert(row).select().single()
   if (error) throw mapDbError(error)
   return data
 }
 
-handlers.update_client = async ({ sb }, args) => {
+handlers.update_client = async ({ user, sb }, args) => {
   const id = String(args[0] || '')
   const form = (args[1] || {}) as Record<string, unknown>
   const displayName = buildClientDisplayName(form)
   if (!displayName) throw new OpsError('First name or surname is required.')
+  const row = formToClientRow(form)
+  applyOpeningBalanceFields(user, row)
   const { data, error } = await sb
     .from('clients')
-    .update({ ...formToClientRow(form), updated_at: nowIso() })
+    .update({ ...row, updated_at: nowIso() })
     .eq('id', id)
     .select()
     .single()
@@ -2556,9 +2600,27 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     const d = pay.payment_date ? String(pay.payment_date) : ''
     if (d && d < fromDate) opening -= Number(pay.amount) || 0
   }
+
+  const openingAmt = clientOpeningBalanceAmount(client as Record<string, unknown>)
+  const openingDate = clientOpeningBalanceDate(client as Record<string, unknown>)
+  if (openingAmt !== 0 && openingDate && openingDate < fromDate) {
+    opening += openingAmt
+  }
   opening = Math.round(opening * 100) / 100
 
   const lines: Record<string, unknown>[] = []
+  if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
+    lines.push({
+      id: null,
+      sortDate: openingDate,
+      type: 'opening_balance',
+      label: 'Opening balance',
+      inactive: false,
+      affectsBalance: true,
+      debit: openingAmt > 0 ? openingAmt : 0,
+      credit: openingAmt < 0 ? Math.abs(openingAmt) : 0,
+    })
+  }
   for (const inv of allInv || []) {
     const sortDate = invoiceSortDate(inv)
     if (!sortDate || !inRange(sortDate)) continue

@@ -1,7 +1,7 @@
 import { isSupabaseConfigured, supabase } from './supabase'
 import { invokeFn } from './invokeFn'
 import { AUTH_BYPASS, isAdmin, readSessionRole } from './authConfig'
-import { buildClientDisplayName, formToClientRow, formToContactSubmissionRow } from './clientRegistration'
+import { buildClientDisplayName, formToClientRow, formToContactSubmissionRow, clientOpeningBalanceAmount, clientOpeningBalanceDate } from './clientRegistration'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
 import { preparePaymentDocumentBundle } from './paymentDocument'
@@ -314,7 +314,9 @@ const directOpsApi = {
 
     const data = (clientsRes.data || []).map((c) => {
       const balance =
-        Math.round(((charges[c.id] || 0) - (credits[c.id] || 0)) * 100) / 100
+        Math.round(
+          ((charges[c.id] || 0) - (credits[c.id] || 0) + clientOpeningBalanceAmount(c)) * 100,
+        ) / 100
       return { ...c, balance }
     })
     return { data, error: null }
@@ -333,11 +335,17 @@ const directOpsApi = {
     if (!displayName) {
       return { data: null, error: { message: 'First name or surname is required.' } }
     }
-    const { data, error } = await supabase
-      .from('clients')
-      .insert(formToClientRow(form))
-      .select()
-      .single()
+    const row = formToClientRow(form)
+    if (!assertAdmin()) {
+      delete row.opening_balance
+      delete row.opening_balance_date
+    } else if (clientOpeningBalanceAmount(row) !== 0 && !clientOpeningBalanceDate(row)) {
+      return {
+        data: null,
+        error: { message: 'Choose an opening balance date when the amount is not zero.' },
+      }
+    }
+    const { data, error } = await supabase.from('clients').insert(row).select().single()
     if (error) return mapError(error)
     return { data, error: null }
   },
@@ -348,9 +356,19 @@ const directOpsApi = {
     if (!displayName) {
       return { data: null, error: { message: 'First name or surname is required.' } }
     }
+    const row = formToClientRow(form)
+    if (!assertAdmin()) {
+      delete row.opening_balance
+      delete row.opening_balance_date
+    } else if (clientOpeningBalanceAmount(row) !== 0 && !clientOpeningBalanceDate(row)) {
+      return {
+        data: null,
+        error: { message: 'Choose an opening balance date when the amount is not zero.' },
+      }
+    }
     const { data, error } = await supabase
       .from('clients')
-      .update({ ...formToClientRow(form), updated_at: new Date().toISOString() })
+      .update({ ...row, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single()
@@ -2521,9 +2539,27 @@ const directOpsApi = {
         opening -= Number(pay.amount) || 0
       }
     }
+
+    const openingAmt = clientOpeningBalanceAmount(clientRes.data)
+    const openingDate = clientOpeningBalanceDate(clientRes.data)
+    if (openingAmt !== 0 && openingDate && openingDate < fromDate) {
+      opening += openingAmt
+    }
     opening = Math.round(opening * 100) / 100
 
     const lines = []
+    if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
+      lines.push({
+        id: null,
+        sortDate: openingDate,
+        type: 'opening_balance',
+        label: 'Opening balance',
+        inactive: false,
+        affectsBalance: true,
+        debit: openingAmt > 0 ? openingAmt : 0,
+        credit: openingAmt < 0 ? Math.abs(openingAmt) : 0,
+      })
+    }
     for (const inv of allInv || []) {
       const sortDate = invoiceSortDate(inv)
       if (!sortDate || !inRange(sortDate)) continue

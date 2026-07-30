@@ -245,9 +245,11 @@ export default function PortalHome() {
                 const label =
                   line.type === 'invoice'
                     ? `Invoice ${line.label}`
-                    : `Payment ${line.label}${
-                        line.method ? ` (${paymentMethodLabel(line.method)})` : ''
-                      }`
+                    : line.type === 'opening_balance'
+                      ? line.label || 'Opening balance'
+                      : `Payment ${line.label}${
+                          line.method ? ` (${paymentMethodLabel(line.method)})` : ''
+                        }`
                 return (
                   <tr
                     key={`${line.type}-${line.id}`}

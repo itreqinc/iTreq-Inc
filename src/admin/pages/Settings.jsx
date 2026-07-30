@@ -6,6 +6,8 @@ import {
   useCollapseIntoView,
 } from '../../lib/collapseIntoView'
 import { opsApi, sortExpenseCategories } from '../../lib/opsApi'
+import { useAuth } from '../../contexts/AuthContext'
+import { isAdmin } from '../../lib/authConfig'
 import { useOpsAlert } from '../OpsAlertContext'
 import { AdminIconAction } from '../AdminIconAction'
 import { AfterHoursPanel } from '../components/AfterHoursPanel'
@@ -24,7 +26,7 @@ const empty = {
 }
 
 const sectionClass =
-  'max-w-xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5'
+  'w-full max-w-xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5'
 
 function ChevronIcon({ open }) {
   return (
@@ -237,6 +239,8 @@ function fieldClass(editable, extra = '') {
 }
 
 export default function SettingsPage() {
+  const { user } = useAuth()
+  const admin = isAdmin(user?.role)
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [form, setForm] = useState(empty)
   const [baseline, setBaseline] = useState('')
@@ -814,8 +818,29 @@ export default function SettingsPage() {
         </div>
       </CollapsibleSection>
 
-      <AfterHoursPanel />
-      <PaydaySettingsPanel />
+      {admin ? (
+        <CollapsibleSection
+          id="after-hours"
+          open={openSection === 'after-hours'}
+          onToggle={toggleSection}
+          title="Staff after-hours access"
+          description="Staff ops is Mon–Fri 07:00–18:00 (Africa/Gaborone). Grant temporary access beyond that window."
+        >
+          <AfterHoursPanel embedded />
+        </CollapsibleSection>
+      ) : null}
+
+      {admin ? (
+        <CollapsibleSection
+          id="payday"
+          open={openSection === 'payday'}
+          onToggle={toggleSection}
+          title="Payroll payday"
+          description="Default: later of the month’s last Tuesday and last Thursday. An admin override replaces that rule until reset."
+        >
+          <PaydaySettingsPanel embedded />
+        </CollapsibleSection>
+      ) : null}
     </div>
   )
 }
