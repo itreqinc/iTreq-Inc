@@ -748,7 +748,7 @@ export default function ClientsPage() {
               value={txFrom}
               onChange={setTxFrom}
               maxYmd={rangeTodayIso()}
-              className="w-[12.25rem] shrink-0"
+              className="w-[14rem] shrink-0"
             />
             <YearMonthDaySelect
               size="compact"
@@ -756,7 +756,7 @@ export default function ClientsPage() {
               value={txTo}
               onChange={setTxTo}
               maxYmd={endOfNextMonthIso()}
-              className="w-[12.25rem] shrink-0"
+              className="w-[14rem] shrink-0"
             />
             <button
               type="button"
