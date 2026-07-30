@@ -14,6 +14,7 @@ import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import {
   documentFilterDate,
   filterByDateRange,
+  sortByDateDescThenNameAsc,
   todayIso,
 } from '../../lib/dateRange'
 import {
@@ -284,7 +285,12 @@ export default function InvoicesPage() {
 
   const visibleRows = useMemo(() => {
     const filtered = filterByDateRange(rows, dateFrom, dateTo, documentFilterDate)
-    return withUnreadRows(filtered, rows, unreadByInvoice)
+    const withUnread = withUnreadRows(filtered, rows, unreadByInvoice)
+    return sortByDateDescThenNameAsc(
+      withUnread,
+      documentFilterDate,
+      (row) => row.clients?.name || '',
+    )
   }, [rows, dateFrom, dateTo, unreadByInvoice])
 
   const issueableDraftIds = useMemo(() => {

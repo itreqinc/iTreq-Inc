@@ -20,7 +20,7 @@ import {
 } from '../../lib/paymentDocument'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
-import { filterByDateRange } from '../../lib/dateRange'
+import { filterByDateRange, sortByDateDescThenNameAsc } from '../../lib/dateRange'
 import { ClientSelect } from '../ClientSelect'
 import { AdminIconAction } from '../AdminIconAction'
 import {
@@ -260,7 +260,12 @@ export default function PaymentsPage() {
   )
 
   const visibleRows = useMemo(
-    () => filterByDateRange(rows, dateFrom, dateTo, (row) => row.payment_date),
+    () =>
+      sortByDateDescThenNameAsc(
+        filterByDateRange(rows, dateFrom, dateTo, (row) => row.payment_date),
+        (row) => row.payment_date,
+        (row) => row.clients?.name || '',
+      ),
     [rows, dateFrom, dateTo],
   )
 

@@ -30,6 +30,7 @@ import { DateRangeFilter } from '../../components/DateRangeFilter'
 import {
   documentFilterDate,
   filterByDateRange,
+  sortByDateDescThenNameAsc,
   todayIso,
 } from '../../lib/dateRange'
 import { useAuth } from '../../contexts/AuthContext'
@@ -208,7 +209,12 @@ export default function QuotationsPage() {
   )
 
   const visibleRows = useMemo(
-    () => filterByDateRange(rows, dateFrom, dateTo, documentFilterDate),
+    () =>
+      sortByDateDescThenNameAsc(
+        filterByDateRange(rows, dateFrom, dateTo, documentFilterDate),
+        documentFilterDate,
+        quotationRecipientName,
+      ),
     [rows, dateFrom, dateTo],
   )
 

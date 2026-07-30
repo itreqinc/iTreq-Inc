@@ -39,6 +39,29 @@ export function filterByDateRange(rows, from, to, pickDate) {
   return list.filter((row) => withinDateRange(pickDate(row), from, to))
 }
 
+/**
+ * Newest dates first; within the same date, client/recipient name A→Z.
+ * Rows with no date sort after dated rows.
+ */
+export function sortByDateDescThenNameAsc(rows, pickDate, pickName) {
+  return [...(rows || [])].sort((a, b) => {
+    const da = String(pickDate(a) ?? '').slice(0, 10)
+    const db = String(pickDate(b) ?? '').slice(0, 10)
+    if (da !== db) {
+      if (!da) return 1
+      if (!db) return -1
+      return db.localeCompare(da)
+    }
+    const na = String(pickName(a) ?? '')
+      .trim()
+      .toLowerCase()
+    const nb = String(pickName(b) ?? '')
+      .trim()
+      .toLowerCase()
+    return na.localeCompare(nb, undefined, { sensitivity: 'base' })
+  })
+}
+
 export function dateRangeIsBackwards(from, to) {
   return Boolean(from && to && from > to)
 }
