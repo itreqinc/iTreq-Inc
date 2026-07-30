@@ -16,7 +16,6 @@ import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import {
   adminBtnPrimary,
   adminBtnSecondary,
-  adminBtnDanger,
   adminFieldClass,
   activateRowKey,
   clickableRowClass,
@@ -35,6 +34,16 @@ function statusClass(status) {
   if (status === 'converted') return 'text-emerald-300'
   if (status === 'dismissed') return 'text-ink-400'
   return 'text-ink-300'
+}
+
+/** Prefer notes; fall back to legacy message / interest. */
+function leadRequestText(lead) {
+  const notes = String(lead?.notes || '').trim()
+  if (notes) return notes
+  const message = String(lead?.message || '').trim()
+  const interest = String(lead?.interest || '').trim()
+  if (interest && message) return `Interest: ${interest}\n\n${message}`
+  return message || (interest ? `Interest: ${interest}` : '')
 }
 
 function LeadRowActions({ items, label = 'Lead actions' }) {
@@ -61,6 +70,7 @@ export default function LeadsPage() {
   const [form, setForm] = useState(emptyClientForm)
   const [editingId, setEditingId] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const [selectedId, setSelectedId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
@@ -86,14 +96,20 @@ export default function LeadsPage() {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return rows
     return rows.filter((r) => {
-      const hay = [r.name, r.email, r.cellphone, r.phone, r.id_number]
+      const hay = [r.name, r.email, r.cellphone, r.phone, r.id_number, r.notes, r.message]
         .map((v) => String(v || '').toLowerCase())
         .join(' ')
       return hay.includes(q)
     })
   }, [rows, searchQuery])
 
+  const selectedLead = useMemo(
+    () => rows.find((r) => r.id === selectedId) || null,
+    [rows, selectedId],
+  )
+
   function startNew() {
+    setSelectedId(null)
     setEditingId(null)
     setForm(emptyClientForm())
     setShowForm(true)
@@ -101,17 +117,31 @@ export default function LeadsPage() {
   }
 
   function startEdit(lead) {
+    setSelectedId(lead.id)
     setEditingId(lead.id)
     setForm(contactSubmissionToForm(lead))
     setShowForm(true)
     scrollToForm()
   }
 
+  function openLead(lead) {
+    setShowForm(false)
+    setEditingId(null)
+    setSelectedId(lead.id)
+  }
+
   function closeForm(savedId) {
     setEditingId(null)
     setForm(emptyClientForm())
     setShowForm(false)
-    if (savedId) highlightRow(savedId)
+    if (savedId) {
+      setSelectedId(savedId)
+      highlightRow(savedId)
+    }
+  }
+
+  function closeDetail() {
+    setSelectedId(null)
   }
 
   async function handleSubmit(e) {
@@ -142,7 +172,7 @@ export default function LeadsPage() {
   async function handleConvert(lead) {
     const ok = await confirm({
       title: 'Convert to client?',
-      message: `${lead.name} will be added to the clients directory. Any quotations for this lead will be linked to the new client record.`,
+      message: `${lead.name} will be added to Clients. Linked quotations move with them.`,
       confirmLabel: 'Convert to client',
     })
     if (!ok) return
@@ -168,7 +198,7 @@ export default function LeadsPage() {
   async function handleDismiss(lead) {
     const ok = await confirm({
       title: 'Dismiss this lead?',
-      message: `${lead.name} will be marked as dismissed and hidden from the default list.`,
+      message: `${lead.name} will be marked dismissed.`,
       confirmLabel: 'Dismiss',
     })
     if (!ok) return
@@ -181,6 +211,7 @@ export default function LeadsPage() {
     showSuccess('Lead dismissed.')
     if (statusFilter === 'new') {
       setRows((prev) => removeById(prev, lead.id))
+      if (selectedId === lead.id) setSelectedId(null)
     } else if (data?.id) {
       setRows((prev) => upsertById(prev, data))
     }
@@ -203,6 +234,7 @@ export default function LeadsPage() {
     }
     showSuccess('Lead deleted.')
     setRows((prev) => removeById(prev, lead.id))
+    if (selectedId === lead.id) setSelectedId(null)
   }
 
   function createQuotation(lead) {
@@ -215,8 +247,7 @@ export default function LeadsPage() {
         <div>
           <h1 className="font-display text-2xl font-bold text-white">Leads</h1>
           <p className="mt-1 text-sm text-ink-300">
-            Website enquiries and other people not yet clients. Convert to a client when they are
-            ready, or quote them directly without adding them to the client directory.
+            Website enquiries — quote them, convert to a client, or dismiss.
           </p>
         </div>
         {!showForm ? (
@@ -250,6 +281,99 @@ export default function LeadsPage() {
             </button>
           </div>
         </form>
+      ) : null}
+
+      {selectedLead && !showForm ? (
+        <section className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">
+                Their request
+              </p>
+              <h2 className="mt-1 font-display text-xl font-semibold text-white">
+                {selectedLead.name}
+              </h2>
+              <p className="mt-1 text-sm text-ink-400">
+                <span className={statusClass(selectedLead.status)}>
+                  {STATUS_LABELS[selectedLead.status] || selectedLead.status}
+                </span>
+                {selectedLead.created_at
+                  ? ` · ${String(selectedLead.created_at).slice(0, 10)}`
+                  : ''}
+              </p>
+            </div>
+            <button type="button" onClick={closeDetail} className={adminBtnSecondary}>
+              Close
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-brand-500/25 bg-brand-500/[0.06] p-4 sm:p-5">
+            {leadRequestText(selectedLead) ? (
+              <p className="whitespace-pre-wrap text-base leading-relaxed text-ink-100">
+                {leadRequestText(selectedLead)}
+              </p>
+            ) : (
+              <p className="text-sm text-ink-400">No request details were provided.</p>
+            )}
+          </div>
+
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <p className="text-ink-300">
+              <span className="block text-xs uppercase tracking-wider text-ink-500">Phone</span>
+              {selectedLead.cellphone || selectedLead.phone || '—'}
+            </p>
+            <p className="min-w-0 break-all text-ink-300">
+              <span className="block text-xs uppercase tracking-wider text-ink-500">Email</span>
+              {selectedLead.email || '—'}
+            </p>
+            <p className="text-ink-300">
+              <span className="block text-xs uppercase tracking-wider text-ink-500">ID / Passport</span>
+              {selectedLead.id_number || '—'}
+            </p>
+            {(selectedLead.physical_address || selectedLead.postal_address) && (
+              <p className="text-ink-300 sm:col-span-2 lg:col-span-3">
+                <span className="block text-xs uppercase tracking-wider text-ink-500">Address</span>
+                {selectedLead.physical_address || selectedLead.postal_address}
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
+            {selectedLead.status === 'new' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => createQuotation(selectedLead)}
+                  className={adminBtnPrimary}
+                >
+                  Create quotation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConvert(selectedLead)}
+                  disabled={saving}
+                  className={adminBtnSecondary}
+                >
+                  Convert to client
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDismiss(selectedLead)}
+                  className={adminBtnSecondary}
+                >
+                  Dismiss
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => startEdit(selectedLead)}
+              className={adminBtnSecondary}
+            >
+              Edit details
+            </button>
+          </div>
+        </section>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
@@ -288,7 +412,7 @@ export default function LeadsPage() {
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
               <th className="px-4 py-3">Name</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>ID / Passport</th>
+              <th className={`px-4 py-3 ${adminColSecondary}`}>Request</th>
               <th className="px-4 py-3">Phone</th>
               <th className={`px-4 py-3 ${adminColSecondary}`}>Email</th>
               <th className="px-4 py-3">Status</th>
@@ -311,10 +435,12 @@ export default function LeadsPage() {
               </tr>
             ) : (
               filteredRows.map((lead) => {
-                const open = () => startEdit(lead)
+                const open = () => openLead(lead)
                 const isNew = lead.status === 'new'
+                const requestPreview = leadRequestText(lead)
                 const menuItems = [
-                  { label: 'Edit', onClick: () => startEdit(lead) },
+                  { label: 'View request', onClick: () => openLead(lead) },
+                  { label: 'Edit details', onClick: () => startEdit(lead) },
                   ...(isNew
                     ? [
                         { label: 'Create quotation', onClick: () => createQuotation(lead) },
@@ -340,13 +466,20 @@ export default function LeadsPage() {
                     data-row-id={lead.id}
                     role="link"
                     tabIndex={0}
-                    className={`group bg-ink-900/20 ${clickableRowClass}${highlightId === lead.id ? ' ring-2 ring-amber-400/60' : ''}`}
+                    className={`group bg-ink-900/20 ${clickableRowClass}${
+                      selectedId === lead.id || highlightId === lead.id
+                        ? ' ring-2 ring-amber-400/60'
+                        : ''
+                    }`}
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
                     <td className="px-4 py-3 font-medium text-white">{lead.name}</td>
-                    <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
-                      {lead.id_number || '—'}
+                    <td
+                      className={`max-w-[14rem] truncate px-4 py-3 text-ink-300 ${adminColSecondary}`}
+                      title={requestPreview || undefined}
+                    >
+                      {requestPreview || '—'}
                     </td>
                     <td className="px-4 py-3 text-ink-300">{lead.cellphone || lead.phone || '—'}</td>
                     <td className={`min-w-0 break-all px-4 py-3 text-ink-300 ${adminColSecondary}`}>

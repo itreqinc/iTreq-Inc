@@ -51,6 +51,12 @@ export default function Contact() {
     e.preventDefault()
     setError('')
 
+    const request = String(form.notes || '').trim()
+    if (!request) {
+      setError('Tell us what you need tracked — a short note is enough to get started.')
+      return
+    }
+
     const check = validateClientForm(form)
     if (!check.ok) {
       setError(check.message)
@@ -58,9 +64,7 @@ export default function Contact() {
     }
 
     if (!isSupabaseConfigured || !supabase) {
-      setError(
-        'A database is not configured yet. Please contact the administrator.',
-      )
+      setError('A database is not configured yet. Please contact the administrator.')
       return
     }
 
@@ -69,8 +73,9 @@ export default function Contact() {
     const { error: insertError } = await supabase.from('contact_submissions').insert({
       ...row,
       phone: row.phone || row.cellphone,
+      notes: request,
       interest: null,
-      message: null,
+      message: request,
     })
     setSubmitting(false)
 
@@ -90,7 +95,7 @@ export default function Contact() {
       <PageHero
         eyebrow="Contact"
         title="Talk to iTreq Inc about a tracking solution"
-        description="Request a quote, ask about installation, or tell us what you need to protect. We’ll get back to you as soon as we can."
+        description="Request a quote or tell us what you need to protect — we’ll get back to you soon."
       />
 
       <section className="section-pad">
@@ -142,8 +147,7 @@ export default function Contact() {
                 </div>
                 <h2 className="font-display text-2xl font-bold text-white">Request received</h2>
                 <p className="mt-3 max-w-sm text-ink-300">
-                  Thanks for reaching out. We’ve saved your details and will follow up as soon as
-                  we can.
+                  Thanks — we’ve got your details and will follow up soon.
                 </p>
                 <div className="mt-6 flex flex-wrap justify-center gap-3">
                   <Button href={`mailto:${COMPANY.email}`}>Email us</Button>
@@ -156,14 +160,42 @@ export default function Contact() {
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <h2 className="font-display text-2xl font-bold text-white">Request a quote</h2>
-                <p className="text-sm text-ink-300">
-                  Fill in your details — the same information we keep on file for clients — and
-                  we&apos;ll follow up with options for your needs.
-                </p>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-white">Request a quote</h2>
+                  <p className="mt-1 text-sm text-ink-300">Tell us what you need — we’ll take it from there.</p>
+                </div>
 
-                <ClientRegistrationFields form={form} setForm={setForm} fieldClass={fieldClass} />
+                <div className="rounded-2xl border border-brand-500/30 bg-brand-500/[0.07] p-4 sm:p-5">
+                  <label className="block">
+                    <span className="font-display text-lg font-semibold text-white">
+                      What do you need tracked?
+                    </span>
+                    <span className="mt-1 block text-sm text-ink-300">
+                      Vehicles, solar, livestock, tools — be specific so we can quote accurately.
+                    </span>
+                    <textarea
+                      required
+                      rows={5}
+                      className={`${fieldClass} mt-3 resize-y border-brand-500/20 bg-ink-950/70 placeholder:text-ink-500`}
+                      value={form.notes}
+                      onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                      placeholder="Example: Three bakkies and a trailer for our fleet in Gaborone, plus two solar arrays at the yard…"
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">
+                    Your details
+                  </p>
+                  <ClientRegistrationFields
+                    form={form}
+                    setForm={setForm}
+                    fieldClass={fieldClass}
+                    showNotes={false}
+                  />
+                </div>
 
                 {error ? (
                   <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">

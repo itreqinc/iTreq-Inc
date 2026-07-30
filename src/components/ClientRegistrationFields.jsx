@@ -2,8 +2,9 @@ import { CountryPhoneInput } from './CountryPhoneInput'
 
 /**
  * Shared client / lead registration fields (admin clients page + public contact form).
+ * Pass showNotes={false} when the host page has its own request / notes field.
  */
-export function ClientRegistrationFields({ form, setForm, fieldClass }) {
+export function ClientRegistrationFields({ form, setForm, fieldClass, showNotes = true }) {
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
   }
@@ -127,15 +128,17 @@ export function ClientRegistrationFields({ form, setForm, fieldClass }) {
             onChange={(e) => setField('physical_address', e.target.value)}
           />
         </label>
-        <label className="block sm:col-span-2 lg:col-span-3">
-          <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Notes</span>
-          <textarea
-            rows={2}
-            className={`${fieldClass} resize-y`}
-            value={form.notes}
-            onChange={(e) => setField('notes', e.target.value)}
-          />
-        </label>
+        {showNotes ? (
+          <label className="block sm:col-span-2 lg:col-span-3">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Notes</span>
+            <textarea
+              rows={2}
+              className={`${fieldClass} resize-y`}
+              value={form.notes}
+              onChange={(e) => setField('notes', e.target.value)}
+            />
+          </label>
+        ) : null}
       </div>
     </div>
   )
