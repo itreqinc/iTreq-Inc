@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
+import {
+  COLLAPSE_BODY_CLASS,
+  useCollapseIntoView,
+} from '../../lib/collapseIntoView'
 import {
   invoiceBalanceDue,
   invoiceEffectiveDueDate,
@@ -30,9 +34,11 @@ function Kpi({ label, value, hint, tone = 'default' }) {
 
 function ActionCard({ title, count, description, children, emptyText, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
+  const rootRef = useRef(null)
+  useCollapseIntoView(open, rootRef)
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-ink-900/40">
+    <section ref={rootRef} className="rounded-2xl border border-white/10 bg-ink-900/40">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -62,11 +68,13 @@ function ActionCard({ title, count, description, children, emptyText, defaultOpe
         </span>
       </button>
       {open ? (
-        count === 0 ? (
-          <p className="px-4 py-6 text-sm text-ink-400">{emptyText}</p>
-        ) : (
-          <ul className="divide-y divide-white/5">{children}</ul>
-        )
+        <div className={COLLAPSE_BODY_CLASS}>
+          {count === 0 ? (
+            <p className="px-4 py-6 text-sm text-ink-400">{emptyText}</p>
+          ) : (
+            <ul className="divide-y divide-white/5">{children}</ul>
+          )}
+        </div>
       ) : null}
     </section>
   )

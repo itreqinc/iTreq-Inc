@@ -3,9 +3,14 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { opsApi } from '../../lib/opsApi'
+import {
+  COLLAPSE_BODY_CLASS,
+  useCollapseIntoView,
+} from '../../lib/collapseIntoView'
 import { PAYMENT_METHODS,
   paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
@@ -97,9 +102,11 @@ function ChevronIcon({ open }) {
 
 function CollapsiblePanel({ open, onToggle, title, description, headerEnd, children }) {
   const panelId = useId()
+  const rootRef = useRef(null)
+  useCollapseIntoView(open, rootRef)
 
   return (
-    <section className="space-y-0">
+    <section ref={rootRef} className="space-y-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <button
           type="button"
@@ -126,7 +133,11 @@ function CollapsiblePanel({ open, onToggle, title, description, headerEnd, child
         }`}
       >
         <div className="min-w-0 overflow-hidden">
-          <div className={`space-y-3 pt-3 ${open ? '' : 'pointer-events-none'}`}>{children}</div>
+          <div
+            className={`space-y-3 pt-3 ${open ? COLLAPSE_BODY_CLASS : 'pointer-events-none'}`}
+          >
+            {children}
+          </div>
         </div>
       </div>
     </section>

@@ -3,6 +3,7 @@ import {
   useState } from 'react'
 import { Link } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
+import { DetailsCollapse } from '../../components/DetailsCollapse'
 import { useOpsAlert } from '../OpsAlertContext'
 import { adminBtnPrimary,
   adminBtnSecondary,
@@ -200,8 +201,8 @@ export default function MonthlyFeesPage() {
           )}
 
           {skipRows.length ? (
-            <details className="rounded-2xl border border-white/10 bg-ink-900/30 p-3 text-sm">
-              <summary className="cursor-pointer font-medium text-ink-200">
+            <DetailsCollapse className="rounded-2xl border border-white/10 bg-ink-900/30 p-3 text-sm [&>summary]:cursor-pointer">
+              <summary className="font-medium text-ink-200">
                 Skipped ({skipRows.length})
               </summary>
               <ul className="mt-3 space-y-1 text-ink-400">
@@ -211,7 +212,7 @@ export default function MonthlyFeesPage() {
                   </li>
                 ))}
               </ul>
-            </details>
+            </DetailsCollapse>
           ) : null}
         </section>
       ) : null}

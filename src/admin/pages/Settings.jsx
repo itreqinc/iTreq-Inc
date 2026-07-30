@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { COMPANY } from '../../data/site'
 import { emptyDocumentSettingsFields } from '../../lib/companyDocumentSettings'
+import {
+  COLLAPSE_BODY_CLASS,
+  useCollapseIntoView,
+} from '../../lib/collapseIntoView'
 import { opsApi, sortExpenseCategories } from '../../lib/opsApi'
 import { useOpsAlert } from '../OpsAlertContext'
 import { AdminIconAction } from '../AdminIconAction'
@@ -108,9 +112,11 @@ function CollapsibleSection({
   headerEnd,
 }) {
   const panelId = useId()
+  const rootRef = useRef(null)
+  useCollapseIntoView(open, rootRef)
 
   return (
-    <section className={className}>
+    <section ref={rootRef} className={className}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <button
           type="button"
@@ -138,7 +144,7 @@ function CollapsibleSection({
       >
         <div className="overflow-hidden">
           <div
-            className={`space-y-3 pt-3 ${open ? '' : 'pointer-events-none'}`}
+            className={`space-y-3 pt-3 ${open ? COLLAPSE_BODY_CLASS : 'pointer-events-none'}`}
           >
             {children}
           </div>

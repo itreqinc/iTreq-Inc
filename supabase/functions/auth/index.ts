@@ -798,6 +798,13 @@ async function handleInviteClient(
   if (!email) {
     return json(400, { success: false, message: 'Client needs an email before invite.' })
   }
+  if (email === 'info@itreqinc.com') {
+    return json(400, {
+      success: false,
+      message:
+        'This client uses the office email placeholder and cannot receive a portal invite. Add their real email first.',
+    })
+  }
   const phone = String(client.cellphone || client.phone || '').trim() || null
   const first_name = String(client.first_name || '').trim() || null
   const middle_name = String(client.middle_name || '').trim() || null

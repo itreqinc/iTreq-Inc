@@ -2,10 +2,15 @@ import {
   useCallback,
   useEffect,
   useId,
+  useRef,
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
+import {
+  COLLAPSE_BODY_CLASS,
+  useCollapseIntoView,
+} from '../../lib/collapseIntoView'
 import { paymentMethodLabel } from '../../lib/payments'
 import {
   openStatementDocumentPrintWindow,
@@ -77,9 +82,11 @@ function ChevronIcon({ open }) {
 
 function CollapsibleSection({ open, onToggle, title, description, className, children }) {
   const panelId = useId()
+  const rootRef = useRef(null)
+  useCollapseIntoView(open, rootRef)
 
   return (
-    <section className={className}>
+    <section ref={rootRef} className={className}>
       <button
         type="button"
         aria-expanded={open}
@@ -103,7 +110,13 @@ function CollapsibleSection({ open, onToggle, title, description, className, chi
         }`}
       >
         <div className="min-w-0 overflow-hidden">
-          <div className={`space-y-3 pt-3 ${open ? '' : 'pointer-events-none print:pointer-events-auto'}`}>
+          <div
+            className={`space-y-3 pt-3 ${
+              open
+                ? `${COLLAPSE_BODY_CLASS} print:max-h-none print:overflow-visible`
+                : 'pointer-events-none print:pointer-events-auto'
+            }`}
+          >
             {children}
           </div>
         </div>

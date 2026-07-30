@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { opsApi } from '../lib/opsApi'
 import { disputeUnreadCount } from '../lib/invoiceDisputes'
+import {
+  COLLAPSE_BODY_CLASS,
+  useCollapseIntoView,
+} from '../lib/collapseIntoView'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import { adminBtnPrimary, adminBtnSecondary, adminFieldClass } from '../admin/ui'
 
@@ -33,6 +37,8 @@ export function InvoiceQueryThread({ invoiceId, clientId, authorRole = 'client',
   const [sending, setSending] = useState(false)
   const [resolving, setResolving] = useState(false)
   const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+  useCollapseIntoView(open, rootRef)
 
   const load = useCallback(async () => {
     if (!invoiceId) return
@@ -156,7 +162,7 @@ export function InvoiceQueryThread({ invoiceId, clientId, authorRole = 'client',
   if (isStaff && loading) return null
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-ink-900/40">
+    <section ref={rootRef} className="rounded-2xl border border-white/10 bg-ink-900/40">
       <button
         type="button"
         onClick={handleToggle}
@@ -212,7 +218,7 @@ export function InvoiceQueryThread({ invoiceId, clientId, authorRole = 'client',
       </button>
 
       {open ? (
-        <>
+        <div className={COLLAPSE_BODY_CLASS}>
           {isStaff && dispute && !isResolved ? (
             <div className="flex justify-end border-b border-white/10 px-4 py-2">
               <button
@@ -297,7 +303,7 @@ export function InvoiceQueryThread({ invoiceId, clientId, authorRole = 'client',
               {sending ? 'Sending…' : isResolved ? 'Reopen with a reply' : 'Send message'}
             </button>
           </form>
-        </>
+        </div>
       ) : null}
     </section>
   )
