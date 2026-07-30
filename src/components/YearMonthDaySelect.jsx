@@ -11,7 +11,7 @@ import { adminFieldClass } from '../admin/ui'
 import { FieldBox } from './FieldBox'
 
 const COMPACT_SELECT_CLASS =
-  'w-full rounded-lg border border-white/10 bg-ink-950/80 px-1.5 py-1 text-xs text-white outline-none transition focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/20'
+  'w-full rounded-lg border border-white/10 bg-ink-950/80 px-2 py-1.5 text-[13px] leading-snug text-white outline-none transition focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/20'
 
 /**
  * Date picker: year → month → day, combined as YYYY-MM-DD (same pattern as iRegistry).
@@ -135,7 +135,7 @@ export function YearMonthDaySelect({
   }
 
   const selects = (
-    <div className={`grid grid-cols-3 ${compact ? 'gap-1' : 'gap-2'}`}>
+    <div className={`grid grid-cols-3 ${compact ? 'gap-1.5' : 'gap-2'}`}>
       <div className="min-w-0">
         <span className="sr-only">Year</span>
         <select

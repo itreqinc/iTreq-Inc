@@ -15,12 +15,12 @@ export function FieldBox({
   return (
     <fieldset
       className={`min-w-0 rounded-xl border border-white/10 bg-ink-950/60 ${
-        compact ? 'px-2 pb-2 pt-0.5' : 'px-3.5 pb-3.5 pt-1'
+        compact ? 'px-2.5 pb-2.5 pt-1' : 'px-3.5 pb-3.5 pt-1'
       } ${className}`}
     >
       <legend
-        className={`w-auto px-1.5 font-medium uppercase tracking-wider text-ink-300 ${
-          compact ? 'text-[10px]' : 'px-2 text-xs'
+        className={`w-auto font-medium uppercase tracking-wider text-ink-300 ${
+          compact ? 'px-1.5 text-[11px]' : 'px-2 text-xs'
         } ${align === 'center' ? 'mx-auto text-center' : ''}`}
       >
         {label}

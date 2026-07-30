@@ -730,15 +730,15 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="block min-w-[9rem] max-w-sm flex-1">
+          <div className="flex flex-wrap items-end gap-2.5">
+            <label className="block min-w-[10rem] max-w-sm flex-1">
               <span className="sr-only">Search clients</span>
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search clients…"
-                className={`${adminFieldClass} py-1.5 text-xs`}
+                className={`${adminFieldClass} py-1.5 text-[13px]`}
                 autoComplete="off"
               />
             </label>
@@ -748,7 +748,7 @@ export default function ClientsPage() {
               value={txFrom}
               onChange={setTxFrom}
               maxYmd={rangeTodayIso()}
-              className="w-[10.75rem] shrink-0"
+              className="w-[12.25rem] shrink-0"
             />
             <YearMonthDaySelect
               size="compact"
@@ -756,7 +756,7 @@ export default function ClientsPage() {
               value={txTo}
               onChange={setTxTo}
               maxYmd={endOfNextMonthIso()}
-              className="w-[10.75rem] shrink-0"
+              className="w-[12.25rem] shrink-0"
             />
             <button
               type="button"
@@ -765,7 +765,7 @@ export default function ClientsPage() {
                 setTxFrom('')
                 setTxTo('')
               }}
-              className={`${adminBtnSecondary} px-2.5 py-1.5 text-xs`}
+              className={`${adminBtnSecondary} px-3 py-1.5 text-[13px]`}
             >
               Clear
             </button>
