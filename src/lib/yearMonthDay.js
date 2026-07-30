@@ -51,8 +51,11 @@ const MONTH_NAMES = [
   'December',
 ]
 
-export function monthOptions() {
-  return MONTH_NAMES.map((name, i) => ({ value: i + 1, label: name }))
+export function monthOptions({ short = false } = {}) {
+  return MONTH_NAMES.map((name, i) => ({
+    value: i + 1,
+    label: short ? name.slice(0, 3) : name,
+  }))
 }
 
 export function dayOptions(year, month) {

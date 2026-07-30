@@ -10,9 +10,13 @@ import {
 import { adminFieldClass } from '../admin/ui'
 import { FieldBox } from './FieldBox'
 
+const COMPACT_SELECT_CLASS =
+  'w-full rounded-lg border border-white/10 bg-ink-950/80 px-1.5 py-1 text-xs text-white outline-none transition focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/20'
+
 /**
  * Date picker: year → month → day, combined as YYYY-MM-DD (same pattern as iRegistry).
  * When `label` is set, wraps in the shared FieldBox (Reports-style bordered legend).
+ * Pass size="compact" for tighter toolbar layouts (short month names, smaller type).
  */
 export function YearMonthDaySelect({
   label,
@@ -24,9 +28,13 @@ export function YearMonthDaySelect({
   maxYear,
   minYmd,
   maxYmd,
-  selectClassName = adminFieldClass,
+  size = 'default',
+  selectClassName,
   className = '',
 }) {
+  const compact = size === 'compact'
+  const fieldClass = selectClassName || (compact ? COMPACT_SELECT_CLASS : adminFieldClass)
+
   const now = new Date().getFullYear()
   // min/maxYmd narrow the dropdown options themselves, not just clamp the result.
   const minParts = useMemo(() => parseYmd(minYmd || ''), [minYmd])
@@ -50,7 +58,7 @@ export function YearMonthDaySelect({
 
   const years = useMemo(() => yearOptions(yMin, yMax), [yMin, yMax])
   const months = useMemo(() => {
-    let list = monthOptions()
+    let list = monthOptions({ short: compact })
     if (year && maxParts.year && Number(year) === Number(maxParts.year)) {
       list = list.filter((m) => m.value <= Number(maxParts.month))
     }
@@ -58,7 +66,7 @@ export function YearMonthDaySelect({
       list = list.filter((m) => m.value >= Number(minParts.month))
     }
     return list
-  }, [year, minParts, maxParts])
+  }, [year, minParts, maxParts, compact])
   const days = useMemo(() => {
     let list = dayOptions(year, month)
     const atMax =
@@ -127,7 +135,7 @@ export function YearMonthDaySelect({
   }
 
   const selects = (
-    <div className="grid grid-cols-3 gap-2">
+    <div className={`grid grid-cols-3 ${compact ? 'gap-1' : 'gap-2'}`}>
       <div className="min-w-0">
         <span className="sr-only">Year</span>
         <select
@@ -135,9 +143,9 @@ export function YearMonthDaySelect({
           onChange={onYearChange}
           disabled={disabled}
           aria-label={label ? `${label} year` : 'Year'}
-          className={selectClassName}
+          className={fieldClass}
         >
-          <option value="">Year</option>
+          <option value="">{compact ? 'Yr' : 'Year'}</option>
           {years.map((y) => (
             <option key={y} value={String(y)}>
               {y}
@@ -152,9 +160,9 @@ export function YearMonthDaySelect({
           onChange={onMonthChange}
           disabled={disabled || !year}
           aria-label={label ? `${label} month` : 'Month'}
-          className={selectClassName}
+          className={fieldClass}
         >
-          <option value="">Month</option>
+          <option value="">{compact ? 'Mo' : 'Month'}</option>
           {months.map((m) => (
             <option key={m.value} value={String(m.value)}>
               {m.label}
@@ -169,9 +177,9 @@ export function YearMonthDaySelect({
           onChange={onDayChange}
           disabled={disabled || !year || !month}
           aria-label={label ? `${label} day` : 'Day'}
-          className={selectClassName}
+          className={fieldClass}
         >
-          <option value="">Day</option>
+          <option value="">{compact ? 'Dy' : 'Day'}</option>
           {days.map((d) => (
             <option key={d} value={String(d)}>
               {d}
@@ -184,7 +192,13 @@ export function YearMonthDaySelect({
 
   if (label) {
     return (
-      <FieldBox label={label} align="center" required={required} className={className}>
+      <FieldBox
+        label={label}
+        align="center"
+        required={required}
+        size={size}
+        className={className}
+      >
         {selects}
       </FieldBox>
     )
