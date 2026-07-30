@@ -7,6 +7,7 @@ import {
   paymentMethodLabel,
 } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
+import { PortalInvitesPanel } from '../components/PortalInvitesPanel'
 import { adminBtnPrimary, adminBtnSecondary, formatPula } from '../ui'
 
 function Kpi({ label, value, hint, tone = 'default' }) {
@@ -297,6 +298,8 @@ export default function AdminDashboard() {
           </li>
         ))}
       </ActionCard>
+
+      <PortalInvitesPanel />
     </div>
   )
 }

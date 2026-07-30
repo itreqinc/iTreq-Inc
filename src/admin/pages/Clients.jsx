@@ -25,7 +25,6 @@ import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
-import { PortalInvitesPanel } from '../components/PortalInvitesPanel'
 import { adminBtnPrimary,
   adminBtnSecondary,
   adminFieldClass,
@@ -916,8 +915,6 @@ export default function ClientsPage() {
           </div>
         </div>
       ) : null}
-
-      {view === 'directory' && !showForm ? <PortalInvitesPanel /> : null}
     </div>
   )
 }

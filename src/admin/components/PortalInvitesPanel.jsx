@@ -88,7 +88,7 @@ export function PortalInvitesPanel() {
 
   return (
     <details
-      className="group mt-10 rounded-2xl border border-white/10 bg-ink-900/30 [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden"
+      className="group rounded-2xl border border-white/10 bg-ink-900/30 [&>summary]:list-none [&>summary::-webkit-details-marker]:hidden"
     >
       <summary className="flex cursor-pointer items-start justify-between gap-3 px-4 py-3 sm:px-5">
         <div className="min-w-0 flex-1">
