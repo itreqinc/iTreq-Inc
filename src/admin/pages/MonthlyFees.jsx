@@ -37,7 +37,7 @@ function actionLabel(action) {
 }
 
 export default function MonthlyFeesPage() {
-  const { showError, showSuccess, confirm } = useOpsAlert()
+  const { showError, showSuccess, confirm, beginProgress, endProgress } = useOpsAlert()
   const [billingPeriod, setBillingPeriod] = useState(monthStartIso())
   const [preview, setPreview] = useState(null)
   const [result, setResult] = useState(null)
@@ -69,32 +69,49 @@ export default function MonthlyFeesPage() {
 
   async function runGenerate() {
     const ok = await confirm({
-      title: `Generate fees for ${formatPeriodLabel(billingPeriod)}?`,
+      title: `Generate fee drafts for ${formatPeriodLabel(billingPeriod)}?`,
       message:
         createRows.length > 0
-          ? `This will create and issue ${createRows.length} invoice(s) by copying monthly fee lines from the previous month. This cannot be undone (void individually if needed).`
+          ? `This will create ${createRows.length} draft invoice(s) by copying monthly fee lines from the previous month. Review and correct them on Invoices, then issue when ready.`
           : 'Run generate for this month? Clients already billed or without a previous fee invoice will be skipped.',
-      confirmLabel: 'Generate invoices',
+      confirmLabel: 'Create drafts',
     })
     if (!ok) return
 
     setGenerating(true)
     setResult(null)
-    const { data, error } = await opsApi.generateMonthlyFeeInvoices({
-      billing_period: billingPeriod,
+    const names = createRows.map((r) => r.client_name).filter(Boolean)
+    beginProgress({
+      title: 'Creating fee drafts…',
+      message: formatPeriodLabel(billingPeriod),
+      total: 0,
+      current: 0,
+      label:
+        names.length === 0
+          ? 'Working…'
+          : names.length <= 2
+            ? names.join(', ')
+            : `${names.slice(0, 2).join(', ')} +${names.length - 2} more`,
     })
-    setGenerating(false)
-    if (error) {
-      showError(error.message)
-      return
+    try {
+      const { data, error } = await opsApi.generateMonthlyFeeInvoices({
+        billing_period: billingPeriod,
+      })
+      if (error) {
+        showError(error.message)
+        return
+      }
+      setResult(data)
+      showSuccess(
+        data.created_count
+          ? `Created ${data.created_count} draft monthly fee invoice(s).`
+          : 'No new invoices were created.',
+      )
+      await runPreview()
+    } finally {
+      endProgress()
+      setGenerating(false)
     }
-    setResult(data)
-    showSuccess(
-      data.created_count
-        ? `Created ${data.created_count} monthly fee invoice(s).`
-        : 'No new invoices were created.',
-    )
-    await runPreview()
   }
 
   return (
@@ -102,9 +119,10 @@ export default function MonthlyFeesPage() {
       <div>
         <h1 className="font-display text-2xl font-bold text-white">Monthly fees</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-300">
-          Generate issued invoices for the selected month by copying recurring monthly fee lines from
-          each client&apos;s previous-month invoice. Usage charges (e.g. roaming) are excluded —
-          add those manually when they occur. Clients without a previous fee invoice are skipped.
+          Create draft invoices for the selected month by copying recurring monthly fee lines (quantities
+          and prices as-is) from each client&apos;s previous-month invoice. Review and correct drafts on
+          Invoices before issuing. Usage charges (e.g. roaming) are excluded — add those manually when
+          they occur. Clients without a previous fee invoice are skipped.
         </p>
       </div>
 
@@ -142,7 +160,7 @@ export default function MonthlyFeesPage() {
             className={adminBtnPrimary}
             title={!preview ? 'Run Preview first' : undefined}
           >
-            {generating ? 'Generating…' : 'Generate invoices'}
+            {generating ? 'Generating…' : 'Create drafts'}
           </button>
         </div>
       </div>
@@ -228,7 +246,7 @@ export default function MonthlyFeesPage() {
               >
                 <div>
                   <p className="font-medium text-white">
-                    {row.number} · {row.client_name}
+                    {row.number || 'Draft'} · {row.client_name}
                   </p>
                   <p className="text-xs text-ink-400">{formatPula(row.total)}</p>
                 </div>

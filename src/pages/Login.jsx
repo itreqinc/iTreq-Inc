@@ -9,9 +9,9 @@ import { SeedUserPicker } from '../components/SeedUserPicker'
 import { adminBtnPrimary, adminBtnSecondary, adminFieldClass } from '../admin/ui'
 
 const METHODS = [
+  { id: 'password', label: 'Password' },
   { id: 'email', label: 'Email OTP' },
   { id: 'sms', label: 'SMS OTP' },
-  { id: 'password', label: 'Password' },
 ]
 
 function safeRedirect(raw) {

@@ -74,8 +74,9 @@ function VariantIcon({ type }) {
 }
 
 /**
- * Reusable Ops modal for success / error / warning / info.
+ * Reusable Ops modal for success / error / warning / info / confirm / progress.
  * Pass onConfirm for a confirm dialog, plus promptLabel to collect a short answer.
+ * Pass progress={{ current, total, label }} while a bulk run is executing (no dismiss).
  */
 export function AlertModal({
   open,
@@ -86,6 +87,7 @@ export function AlertModal({
   cancelLabel = 'Cancel',
   promptLabel = '',
   promptPlaceholder = '',
+  progress = null,
   onConfirm,
   onClose,
 }) {
@@ -95,8 +97,19 @@ export function AlertModal({
   const inputRef = useRef(null)
   const [value, setValue] = useState('')
   const variant = VARIANTS[type] || VARIANTS.info
-  const isConfirm = typeof onConfirm === 'function'
+  const isProgress = Boolean(progress)
+  const isConfirm = !isProgress && typeof onConfirm === 'function'
   const isPrompt = isConfirm && Boolean(promptLabel)
+
+  const total = Math.max(0, Number(progress?.total) || 0)
+  const current = Math.min(total, Math.max(0, Number(progress?.current) || 0))
+  const percent =
+    progress?.percent != null
+      ? Math.min(100, Math.max(0, Math.round(Number(progress.percent))))
+      : total > 0
+        ? Math.round((current / total) * 100)
+        : 0
+  const progressLabel = String(progress?.label || '').trim()
 
   useEffect(() => {
     if (!open) return undefined
@@ -108,7 +121,7 @@ export function AlertModal({
       0,
     )
     function onKey(e) {
-      if (e.key === 'Escape') onClose?.()
+      if (e.key === 'Escape' && !isProgress) onClose?.()
     }
     window.addEventListener('keydown', onKey)
     return () => {
@@ -116,7 +129,7 @@ export function AlertModal({
       window.clearTimeout(t)
       window.removeEventListener('keydown', onKey)
     }
-  }, [open, onClose])
+  }, [open, onClose, isProgress])
 
   if (!open) return null
 
@@ -125,14 +138,16 @@ export function AlertModal({
       <button
         type="button"
         className="absolute inset-0 bg-ink-950/50 backdrop-blur-[2px]"
-        aria-label="Close dialog"
-        onClick={onClose}
+        aria-label={isProgress ? 'Progress dialog' : 'Close dialog'}
+        disabled={isProgress}
+        onClick={isProgress ? undefined : onClose}
       />
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={message ? descId : undefined}
+        aria-describedby={message || isProgress ? descId : undefined}
+        aria-busy={isProgress || undefined}
         className={`relative w-full max-w-md rounded-2xl border bg-ink-900 p-5 shadow-2xl ${variant.panel}`}
       >
         <div className="flex items-start gap-3">
@@ -153,6 +168,48 @@ export function AlertModal({
           </div>
         </div>
 
+        {isProgress ? (
+          <div id={message ? undefined : descId} className="mt-5 space-y-3">
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+              <span className="font-semibold text-white tabular-nums">
+                {total > 0 ? `${percent}%` : '…'}
+              </span>
+              {total > 0 ? (
+                <span className="text-ink-400 tabular-nums">
+                  {current} of {total}
+                </span>
+              ) : null}
+            </div>
+            <div
+              className="h-2.5 overflow-hidden rounded-full bg-white/10"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={total > 0 ? 100 : undefined}
+              aria-valuenow={total > 0 ? percent : undefined}
+              aria-label={progressLabel || title || 'Progress'}
+            >
+              {total > 0 ? (
+                <div
+                  className="h-full rounded-full bg-brand-500 transition-[width] duration-300 ease-out"
+                  style={{ width: `${percent}%` }}
+                />
+              ) : (
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-brand-500/80" />
+              )}
+            </div>
+            <p className="min-h-[1.25rem] truncate text-sm text-ink-200">
+              {progressLabel ? (
+                <>
+                  <span className="text-ink-400">Now: </span>
+                  <span className="font-medium text-white">{progressLabel}</span>
+                </>
+              ) : (
+                <span className="text-ink-500">Working…</span>
+              )}
+            </p>
+          </div>
+        ) : null}
+
         {isPrompt ? (
           <label className="mt-4 block">
             <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
@@ -169,25 +226,27 @@ export function AlertModal({
           </label>
         ) : null}
 
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          {isConfirm ? (
-            <button type="button" className={adminBtnSecondary} onClick={onClose}>
-              {cancelLabel}
+        {!isProgress ? (
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            {isConfirm ? (
+              <button type="button" className={adminBtnSecondary} onClick={onClose}>
+                {cancelLabel}
+              </button>
+            ) : null}
+            <button
+              ref={confirmRef}
+              type="button"
+              disabled={isPrompt && !value.trim()}
+              className={adminBtnPrimary}
+              onClick={() => {
+                if (isConfirm) onConfirm(isPrompt ? value.trim() : true)
+                else onClose?.()
+              }}
+            >
+              {isConfirm ? confirmLabel : confirmLabel || 'OK'}
             </button>
-          ) : null}
-          <button
-            ref={confirmRef}
-            type="button"
-            disabled={isPrompt && !value.trim()}
-            className={adminBtnPrimary}
-            onClick={() => {
-              if (isConfirm) onConfirm(isPrompt ? value.trim() : true)
-              else onClose?.()
-            }}
-          >
-            {isConfirm ? confirmLabel : confirmLabel || 'OK'}
-          </button>
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

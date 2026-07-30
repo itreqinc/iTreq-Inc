@@ -48,7 +48,7 @@ function rowInviteable(row) {
 }
 
 export function PortalInvitesPanel() {
-  const { showError, showSuccess, showWarning, confirm } = useOpsAlert()
+  const { showError, showSuccess, showWarning, confirm, runWithProgress } = useOpsAlert()
   const [pending, setPending] = useState([])
   const [notified, setNotified] = useState([])
   const [loading, setLoading] = useState(!AUTH_BYPASS)
@@ -168,15 +168,26 @@ export function PortalInvitesPanel() {
     let stubbed = 0
     const failures = []
     try {
-      for (const clientId of inviteable) {
-        const result = await inviteOne(clientId)
-        if (result.ok) {
-          sent += 1
-          if (result.stub) stubbed += 1
-        } else {
-          failures.push(result.message)
-        }
-      }
+      await runWithProgress({
+        title: resend ? 'Resending invites…' : 'Sending invites…',
+        items: inviteable,
+        getLabel: (clientId) => {
+          const row =
+            pending.find((r) => r.client_id === clientId) ||
+            notified.find((r) => r.client_id === clientId)
+          return row?.client_name || row?.email || 'Client'
+        },
+        fn: async (clientId) => {
+          const result = await inviteOne(clientId)
+          if (result.ok) {
+            sent += 1
+            if (result.stub) stubbed += 1
+          } else {
+            failures.push(result.message)
+          }
+          return result
+        },
+      })
     } finally {
       setBulkBusy(false)
     }

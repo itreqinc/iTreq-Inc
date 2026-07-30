@@ -1,3 +1,18 @@
+const MONTH_ABBR = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
+
 /** First-of-month billing_period → "July 2026". */
 export function formatBillingPeriodLabel(isoDate) {
   if (!isoDate) return ''
@@ -5,6 +20,15 @@ export function formatBillingPeriodLabel(isoDate) {
   if (!y || !m) return String(isoDate).slice(0, 10)
   const dt = new Date(Number(y), Number(m) - 1, 1)
   return dt.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+}
+
+/** First-of-month billing_period → "Jul 2026" (matches Postgres to_char Mon YYYY). */
+export function formatBillingPeriodMonthAbbr(isoDate) {
+  if (!isoDate) return ''
+  const y = String(isoDate).slice(0, 4)
+  const m = Number(String(isoDate).slice(5, 7))
+  if (!y || !m || m < 1 || m > 12) return ''
+  return `${MONTH_ABBR[m - 1]} ${y}`
 }
 
 /**

@@ -2,7 +2,7 @@ import { COMPANY } from '../data/site'
 import { documentLetterheadFromSettings } from './companyDocumentSettings'
 import { DEFAULT_QUOTATION_TERMS } from './quotationTerms'
 import { currencyDisplayLabel, formatDocMoney } from './money'
-import { formatBillingPeriodLabel } from './invoiceDates'
+import { formatBillingPeriodMonthAbbr } from './invoiceDates'
 
 export { formatDocMoney } from './money'
 
@@ -75,8 +75,8 @@ export function buildBillingDocumentModel({ type, doc, client, settings, product
   const taxRate = Number(settings?.default_tax_rate) || 0
   const title = documentTitle(type)
   const docNumber = doc.number || (type === 'quote' ? 'Draft' : 'Draft')
-  // Monthly-fee lines say "(monthly)" generically; show the billed month instead.
-  const billingMonthLabel = formatBillingPeriodLabel(doc.billing_period)
+  // Monthly-fee lines may still say "(monthly)"; show Mon YYYY (Jul 2026).
+  const billingMonthAbbr = formatBillingPeriodMonthAbbr(doc.billing_period)
   // Printables never include product SKU — description / qty / prices only.
   const lines = (doc.lines || []).map((line) => {
     let description = String(line.description || '').trim() || 'Item'
@@ -84,8 +84,8 @@ export function buildBillingDocumentModel({ type, doc, client, settings, product
     if (product?.sku && description === String(product.sku).trim()) {
       description = product.name || description
     }
-    if (billingMonthLabel) {
-      description = description.replace(/\(\s*monthly\s*\)/i, `(${billingMonthLabel})`)
+    if (billingMonthAbbr) {
+      description = description.replace(/\(\s*monthly\s*\)/i, `(${billingMonthAbbr})`)
     }
     return {
       description,

@@ -130,7 +130,7 @@ export default function InvoicesPage() {
   const { user } = useAuth()
   const [params, setParams] = useSearchParams()
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
-  const { showError, showSuccess, confirm } = useOpsAlert()
+  const { showError, showSuccess, confirm, runWithProgress } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [clients, setClients] = useState([])
   const [products, setProducts] = useState([])
@@ -455,14 +455,35 @@ export default function InvoicesPage() {
 
     setSaving(true)
     const issued = []
-    for (const id of idsToIssue) {
-      const { data, error } = await opsApi.issueInvoice(id)
-      if (error) {
-        setSaving(false)
-        showError(error.message)
-        return
+    try {
+      await runWithProgress({
+        title: 'Issuing invoices…',
+        items: idsToIssue,
+        getLabel: (id) => {
+          const row = rows.find((r) => r.id === id)
+          const client = row?.clients?.name || 'Client'
+          const doc = row?.number || 'Draft'
+          return `${client} · ${doc}`
+        },
+        fn: async (id) => {
+          const { data, error } = await opsApi.issueInvoice(id)
+          if (error) throw new Error(error.message)
+          if (data?.id) issued.push(data)
+          return data
+        },
+      })
+    } catch (err) {
+      setSaving(false)
+      if (issued.length) {
+        setRows((prev) => {
+          let next = prev
+          for (const inv of issued) next = upsertById(next, inv)
+          return next
+        })
+        setIssueSelectedIds((prev) => prev.filter((id) => !issued.some((inv) => inv.id === id)))
       }
-      if (data?.id) issued.push(data)
+      showError(err?.message || 'Could not issue invoices.')
+      return
     }
     setSaving(false)
 
