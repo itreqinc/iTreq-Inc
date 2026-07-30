@@ -1013,7 +1013,7 @@ export default function ClientsPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="statement-range-title"
-            className="relative w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-5 shadow-xl"
+            className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-ink-900 p-5 shadow-xl"
           >
             <h2 id="statement-range-title" className="text-base font-semibold text-white">
               Print statement
@@ -1022,16 +1022,20 @@ export default function ClientsPage() {
               Choose the period for{' '}
               <span className="text-ink-100">{stmtModalClient.name}</span>.
             </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 flex flex-wrap items-end gap-2.5">
               <YearMonthDaySelect
+                size="compact"
                 label="From"
                 value={stmtFrom}
                 onChange={setStmtFrom}
+                className="w-[14rem] shrink-0"
               />
               <YearMonthDaySelect
+                size="compact"
                 label="To"
                 value={stmtTo}
                 onChange={setStmtTo}
+                className="w-[14rem] shrink-0"
               />
             </div>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
