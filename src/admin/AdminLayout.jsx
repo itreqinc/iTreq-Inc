@@ -86,7 +86,7 @@ export function AdminLayout() {
   return (
     <OpsAlertProvider>
     <div className="min-h-screen overflow-x-clip bg-ink-950 text-ink-100">
-      <header className="relative z-40 border-b border-white/10 bg-ink-900/80">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-ink-900/95 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
             <div className="flex items-center justify-between gap-3 lg:justify-start">
@@ -200,7 +200,7 @@ export function AdminLayout() {
       ) : null}
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:grid lg:grid-cols-[220px_1fr] lg:gap-0">
-        <nav className="hidden space-y-1 lg:sticky lg:top-6 lg:block lg:self-start lg:border-r lg:border-white/10 lg:pr-6">
+        <nav className="hidden space-y-1 lg:sticky lg:top-24 lg:block lg:self-start lg:border-r lg:border-white/10 lg:pr-6">
           {nav.map((item) =>
             item.type === 'heading' ? (
               <p

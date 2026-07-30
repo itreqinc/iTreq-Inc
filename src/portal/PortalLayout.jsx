@@ -116,7 +116,7 @@ function PortalShell() {
 
   return (
     <div className="min-h-screen overflow-x-clip bg-ink-950 text-ink-100">
-      <header className="relative z-40 border-b border-white/10 bg-ink-900/80">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-ink-900/95 backdrop-blur-md">
         <div className="mx-auto max-w-5xl px-4 py-3 sm:px-6">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
             <div className="flex items-center justify-between gap-3 md:justify-start">
