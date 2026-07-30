@@ -14,7 +14,13 @@ import { portalQuoteAwaitingApproval,
   quotationDisplayStatus } from '../../lib/portalQuote'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
-import { ClientSelect } from '../ClientSelect'
+import { QuoteRecipientSelect } from '../QuoteRecipientSelect'
+import {
+  buildRecipientKey,
+  parseRecipientKey,
+  quotationRecipientName,
+  recipientKeyFromQuotation,
+} from '../../lib/quoteRecipient'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
@@ -42,7 +48,7 @@ import { adminBtnDanger,
 
 function snapshotQuotationForm(form) {
   return JSON.stringify({
-    client_id: form.client_id || '',
+    recipient_key: form.recipient_key || '',
     issue_date: form.issue_date || '',
     notes: form.notes || '',
     discount_amount: String(form.discount_amount ?? 0),
@@ -65,6 +71,7 @@ export default function QuotationsPage() {
   const [rows, setRows] = useState([])
   const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.quotations')
   const [clients, setClients] = useState([])
+  const [leads, setLeads] = useState([])
   const [products, setProducts] = useState([])
   const [trackableItems, setTrackableItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -75,7 +82,7 @@ export default function QuotationsPage() {
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [form, setForm] = useState({
     number: '',
-    client_id: '',
+    recipient_key: '',
     issue_date: new Date().toISOString().slice(0, 10),
     notes: '',
     status: 'draft',
@@ -87,9 +94,10 @@ export default function QuotationsPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [q, c, p, s, t] = await Promise.all([
+    const [q, c, l, p, s, t] = await Promise.all([
       opsApi.listQuotations(),
       opsApi.listClients({ activeOnly: true }),
+      opsApi.listLeads({ status: 'new' }),
       opsApi.listProducts({ activeOnly: true }),
       opsApi.getSettings(),
       opsApi.listTrackableItems({ withComponents: true }),
@@ -103,6 +111,7 @@ export default function QuotationsPage() {
     setClients(
       (c.data || []).filter((cl) => String(cl.id) !== String(ownClientId || '')),
     )
+    setLeads(l.data || [])
     setProducts(p.data || [])
     setTaxRate(Number(s.data?.default_tax_rate) || 0)
     if (t.error) showError(t.error.message)
@@ -113,10 +122,10 @@ export default function QuotationsPage() {
     load()
   }, [load])
 
-  function startNew() {
+  function startNew(prefillLeadId) {
     const nextForm = {
       number: '',
-      client_id: '',
+      recipient_key: prefillLeadId ? buildRecipientKey('lead', prefillLeadId) : '',
       issue_date: new Date().toISOString().slice(0, 10),
       notes: '',
       status: 'draft',
@@ -144,7 +153,7 @@ export default function QuotationsPage() {
       showError(err.message)
       return
     }
-    if (isBlocked(data.client_id)) {
+    if (data.client_id && isBlocked(data.client_id)) {
       showError(blockMessage())
       return
     }
@@ -160,7 +169,7 @@ export default function QuotationsPage() {
 
     const nextForm = {
       number: data.number || '',
-      client_id: data.client_id,
+      recipient_key: recipientKeyFromQuotation(data),
       issue_date: data.issue_date,
       notes: data.notes || '',
       status: data.status,
@@ -178,11 +187,19 @@ export default function QuotationsPage() {
 
   useEffect(() => {
     const openId = params.get('open')
-    if (!openId) return
-    openRow(openId).then(() => {
-      params.delete('open')
+    if (openId) {
+      openRow(openId).then(() => {
+        params.delete('open')
+        setParams(params, { replace: true })
+      })
+      return
+    }
+    const leadId = params.get('lead')
+    if (leadId) {
+      startNew(leadId)
+      params.delete('lead')
       setParams(params, { replace: true })
-    })
+    }
   }, [params, setParams])
 
   const isDirty = useMemo(
@@ -204,8 +221,10 @@ export default function QuotationsPage() {
     form.status === 'draft' &&
     !saving &&
     !readOnly
+  const recipient = parseRecipientKey(form.recipient_key)
   const canCreateInvoice =
     Boolean(editingId) &&
+    Boolean(recipient.client_id) &&
     !isDirty &&
     !saving &&
     !['converted', 'cancelled', 'declined'].includes(form.status)
@@ -246,7 +265,14 @@ export default function QuotationsPage() {
     setSaving(true)
     const { data: saved, error: err } = await opsApi.saveQuotation({
       id: editingId,
-      ...form,
+      client_id: recipient.client_id,
+      contact_submission_id: recipient.contact_submission_id,
+      issue_date: form.issue_date,
+      notes: form.notes,
+      status: form.status,
+      source: form.source,
+      discount_amount: form.discount_amount,
+      lines: form.lines,
     })
     setSaving(false)
     if (err) {
@@ -273,8 +299,14 @@ export default function QuotationsPage() {
     setSaving(true)
     const { data: saved, error: err } = await opsApi.saveQuotation({
       id: editingId,
-      ...form,
+      client_id: recipient.client_id,
+      contact_submission_id: recipient.contact_submission_id,
+      issue_date: form.issue_date,
+      notes: form.notes,
       status: 'accepted',
+      source: form.source,
+      discount_amount: form.discount_amount,
+      lines: form.lines,
     })
     setSaving(false)
     if (err) {
@@ -438,14 +470,15 @@ export default function QuotationsPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Client *
+                Client or lead *
               </span>
-              <ClientSelect
+              <QuoteRecipientSelect
                 required
                 disabled={readOnly}
                 clients={clients}
-                value={form.client_id}
-                onChange={(client_id) => setForm((f) => ({ ...f, client_id }))}
+                leads={leads}
+                value={form.recipient_key}
+                onChange={(recipient_key) => setForm((f) => ({ ...f, recipient_key }))}
               />
             </label>
             <YearMonthDaySelect
@@ -533,6 +566,8 @@ export default function QuotationsPage() {
               title={
                 !editingId
                   ? 'Save this quotation first'
+                  : !recipient.client_id
+                    ? 'Convert this lead to a client before creating an invoice'
                   : isDirty
                     ? 'Save your changes before creating an invoice'
                     : readOnly
@@ -612,7 +647,7 @@ export default function QuotationsPage() {
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
               <th className="px-4 py-3">Number</th>
-              <th className="px-4 py-3">Client</th>
+              <th className="px-4 py-3">Client / lead</th>
               <th className={`px-4 py-3 ${adminColSecondary}`}>Date</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Total</th>
@@ -652,7 +687,7 @@ export default function QuotationsPage() {
                     <span className={clickableDocClass}>{row.number || '—'}</span>
                   </td>
                   <td className="min-w-0 break-words px-4 py-3 text-ink-300">
-                    {row.clients?.name || '—'}
+                    {quotationRecipientName(row)}
                   </td>
                   <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>{row.issue_date}</td>
                   <td className="px-4 py-3 text-ink-300">

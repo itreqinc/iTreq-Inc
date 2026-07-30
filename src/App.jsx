@@ -5,6 +5,7 @@ import { AdminOnlyRoute } from './components/AdminOnlyRoute'
 import { AdminLayout } from './admin/AdminLayout'
 import AdminDashboard from './admin/pages/Dashboard'
 import ClientsPage from './admin/pages/Clients'
+import LeadsPage from './admin/pages/Leads'
 import ProductsPage from './admin/pages/Products'
 import StockPage from './admin/pages/Stock'
 import SettingsPage from './admin/pages/Settings'
@@ -71,6 +72,7 @@ export default function App() {
       >
         <Route index element={<AdminDashboard />} />
         <Route path="clients" element={<ClientsPage />} />
+        <Route path="leads" element={<LeadsPage />} />
         <Route
           path="stock"
           element={

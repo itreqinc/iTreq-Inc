@@ -221,6 +221,50 @@ function formToClientRow(form: Record<string, unknown>) {
   }
 }
 
+function formToLeadRow(form: Record<string, unknown>) {
+  const base = formToClientRow(form)
+  return {
+    ...base,
+    phone: base.phone || base.cellphone,
+  }
+}
+
+function leadToBillingClient(lead: Record<string, unknown>) {
+  return {
+    id: lead.id,
+    name: lead.name,
+    email: lead.email,
+    phone: lead.cellphone || lead.phone,
+    cellphone: lead.cellphone || lead.phone,
+    landline: lead.landline,
+    postal_address: lead.postal_address,
+    physical_address: lead.physical_address || lead.address,
+    address: lead.physical_address || lead.address,
+    id_number: lead.id_number,
+    country: lead.country,
+    first_name: lead.first_name,
+    middle_name: lead.middle_name,
+    surname: lead.surname,
+    gender: lead.gender,
+    notes: lead.notes,
+  }
+}
+
+async function getLeadInternal(sb: SupabaseClient, id: string) {
+  const { data, error } = await sb.from('contact_submissions').select('*').eq('id', id).single()
+  if (error) throw mapDbError(error)
+  return data as Record<string, unknown>
+}
+
+async function leadHasQuotations(sb: SupabaseClient, leadId: string) {
+  const { count, error } = await sb
+    .from('quotations')
+    .select('id', { count: 'exact', head: true })
+    .eq('contact_submission_id', leadId)
+  if (error) throw mapDbError(error)
+  return (count || 0) > 0
+}
+
 function assertAdminUser(user: UserRow) {
   if (!isAdmin(user)) throw new OpsError('Admin access required for this action.', 403)
 }
@@ -351,7 +395,7 @@ async function listProductsInternal(
 async function getQuotationInternal(sb: SupabaseClient, id: string) {
   const { data: quotation, error } = await sb
     .from('quotations')
-    .select('*, clients(name)')
+    .select('*, clients(name), contact_submissions(name)')
     .eq('id', id)
     .single()
   if (error) throw mapDbError(error)
@@ -525,6 +569,7 @@ async function saveQuotationInternal(
   const {
     id,
     client_id,
+    contact_submission_id,
     issue_date,
     notes,
     status,
@@ -535,7 +580,10 @@ async function saveQuotationInternal(
   const settings = await getSettingsInternal(sb)
   const taxRate = Number(settings.default_tax_rate) || 0
   const normalized = normalizeLines(lines as unknown[])
-  if (!client_id) throw new OpsError('Please select a client.')
+  const hasClient = Boolean(client_id)
+  const hasLead = Boolean(contact_submission_id)
+  if (!hasClient && !hasLead) throw new OpsError('Please select a client or lead.')
+  if (hasClient && hasLead) throw new OpsError('Select either a client or a lead, not both.')
   if (!normalized.length) throw new OpsError('Add at least one line item.')
   const totals = calcDocTotals(normalized, taxRate, Number(discount_amount) || 0)
   const docSource = source === 'portal' ? 'portal' : 'staff'
@@ -552,7 +600,8 @@ async function saveQuotationInternal(
     const { error } = await sb
       .from('quotations')
       .update({
-        client_id,
+        client_id: hasClient ? String(client_id) : null,
+        contact_submission_id: hasLead ? String(contact_submission_id) : null,
         issue_date: issue_date || existing.issue_date,
         notes: notes ? String(notes).trim() : null,
         status: status || existing.status,
@@ -571,7 +620,8 @@ async function saveQuotationInternal(
     const { data, error } = await sb
       .from('quotations')
       .insert({
-        client_id,
+        client_id: hasClient ? String(client_id) : null,
+        contact_submission_id: hasLead ? String(contact_submission_id) : null,
         number,
         issue_date: issue_date || localTodayIso(),
         notes: notes ? String(notes).trim() : null,
@@ -692,7 +742,15 @@ async function getBillingDocumentBundleInternal(
     type === 'quote'
       ? await getQuotationInternal(sb, id)
       : await getInvoiceInternal(sb, id)
-  const client = await getClientInternal(sb, String(doc.client_id))
+  let client: Record<string, unknown>
+  if (doc.client_id) {
+    client = await getClientInternal(sb, String(doc.client_id))
+  } else if (type === 'quote' && doc.contact_submission_id) {
+    const lead = await getLeadInternal(sb, String(doc.contact_submission_id))
+    client = leadToBillingClient(lead)
+  } else {
+    throw new OpsError('Document has no recipient.')
+  }
 
   let paidDate: string | null = null
   if (type === 'invoice' && doc.status === 'paid') {
@@ -980,6 +1038,110 @@ handlers.set_client_active = async ({ sb }, args) => {
     .single()
   if (error) throw mapDbError(error)
   return data
+}
+
+handlers.list_leads = async ({ sb }, args) => {
+  const { status } = (args[0] || {}) as { status?: string }
+  let query = sb.from('contact_submissions').select('*').order('created_at', { ascending: false })
+  if (status) query = query.eq('status', status)
+  const { data, error } = await query
+  if (error) throw mapDbError(error)
+  return data || []
+}
+
+handlers.get_lead = async ({ sb }, args) => {
+  const id = String(args[0] || '')
+  return getLeadInternal(sb, id)
+}
+
+handlers.create_lead = async ({ sb }, args) => {
+  const form = (args[0] || {}) as Record<string, unknown>
+  const displayName = buildClientDisplayName(form)
+  if (!displayName) throw new OpsError('First name or surname is required.')
+  const { data, error } = await sb
+    .from('contact_submissions')
+    .insert({ ...formToLeadRow(form), status: 'new' })
+    .select()
+    .single()
+  if (error) throw mapDbError(error)
+  return data
+}
+
+handlers.update_lead = async ({ sb }, args) => {
+  const id = String(args[0] || '')
+  const form = (args[1] || {}) as Record<string, unknown>
+  const displayName = buildClientDisplayName(form)
+  if (!displayName) throw new OpsError('First name or surname is required.')
+  const { data, error } = await sb
+    .from('contact_submissions')
+    .update({ ...formToLeadRow(form), updated_at: nowIso() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw mapDbError(error)
+  return data
+}
+
+handlers.dismiss_lead = async ({ sb }, args) => {
+  const id = String(args[0] || '')
+  const { data, error } = await sb
+    .from('contact_submissions')
+    .update({ status: 'dismissed', updated_at: nowIso() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw mapDbError(error)
+  return data
+}
+
+handlers.convert_lead_to_client = async ({ sb }, args) => {
+  const id = String(args[0] || '')
+  const lead = await getLeadInternal(sb, id)
+  if (String(lead.status) === 'converted' && lead.converted_client_id) {
+    return getClientInternal(sb, String(lead.converted_client_id))
+  }
+
+  const row = formToClientRow(lead)
+  const { data: client, error } = await sb
+    .from('clients')
+    .insert({ ...row, contact_submission_id: id })
+    .select()
+    .single()
+  if (error) throw mapDbError(error)
+
+  const { error: leadErr } = await sb
+    .from('contact_submissions')
+    .update({
+      status: 'converted',
+      converted_client_id: client.id,
+      updated_at: nowIso(),
+    })
+    .eq('id', id)
+  if (leadErr) throw mapDbError(leadErr)
+
+  const { error: quoteErr } = await sb
+    .from('quotations')
+    .update({
+      client_id: client.id,
+      contact_submission_id: null,
+      updated_at: nowIso(),
+    })
+    .eq('contact_submission_id', id)
+  if (quoteErr) throw mapDbError(quoteErr)
+
+  return client
+}
+
+handlers.delete_lead = async ({ user, sb }, args) => {
+  assertAdminUser(user)
+  const id = String(args[0] || '')
+  if (!id) throw new OpsError('Lead id is required.')
+  if (await leadHasQuotations(sb, id)) {
+    throw new OpsError('This lead has quotations. Convert to a client or delete the quotations first.')
+  }
+  const { error } = await sb.from('contact_submissions').delete().eq('id', id)
+  if (error) throw mapDbError(error)
+  return { ok: true }
 }
 
 handlers.list_products = async ({ sb }, args) => {
@@ -1758,7 +1920,7 @@ handlers.list_quotations = async ({ sb }, args) => {
   const { client_id } = (args[0] || {}) as { client_id?: string }
   let query = sb
     .from('quotations')
-    .select('*, clients(name)')
+    .select('*, clients(name), contact_submissions(name)')
     .order('created_at', { ascending: false })
   if (client_id) query = query.eq('client_id', client_id)
   const { data, error } = await query
@@ -1816,6 +1978,9 @@ handlers.mark_quotation_sent = async ({ sb }, args) => {
 handlers.convert_quotation_to_invoice = async ({ user, sb }, args) => {
   const quotationId = String(args[0] || '')
   const quote = await getQuotationInternal(sb, quotationId)
+  if (!quote.client_id) {
+    throw new OpsError('Convert this lead to a client before creating an invoice.')
+  }
   assertNotOwnClient(user, String(quote.client_id))
   if (quote.status === 'converted') {
     throw new OpsError('This quotation was already converted.')

@@ -1,7 +1,7 @@
 import { isSupabaseConfigured, supabase } from './supabase'
 import { invokeFn } from './invokeFn'
 import { AUTH_BYPASS, isAdmin, readSessionRole } from './authConfig'
-import { buildClientDisplayName, formToClientRow } from './clientRegistration'
+import { buildClientDisplayName, formToClientRow, formToContactSubmissionRow } from './clientRegistration'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
 import { preparePaymentDocumentBundle } from './paymentDocument'
@@ -158,6 +158,121 @@ const directOpsApi = {
   },
 
   // --- Clients ---
+
+  async listLeads({ status } = {}) {
+    if (!supabase) return dbUnavailable()
+    let q = supabase.from('contact_submissions').select('*').order('created_at', { ascending: false })
+    if (status) q = q.eq('status', status)
+    const { data, error } = await q
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async getLead(id) {
+    if (!supabase) return dbUnavailable()
+    const { data, error } = await supabase.from('contact_submissions').select('*').eq('id', id).single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async createLead(form) {
+    if (!supabase) return dbUnavailable()
+    const displayName = buildClientDisplayName(form)
+    if (!displayName) return { data: null, error: { message: 'First name or surname is required.' } }
+    const row = formToContactSubmissionRow(form)
+    const { data, error } = await supabase
+      .from('contact_submissions')
+      .insert({ ...row, phone: row.phone || row.cellphone, status: 'new' })
+      .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async updateLead(id, form) {
+    if (!supabase) return dbUnavailable()
+    const displayName = buildClientDisplayName(form)
+    if (!displayName) return { data: null, error: { message: 'First name or surname is required.' } }
+    const row = formToContactSubmissionRow(form)
+    const { data, error } = await supabase
+      .from('contact_submissions')
+      .update({ ...row, phone: row.phone || row.cellphone, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async dismissLead(id) {
+    if (!supabase) return dbUnavailable()
+    const { data, error } = await supabase
+      .from('contact_submissions')
+      .update({ status: 'dismissed', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
+  async convertLeadToClient(id) {
+    if (!supabase) return dbUnavailable()
+    const leadRes = await this.getLead(id)
+    if (leadRes.error) return leadRes
+    const lead = leadRes.data
+    if (lead.status === 'converted' && lead.converted_client_id) {
+      return this.getClient(lead.converted_client_id)
+    }
+    const row = formToClientRow(lead)
+    const { data: client, error } = await supabase
+      .from('clients')
+      .insert({ ...row, contact_submission_id: id })
+      .select()
+      .single()
+    if (error) return mapError(error)
+    const { error: leadErr } = await supabase
+      .from('contact_submissions')
+      .update({
+        status: 'converted',
+        converted_client_id: client.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (leadErr) return mapError(leadErr)
+    const { error: quoteErr } = await supabase
+      .from('quotations')
+      .update({
+        client_id: client.id,
+        contact_submission_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('contact_submission_id', id)
+    if (quoteErr) return mapError(quoteErr)
+    return { data: client, error: null }
+  },
+
+  async deleteLead(id) {
+    if (!assertAdmin()) return adminRequired()
+    if (!supabase) return dbUnavailable()
+    const { count, error: countErr } = await supabase
+      .from('quotations')
+      .select('id', { count: 'exact', head: true })
+      .eq('contact_submission_id', id)
+    if (countErr) return mapError(countErr)
+    if ((count || 0) > 0) {
+      return {
+        data: null,
+        error: {
+          message:
+            'This lead has quotations. Convert to a client or delete the quotations first.',
+        },
+      }
+    }
+    const { error } = await supabase.from('contact_submissions').delete().eq('id', id)
+    if (error) return mapError(error)
+    return { data: { ok: true }, error: null }
+  },
 
   async listClients({ activeOnly = false } = {}) {
     if (!supabase) return dbUnavailable()
@@ -1343,7 +1458,7 @@ const directOpsApi = {
     if (!supabase) return dbUnavailable()
     let query = supabase
       .from('quotations')
-      .select('*, clients(name)')
+      .select('*, clients(name), contact_submissions(name)')
       .order('created_at', { ascending: false })
     if (client_id) query = query.eq('client_id', client_id)
     const { data, error } = await query
@@ -1355,7 +1470,7 @@ const directOpsApi = {
     if (!supabase) return dbUnavailable()
     const { data: quotation, error } = await supabase
       .from('quotations')
-      .select('*, clients(name)')
+      .select('*, clients(name), contact_submissions(name)')
       .eq('id', id)
       .single()
     if (error) return mapError(error)
@@ -1383,6 +1498,7 @@ const directOpsApi = {
   async saveQuotation({
     id,
     client_id,
+    contact_submission_id,
     issue_date,
     notes,
     status,
@@ -1394,8 +1510,13 @@ const directOpsApi = {
     const settingsRes = await this.getSettings()
     const taxRate = settingsRes.data?.default_tax_rate ?? 0
     const normalized = normalizeLines(lines)
-    if (!client_id) {
-      return { data: null, error: { message: 'Please select a client.' } }
+    const hasClient = Boolean(client_id)
+    const hasLead = Boolean(contact_submission_id)
+    if (!hasClient && !hasLead) {
+      return { data: null, error: { message: 'Please select a client or lead.' } }
+    }
+    if (hasClient && hasLead) {
+      return { data: null, error: { message: 'Select either a client or a lead, not both.' } }
     }
     if (!normalized.length) {
       return { data: null, error: { message: 'Add at least one line item.' } }
@@ -1416,7 +1537,8 @@ const directOpsApi = {
       const { error } = await supabase
         .from('quotations')
         .update({
-          client_id,
+          client_id: hasClient ? client_id : null,
+          contact_submission_id: hasLead ? contact_submission_id : null,
           issue_date: issue_date || existing.data.issue_date,
           notes: notes?.trim() || null,
           status: status || existing.data.status,
@@ -1436,7 +1558,8 @@ const directOpsApi = {
       const { data, error } = await supabase
         .from('quotations')
         .insert({
-          client_id,
+          client_id: hasClient ? client_id : null,
+          contact_submission_id: hasLead ? contact_submission_id : null,
           number,
           issue_date: issue_date || new Date().toISOString().slice(0, 10),
           notes: notes?.trim() || null,

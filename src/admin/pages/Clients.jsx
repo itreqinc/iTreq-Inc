@@ -20,7 +20,7 @@ import {
   fillStatementDocumentPrintWindow,
   prepareStatementDocument,
   } from '../../lib/statementDocument'
-import { CountryPhoneInput } from '../../components/CountryPhoneInput'
+import { ClientRegistrationFields } from '../../components/ClientRegistrationFields'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
@@ -183,10 +183,6 @@ export default function ClientsPage() {
       setSelectedId(filteredClients[0]?.id || null)
     }
   }, [view, filteredClients, selectedId])
-
-  function setField(key, value) {
-    setForm((f) => ({ ...f, [key]: value }))
-  }
 
   function startNew() {
     setEditingId(null)
@@ -556,135 +552,7 @@ export default function ClientsPage() {
               Close
             </button>
           </div>
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  First name *
-                </span>
-                <input
-                  required
-                  className={adminFieldClass}
-                  value={form.first_name}
-                  onChange={(e) => setField('first_name', e.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Middle name
-                </span>
-                <input
-                  className={adminFieldClass}
-                  value={form.middle_name}
-                  onChange={(e) => setField('middle_name', e.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Surname *
-                </span>
-                <input
-                  required
-                  className={adminFieldClass}
-                  value={form.surname}
-                  onChange={(e) => setField('surname', e.target.value)}
-                />
-              </label>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="block w-fit shrink-0">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Gender / sex
-                </span>
-                <select
-                  className={`${adminFieldClass} w-[4.5rem] min-w-0 px-2`}
-                  value={form.gender}
-                  onChange={(e) => setField('gender', e.target.value)}
-                >
-                  <option value="">—</option>
-                  <option value="M">M</option>
-                  <option value="F">F</option>
-                </select>
-              </label>
-              <label className="block min-w-0 flex-1">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  ID / Passport number *
-                </span>
-                <input
-                  required
-                  className={adminFieldClass}
-                  value={form.id_number}
-                  onChange={(e) => setField('id_number', e.target.value)}
-                />
-              </label>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="sm:col-span-2 lg:col-span-3">
-                <CountryPhoneInput
-                  required
-                  country={form.country}
-                  phone={form.cellphone}
-                  onChange={({ country, phone }) =>
-                    setForm((f) => ({ ...f, country, cellphone: phone }))
-                  }
-                />
-              </div>
-
-              <label className="block sm:col-span-2">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Email *
-                </span>
-                <input
-                  required
-                  type="email"
-                  className={adminFieldClass}
-                  value={form.email}
-                  onChange={(e) => setField('email', e.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Landline
-                </span>
-                <input
-                  className={adminFieldClass}
-                  value={form.landline}
-                  onChange={(e) => setField('landline', e.target.value)}
-                />
-              </label>
-              <label className="block sm:col-span-2 lg:col-span-3">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Postal address
-                </span>
-                <input
-                  className={adminFieldClass}
-                  value={form.postal_address}
-                  onChange={(e) => setField('postal_address', e.target.value)}
-                />
-              </label>
-              <label className="block sm:col-span-2 lg:col-span-3">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Physical address
-                </span>
-                <input
-                  className={adminFieldClass}
-                  value={form.physical_address}
-                  onChange={(e) => setField('physical_address', e.target.value)}
-                />
-              </label>
-              <label className="block sm:col-span-2 lg:col-span-3">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Notes</span>
-                <textarea
-                  rows={2}
-                  className={`${adminFieldClass} resize-y`}
-                  value={form.notes}
-                  onChange={(e) => setField('notes', e.target.value)}
-                />
-              </label>
-            </div>
-          </div>
+          <ClientRegistrationFields form={form} setForm={setForm} fieldClass={adminFieldClass} />
           <div className="flex flex-wrap gap-2">
             <button type="submit" disabled={saving} className={adminBtnPrimary}>
               {saving ? 'Saving…' : editingId ? 'Update client' : 'Add client'}

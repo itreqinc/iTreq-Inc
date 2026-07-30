@@ -9,6 +9,7 @@ import { OpsAlertProvider } from './OpsAlertContext'
 const navItems = [
   { to: '/admin', label: 'Dashboard', end: true },
   { to: '/admin/clients', label: 'Clients' },
+  { to: '/admin/leads', label: 'Leads' },
   { to: '/admin/staff', label: 'Staff', adminOnly: true },
   { to: '/admin/stock', label: 'Stock', adminOnly: true },
   { type: 'heading', label: 'Catalog' },

@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { PageHero } from '../components/PageHero'
+import { ClientRegistrationFields } from '../components/ClientRegistrationFields'
 import { COMPANY } from '../data/site'
+import { emptyClientForm, formToContactSubmissionRow } from '../lib/clientRegistration'
+import { validateClientForm } from '../lib/clientValidation'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const contactCards = [
@@ -42,22 +45,17 @@ export default function Contact() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    interest: 'Vehicle GPS Tracking',
-    message: '',
-  })
-
-  function handleChange(e) {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
-  }
+  const [form, setForm] = useState(emptyClientForm)
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+
+    const check = validateClientForm(form)
+    if (!check.ok) {
+      setError(check.message)
+      return
+    }
 
     if (!isSupabaseConfigured || !supabase) {
       setError(
@@ -67,12 +65,12 @@ export default function Contact() {
     }
 
     setSubmitting(true)
+    const row = formToContactSubmissionRow(form)
     const { error: insertError } = await supabase.from('contact_submissions').insert({
-      name: form.name.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      interest: form.interest,
-      message: form.message.trim(),
+      ...row,
+      phone: row.phone || row.cellphone,
+      interest: null,
+      message: null,
     })
     setSubmitting(false)
 
@@ -142,9 +140,9 @@ export default function Contact() {
                 <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500/15 text-brand-400">
                   <Icon name="check" className="h-7 w-7" />
                 </div>
-                <h2 className="font-display text-2xl font-bold text-white">Message received</h2>
+                <h2 className="font-display text-2xl font-bold text-white">Request received</h2>
                 <p className="mt-3 max-w-sm text-ink-300">
-                  Thanks for reaching out. We’ve saved your request and will follow up as soon as
+                  Thanks for reaching out. We’ve saved your details and will follow up as soon as
                   we can.
                 </p>
                 <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -161,85 +159,11 @@ export default function Contact() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <h2 className="font-display text-2xl font-bold text-white">Request a quote</h2>
                 <p className="text-sm text-ink-300">
-                  Fill in your details and we&apos;ll follow up with options for your needs.
+                  Fill in your details — the same information we keep on file for clients — and
+                  we&apos;ll follow up with options for your needs.
                 </p>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block sm:col-span-1">
-                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-400">
-                      Name
-                    </span>
-                    <input
-                      required
-                      name="name"
-                      value={form.name}
-                      onChange={handleChange}
-                      className={fieldClass}
-                      placeholder="Your name"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-400">
-                      Phone
-                    </span>
-                    <input
-                      required
-                      name="phone"
-                      value={form.phone}
-                      onChange={handleChange}
-                      className={fieldClass}
-                      placeholder="+267 ..."
-                    />
-                  </label>
-                </div>
-
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-400">
-                    Email
-                  </span>
-                  <input
-                    required
-                    type="email"
-                    name="email"
-                    value={form.email}
-                    onChange={handleChange}
-                    className={fieldClass}
-                    placeholder="you@example.com"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-400">
-                    Interested in
-                  </span>
-                  <select
-                    name="interest"
-                    value={form.interest}
-                    onChange={handleChange}
-                    className={fieldClass}
-                  >
-                    <option>Vehicle GPS Tracking</option>
-                    <option>Asset Tracking</option>
-                    <option>Fleet Monitoring</option>
-                    <option>Recovery Support</option>
-                    <option>Not sure yet</option>
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-400">
-                    Message
-                  </span>
-                  <textarea
-                    required
-                    name="message"
-                    rows={4}
-                    value={form.message}
-                    onChange={handleChange}
-                    className={`${fieldClass} resize-y`}
-                    placeholder="Tell us what you'd like to track..."
-                  />
-                </label>
+                <ClientRegistrationFields form={form} setForm={setForm} fieldClass={fieldClass} />
 
                 {error ? (
                   <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -248,7 +172,7 @@ export default function Contact() {
                 ) : null}
 
                 <Button type="submit" className="w-full sm:w-auto" disabled={submitting}>
-                  {submitting ? 'Sending…' : 'Send message'}
+                  {submitting ? 'Sending…' : 'Submit request'}
                 </Button>
               </form>
             )}

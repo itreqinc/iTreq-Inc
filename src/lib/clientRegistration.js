@@ -57,6 +57,10 @@ export function clientToForm(client) {
   }
 }
 
+/** Leads use the same registration shape as clients. */
+export const contactSubmissionToForm = clientToForm
+export const formToContactSubmissionRow = formToClientRow
+
 export function formToClientRow(form) {
   const displayName = buildClientDisplayName(form)
   const cellphone = form.cellphone?.trim() || null
