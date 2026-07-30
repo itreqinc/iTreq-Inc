@@ -949,6 +949,8 @@ async function handleListPortalInvites(
   for (const c of clients || []) {
     const email = String(c.email || '').trim()
     if (!email) continue
+    // Office placeholder used when the client had no personal email — not inviteable.
+    if (email.toLowerCase().replace(/\s+/g, '') === 'info@itreqinc.com') continue
     const u = byClient.get(c.id)
     if (!u) {
       pending.push({

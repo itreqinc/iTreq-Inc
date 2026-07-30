@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { authAction } from '../../lib/authApi'
 import { AUTH_BYPASS } from '../../lib/authConfig'
-import { canSendPortalInviteEmail } from '../../lib/portalInvite'
+import {
+  canSendPortalInviteEmail,
+  isOfficePlaceholderEmail,
+} from '../../lib/portalInvite'
 import { DetailsCollapse } from '../../components/DetailsCollapse'
 import { AdminIconAction } from '../AdminIconAction'
 import { useOpsAlert } from '../OpsAlertContext'
@@ -44,7 +47,12 @@ function toggleId(list, id, checked) {
 }
 
 function rowInviteable(row) {
-  return canSendPortalInviteEmail(row.email)
+  return canSendPortalInviteEmail(row?.email)
+}
+
+/** Invite candidates only — office-placeholder emails are excluded from the list. */
+function inviteListRows(rows) {
+  return (rows || []).filter((row) => !isOfficePlaceholderEmail(row?.email))
 }
 
 export function PortalInvitesPanel() {
@@ -57,21 +65,13 @@ export function PortalInvitesPanel() {
   const [selectedPending, setSelectedPending] = useState([])
   const [selectedNotified, setSelectedNotified] = useState([])
 
-  const inviteablePendingIds = useMemo(
-    () => pending.filter(rowInviteable).map((r) => r.client_id),
-    [pending],
-  )
-  const inviteableNotifiedIds = useMemo(
-    () => notified.filter(rowInviteable).map((r) => r.client_id),
-    [notified],
-  )
+  const pendingIds = useMemo(() => pending.map((r) => r.client_id), [pending])
+  const notifiedIds = useMemo(() => notified.map((r) => r.client_id), [notified])
 
   const allPendingSelected =
-    inviteablePendingIds.length > 0 &&
-    inviteablePendingIds.every((id) => selectedPending.includes(id))
+    pendingIds.length > 0 && pendingIds.every((id) => selectedPending.includes(id))
   const allNotifiedSelected =
-    inviteableNotifiedIds.length > 0 &&
-    inviteableNotifiedIds.every((id) => selectedNotified.includes(id))
+    notifiedIds.length > 0 && notifiedIds.every((id) => selectedNotified.includes(id))
 
   const load = useCallback(async () => {
     if (AUTH_BYPASS) {
@@ -85,18 +85,14 @@ export function PortalInvitesPanel() {
       showError(error?.message || data?.message || 'Could not load portal invites')
       return
     }
-    const nextPending = data.pending || []
-    const nextNotified = data.notified || []
+    const nextPending = inviteListRows(data.pending)
+    const nextNotified = inviteListRows(data.notified)
     setPending(nextPending)
     setNotified(nextNotified)
-    const pendingInviteable = new Set(
-      nextPending.filter(rowInviteable).map((r) => r.client_id),
-    )
-    const notifiedInviteable = new Set(
-      nextNotified.filter(rowInviteable).map((r) => r.client_id),
-    )
-    setSelectedPending((prev) => prev.filter((id) => pendingInviteable.has(id)))
-    setSelectedNotified((prev) => prev.filter((id) => notifiedInviteable.has(id)))
+    const pendingSet = new Set(nextPending.map((r) => r.client_id))
+    const notifiedSet = new Set(nextNotified.map((r) => r.client_id))
+    setSelectedPending((prev) => prev.filter((id) => pendingSet.has(id)))
+    setSelectedNotified((prev) => prev.filter((id) => notifiedSet.has(id)))
   }, [showError])
 
   useEffect(() => {
@@ -119,7 +115,7 @@ export function PortalInvitesPanel() {
     const row =
       pending.find((r) => r.client_id === clientId) ||
       notified.find((r) => r.client_id === clientId)
-    if (row && !rowInviteable(row)) {
+    if (!row || !rowInviteable(row)) {
       showError(
         'This client uses the office email placeholder and cannot receive a portal invite. Add their real email first.',
       )
@@ -156,14 +152,9 @@ export function PortalInvitesPanel() {
       }
       return
     }
-    const skipped = ids.length - inviteable.length
     const ok = await confirm({
       title: resend ? 'Resend selected invites?' : 'Invite selected clients?',
-      message:
-        `${inviteable.length} client${inviteable.length === 1 ? '' : 's'} will receive portal login details.` +
-        (skipped
-          ? ` ${skipped} with the office email will be skipped.`
-          : ''),
+      message: `${inviteable.length} client${inviteable.length === 1 ? '' : 's'} will receive portal login details.`,
       confirmLabel: resend ? 'Resend invites' : 'Send invites',
     })
     if (!ok) return
@@ -215,8 +206,8 @@ export function PortalInvitesPanel() {
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-lg font-semibold text-white">Portal invites</h2>
           <p className="mt-1 text-sm text-ink-400">
-            Send portal login details and track who still needs to sign in. Clients on the office
-            email are skipped.
+            Send portal login details and track who still needs to sign in. Clients on{' '}
+            <span className="text-ink-300">info@itreqinc.com</span> are omitted.
           </p>
         </div>
         <DetailsChevron className="mt-1" />
@@ -233,7 +224,7 @@ export function PortalInvitesPanel() {
           <p className="text-sm text-ink-400">Loading invite status…</p>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
-            <DetailsCollapse className={detailsClass}>
+            <DetailsCollapse constrainBody={false} className={detailsClass}>
               <summary className={summaryClass}>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-ink-200">
@@ -264,30 +255,29 @@ export function PortalInvitesPanel() {
                     </button>
                   </div>
                 ) : null}
-                <div className={adminTableShellClass}>
-                  <table className="w-full text-left text-sm">
-                    <thead className="border-b border-white/10 text-ink-400">
+                <div className={`${adminTableShellClass} max-h-[min(50vh,28rem)] overflow-y-auto`}>
+                  <table className="w-full min-w-[28rem] text-left text-sm">
+                    <thead className="sticky top-0 z-10 border-b border-white/10 bg-ink-950 text-ink-400">
                       <tr>
                         <th className="w-10 px-3 py-2">
                           <input
                             type="checkbox"
                             aria-label="Select all clients to invite"
                             checked={allPendingSelected}
-                            disabled={anyBusy || inviteablePendingIds.length === 0}
+                            disabled={anyBusy || pendingIds.length === 0}
                             onChange={(e) => {
-                              if (e.target.checked) setSelectedPending(inviteablePendingIds)
+                              if (e.target.checked) setSelectedPending(pendingIds)
                               else setSelectedPending([])
                             }}
                           />
                         </th>
                         <th className="px-3 py-2">Client</th>
                         <th className="px-3 py-2">Email</th>
-                        <th className="px-3 py-2" />
+                        <th className="w-12 px-3 py-2" />
                       </tr>
                     </thead>
                     <tbody>
                       {pending.map((row) => {
-                        const inviteable = rowInviteable(row)
                         const checked = selectedPending.includes(row.client_id)
                         return (
                           <tr key={row.client_id} className="border-b border-white/5">
@@ -296,12 +286,7 @@ export function PortalInvitesPanel() {
                                 type="checkbox"
                                 aria-label={`Select ${row.client_name}`}
                                 checked={checked}
-                                disabled={anyBusy || !inviteable}
-                                title={
-                                  inviteable
-                                    ? undefined
-                                    : 'Office email — add the client’s real email to invite'
-                                }
+                                disabled={anyBusy}
                                 onChange={(e) =>
                                   setSelectedPending((prev) =>
                                     toggleId(prev, row.client_id, e.target.checked),
@@ -310,23 +295,14 @@ export function PortalInvitesPanel() {
                               />
                             </td>
                             <td className="px-3 py-2 text-white">{row.client_name}</td>
-                            <td className="px-3 py-2 text-ink-300">
-                              {row.email}
-                              {!inviteable ? (
-                                <span className="mt-0.5 block text-xs text-ink-500">
-                                  Office placeholder — no invite
-                                </span>
-                              ) : null}
-                            </td>
+                            <td className="break-all px-3 py-2 text-ink-300">{row.email}</td>
                             <td className="px-3 py-2 text-right">
-                              {inviteable ? (
-                                <AdminIconAction
-                                  label="Invite"
-                                  icon="mail"
-                                  disabled={anyBusy}
-                                  onClick={() => invite(row.client_id)}
-                                />
-                              ) : null}
+                              <AdminIconAction
+                                label="Invite"
+                                icon="mail"
+                                disabled={anyBusy}
+                                onClick={() => invite(row.client_id)}
+                              />
                             </td>
                           </tr>
                         )
@@ -344,7 +320,7 @@ export function PortalInvitesPanel() {
               </div>
             </DetailsCollapse>
 
-            <DetailsCollapse className={detailsClass}>
+            <DetailsCollapse constrainBody={false} className={detailsClass}>
               <summary className={summaryClass}>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-ink-200">
@@ -375,30 +351,29 @@ export function PortalInvitesPanel() {
                     </button>
                   </div>
                 ) : null}
-                <div className={adminTableShellClass}>
-                  <table className="w-full text-left text-sm">
-                    <thead className="border-b border-white/10 text-ink-400">
+                <div className={`${adminTableShellClass} max-h-[min(50vh,28rem)] overflow-y-auto`}>
+                  <table className="w-full min-w-[28rem] text-left text-sm">
+                    <thead className="sticky top-0 z-10 border-b border-white/10 bg-ink-950 text-ink-400">
                       <tr>
                         <th className="w-10 px-3 py-2">
                           <input
                             type="checkbox"
                             aria-label="Select all clients to resend"
                             checked={allNotifiedSelected}
-                            disabled={anyBusy || inviteableNotifiedIds.length === 0}
+                            disabled={anyBusy || notifiedIds.length === 0}
                             onChange={(e) => {
-                              if (e.target.checked) setSelectedNotified(inviteableNotifiedIds)
+                              if (e.target.checked) setSelectedNotified(notifiedIds)
                               else setSelectedNotified([])
                             }}
                           />
                         </th>
                         <th className="px-3 py-2">Client</th>
                         <th className="px-3 py-2">Notified</th>
-                        <th className="px-3 py-2" />
+                        <th className="w-12 px-3 py-2" />
                       </tr>
                     </thead>
                     <tbody>
                       {notified.map((row) => {
-                        const inviteable = rowInviteable(row)
                         const checked = selectedNotified.includes(row.client_id)
                         return (
                           <tr key={row.client_id} className="border-b border-white/5">
@@ -407,12 +382,7 @@ export function PortalInvitesPanel() {
                                 type="checkbox"
                                 aria-label={`Select ${row.client_name}`}
                                 checked={checked}
-                                disabled={anyBusy || !inviteable}
-                                title={
-                                  inviteable
-                                    ? undefined
-                                    : 'Office email — add the client’s real email to invite'
-                                }
+                                disabled={anyBusy}
                                 onChange={(e) =>
                                   setSelectedNotified((prev) =>
                                     toggleId(prev, row.client_id, e.target.checked),
@@ -421,24 +391,15 @@ export function PortalInvitesPanel() {
                               />
                             </td>
                             <td className="px-3 py-2 text-white">{row.client_name}</td>
-                            <td className="px-3 py-2 text-ink-300">
-                              {formatWhen(row.invited_at)}
-                              {!inviteable ? (
-                                <span className="mt-0.5 block text-xs text-ink-500">
-                                  Office placeholder — no invite
-                                </span>
-                              ) : null}
-                            </td>
+                            <td className="px-3 py-2 text-ink-300">{formatWhen(row.invited_at)}</td>
                             <td className="px-3 py-2 text-right">
-                              {inviteable ? (
-                                <AdminIconAction
-                                  label="Resend invite"
-                                  icon="mail"
-                                  tone="muted"
-                                  disabled={anyBusy}
-                                  onClick={() => invite(row.client_id)}
-                                />
-                              ) : null}
+                              <AdminIconAction
+                                label="Resend invite"
+                                icon="mail"
+                                tone="muted"
+                                disabled={anyBusy}
+                                onClick={() => invite(row.client_id)}
+                              />
                             </td>
                           </tr>
                         )
