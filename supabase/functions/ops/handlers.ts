@@ -1019,6 +1019,13 @@ handlers.delete_client = async ({ user, sb }, args) => {
     )
   }
 
+  // Drop portal access before delete (client_id becomes null on users FK).
+  await sb
+    .from('users')
+    .update({ is_active: false, updated_at: nowIso() })
+    .eq('client_id', id)
+    .eq('role', 'client')
+
   const { error } = await sb.from('clients').delete().eq('id', id)
   if (error) throw mapDbError(error)
   return { ok: true }
@@ -1037,6 +1044,16 @@ handlers.set_client_active = async ({ sb }, args) => {
     .select()
     .single()
   if (error) throw mapDbError(error)
+
+  // Deactivated clients must not remain inviteable / portal-active.
+  if (!isActive) {
+    await sb
+      .from('users')
+      .update({ is_active: false, updated_at: nowIso() })
+      .eq('client_id', id)
+      .eq('role', 'client')
+  }
+
   return data
 }
 

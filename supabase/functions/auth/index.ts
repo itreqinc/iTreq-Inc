@@ -928,9 +928,12 @@ async function handleListPortalInvites(
 
   const { data: clients, error: cErr } = await supabase
     .from('clients')
-    .select('id, name, email, phone, cellphone')
+    .select('id, name, email, phone, cellphone, is_active')
     .order('name')
   if (cErr) throw cErr
+
+  const activeClients = (clients || []).filter((c) => c.is_active !== false)
+  const activeClientIds = new Set(activeClients.map((c) => String(c.id)))
 
   const { data: portalUsers, error: uErr } = await supabase
     .from('users')
@@ -939,18 +942,29 @@ async function handleListPortalInvites(
     .eq('is_active', true)
   if (uErr) throw uErr
 
+  // Deactivate portal logins left behind after client delete / deactivate.
+  const orphanIds = (portalUsers || [])
+    .filter((u) => !u.client_id || !activeClientIds.has(String(u.client_id)))
+    .map((u) => u.id)
+  if (orphanIds.length) {
+    await supabase
+      .from('users')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .in('id', orphanIds)
+  }
+
   const byClient = new Map(
-    (portalUsers || []).map((u) => [u.client_id, u]),
+    (portalUsers || [])
+      .filter((u) => u.client_id && activeClientIds.has(String(u.client_id)))
+      .map((u) => [u.client_id, u]),
   )
 
   const pending: Record<string, unknown>[] = []
   const notified: Record<string, unknown>[] = []
 
-  for (const c of clients || []) {
+  for (const c of activeClients) {
     const email = String(c.email || '').trim()
     if (!email) continue
-    // Office placeholder used when the client had no personal email — not inviteable.
-    if (email.toLowerCase().replace(/\s+/g, '') === 'info@itreqinc.com') continue
     const u = byClient.get(c.id)
     if (!u) {
       pending.push({
