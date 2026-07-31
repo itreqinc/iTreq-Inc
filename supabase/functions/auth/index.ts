@@ -26,6 +26,25 @@ function json(status: number, body: Record<string, unknown>) {
   })
 }
 
+/** Postgrest errors from esm.sh often fail `instanceof Error` across Deno realms. */
+function errorMessage(err: unknown): string {
+  if (err == null) return 'Unexpected error'
+  if (typeof err === 'string' && err.trim()) return err
+  if (typeof err === 'object') {
+    const o = err as { message?: unknown; error_description?: unknown; details?: unknown; hint?: unknown; code?: unknown }
+    const parts = [o.message, o.error_description, o.details, o.hint]
+      .map((v) => (typeof v === 'string' ? v.trim() : ''))
+      .filter(Boolean)
+    if (parts.length) return parts.join(' — ')
+    if (typeof o.code === 'string' && o.code.trim()) return `Database error (${o.code})`
+  }
+  return 'Unexpected error'
+}
+
+function throwDb(error: unknown): never {
+  throw new Error(errorMessage(error))
+}
+
 function appEnv() {
   return String(Deno.env.get('APP_ENV') || '').trim().toLowerCase()
 }
@@ -275,7 +294,14 @@ async function sendViaResend(
   if (!res.ok) {
     const errText = await res.text()
     console.error('Resend error:', errText)
-    throw new Error('Could not send email. Check Resend configuration.')
+    let detail = ''
+    try {
+      const parsed = JSON.parse(errText) as { message?: string }
+      if (parsed?.message) detail = `: ${parsed.message}`
+    } catch {
+      if (errText.trim()) detail = `: ${errText.trim().slice(0, 180)}`
+    }
+    throw new Error(`Could not send email${detail}`)
   }
 }
 
@@ -805,7 +831,7 @@ async function handleInviteClient(
         'This client uses the office email placeholder and cannot receive a portal invite. Add their real email first.',
     })
   }
-  const phone = String(client.cellphone || client.phone || '').trim() || null
+  const phoneRaw = String(client.cellphone || client.phone || '').trim() || null
   const first_name = String(client.first_name || '').trim() || null
   const middle_name = String(client.middle_name || '').trim() || null
   const surname = String(client.surname || '').trim() || null
@@ -814,6 +840,56 @@ async function handleInviteClient(
     buildDisplayName({ first_name, middle_name, surname, name: client.name }) || 'Client'
   const now = new Date().toISOString()
   const password_hash = await hashPassword(DEFAULT_INVITE_PASSWORD)
+
+  const { data: existing, error: existingErr } = await supabase
+    .from('users')
+    .select('*')
+    .eq('client_id', clientId)
+    .eq('role', 'client')
+    .maybeSingle()
+  if (existingErr) throwDb(existingErr)
+
+  if (existing?.first_login_at && !existing.must_change_password) {
+    return json(400, {
+      success: false,
+      message: 'This client already activated their portal login.',
+    })
+  }
+
+  // Email must be unique across users (login key).
+  const { data: emailOwner, error: emailOwnerErr } = await supabase
+    .from('users')
+    .select('id, client_id, role, name, email')
+    .ilike('email', email)
+    .maybeSingle()
+  if (emailOwnerErr) throwDb(emailOwnerErr)
+  if (emailOwner && (!existing || emailOwner.id !== existing.id)) {
+    const who =
+      emailOwner.role === 'client'
+        ? `another client account (${emailOwner.name || 'unnamed'})`
+        : `a ${emailOwner.role} account (${emailOwner.name || emailOwner.email})`
+    return json(400, {
+      success: false,
+      message: `Cannot invite ${name}: email ${email} is already used by ${who}. Use a unique client email.`,
+    })
+  }
+
+  // Phone is also unique; shared numbers are common — drop phone rather than block invite.
+  let phone = phoneRaw
+  if (phone) {
+    const { data: phoneOwner, error: phoneOwnerErr } = await supabase
+      .from('users')
+      .select('id, client_id, name')
+      .eq('phone', phone)
+      .maybeSingle()
+    if (phoneOwnerErr) throwDb(phoneOwnerErr)
+    if (phoneOwner && (!existing || phoneOwner.id !== existing.id)) {
+      console.warn(
+        `[auth] invite: phone ${phone} already on user ${phoneOwner.id}; omitting from ${clientId}`,
+      )
+      phone = null
+    }
+  }
 
   const profileFields = {
     name,
@@ -825,21 +901,8 @@ async function handleInviteClient(
     phone,
   }
 
-  const { data: existing } = await supabase
-    .from('users')
-    .select('*')
-    .eq('client_id', clientId)
-    .eq('role', 'client')
-    .maybeSingle()
-
   let userRow
   if (existing) {
-    if (existing.first_login_at && !existing.must_change_password) {
-      return json(400, {
-        success: false,
-        message: 'This client already activated their portal login.',
-      })
-    }
     const { data, error } = await supabase
       .from('users')
       .update({
@@ -853,7 +916,7 @@ async function handleInviteClient(
       .eq('id', existing.id)
       .select('*')
       .single()
-    if (error) throw error
+    if (error) throwDb(error)
     userRow = data
   } else {
     const { data, error } = await supabase
@@ -869,7 +932,7 @@ async function handleInviteClient(
       })
       .select('*')
       .single()
-    if (error) throw error
+    if (error) throwDb(error)
     userRow = data
   }
 
@@ -1196,7 +1259,6 @@ serve(async (req) => {
     }
   } catch (err) {
     console.error('auth error:', err)
-    const message = err instanceof Error ? err.message : 'Unexpected error'
-    return json(500, { success: false, message })
+    return json(500, { success: false, message: errorMessage(err) })
   }
 })
