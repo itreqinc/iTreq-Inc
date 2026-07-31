@@ -92,6 +92,10 @@ export default function ClientsPage() {
   const [stmtModalClient, setStmtModalClient] = useState(null)
   const [stmtFrom, setStmtFrom] = useState(monthStartIso)
   const [stmtTo, setStmtTo] = useState(todayIso)
+  const [openingModalClient, setOpeningModalClient] = useState(null)
+  const [openingAmount, setOpeningAmount] = useState('')
+  const [openingDate, setOpeningDate] = useState('')
+  const [openingSaving, setOpeningSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
 
   const [selectedId, setSelectedId] = useState(null)
@@ -241,6 +245,72 @@ export default function ClientsPage() {
     setStmtModalClient(null)
   }
 
+  function openOpeningBalanceModal(client) {
+    const amount = Number(client.opening_balance)
+    setOpeningAmount(
+      Number.isFinite(amount) && amount !== 0 ? String(amount) : amount === 0 ? '0' : '',
+    )
+    setOpeningDate(
+      client.opening_balance_date ? String(client.opening_balance_date).slice(0, 10) : '',
+    )
+    setOpeningModalClient(client)
+  }
+
+  function closeOpeningBalanceModal() {
+    if (openingSaving) return
+    setOpeningModalClient(null)
+  }
+
+  async function saveOpeningBalance() {
+    if (!openingModalClient) return
+    const opening = Math.round((Number(openingAmount) || 0) * 100) / 100
+    if (opening !== 0 && !String(openingDate || '').trim()) {
+      showWarning('Choose an opening balance date when the amount is not zero.')
+      return
+    }
+
+    const formPayload = {
+      ...clientToForm(openingModalClient),
+      opening_balance: opening === 0 ? '0' : String(opening),
+      opening_balance_date: opening === 0 ? '' : openingDate,
+    }
+
+    setOpeningSaving(true)
+    const { data, error } = await opsApi.updateClient(openingModalClient.id, formPayload)
+    setOpeningSaving(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+
+    showSuccess('Opening balance updated.')
+    setOpeningModalClient(null)
+    setClients((prev) => {
+      const existing = prev.find((c) => c.id === data.id)
+      return upsertById(prev, {
+        ...existing,
+        ...data,
+        balance: existing?.balance,
+        has_financial_records: existing?.has_financial_records,
+      })
+    })
+    // Refresh list balances and on-screen statement for this client.
+    if (view === 'accounts') {
+      const { data: withBalances } = await opsApi.listClientsWithBalances({
+        activeOnly: !showAllClients,
+      })
+      if (withBalances) setClients(withBalances)
+      if (selectedId === data.id) {
+        const { data: stmt } = await opsApi.getClientStatement({
+          client_id: data.id,
+          from: txFrom || undefined,
+          to: txTo || undefined,
+        })
+        if (stmt) setStatement(stmt)
+      }
+    }
+  }
+
   async function printClientStatement(clientId, from, to) {
     if (from && to && from > to) {
       showWarning('From date must be on or before To date.')
@@ -350,6 +420,15 @@ export default function ClientsPage() {
     const actions = clientIconActions(client)
     const items = [
       { label: 'Edit client', icon: 'pencil', onClick: actions.onEdit },
+      ...(admin
+        ? [
+            {
+              label: 'Opening balance',
+              icon: 'payment',
+              onClick: () => openOpeningBalanceModal(client),
+            },
+          ]
+        : []),
       { label: 'New invoice', icon: 'invoice', onClick: actions.onInvoice },
       { label: 'Record payment', icon: 'payment', onClick: actions.onPayment },
       {
@@ -1000,6 +1079,72 @@ export default function ClientsPage() {
         </div>
         </div>
       )}
+
+      {openingModalClient ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-ink-950/50 backdrop-blur-[2px]"
+            aria-label="Close dialog"
+            onClick={closeOpeningBalanceModal}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="opening-balance-title"
+            className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-ink-900 p-5 shadow-xl"
+          >
+            <h2 id="opening-balance-title" className="text-base font-semibold text-white">
+              Opening balance
+            </h2>
+            <p className="mt-1 text-sm text-ink-300">
+              Carry-in amount for{' '}
+              <span className="text-ink-100">{openingModalClient.name}</span>. Positive means
+              they owe iTreq.
+            </p>
+            <div className="mt-4 flex flex-wrap items-end gap-2.5">
+              <label className="block min-w-[8rem] flex-1">
+                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-ink-400">
+                  Amount (P)
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={`${adminFieldClass} py-1.5 text-[13px]`}
+                  value={openingAmount}
+                  onChange={(e) => setOpeningAmount(e.target.value)}
+                  placeholder="0.00"
+                />
+              </label>
+              <YearMonthDaySelect
+                size="compact"
+                label="As of"
+                value={openingDate}
+                onChange={setOpeningDate}
+                className="w-[14rem] shrink-0"
+              />
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={openingSaving}
+                onClick={closeOpeningBalanceModal}
+                className={adminBtnSecondary}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={openingSaving}
+                onClick={saveOpeningBalance}
+                className={adminBtnPrimary}
+              >
+                {openingSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {stmtModalClient ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
