@@ -161,7 +161,7 @@ export function AlertModal({
               {title || variant.title}
             </h2>
             {message ? (
-              <p id={descId} className="mt-2 text-sm leading-relaxed text-ink-200">
+              <p id={descId} className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink-200">
                 {message}
               </p>
             ) : null}

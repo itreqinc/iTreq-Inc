@@ -875,24 +875,55 @@ async function handleInviteClient(
 
   const maskedEmail = truncateEmail(email)
   const phoneLine = phone || 'Not on file'
+  const siteOrigin = (
+    Deno.env.get('PUBLIC_SITE_URL') ||
+    Deno.env.get('APP_PUBLIC_URL') ||
+    'https://www.itreqinc.com'
+  )
+    .trim()
+    .replace(/\/$/, '')
+  const portalLoginUrl = `${siteOrigin}/login`
+  const whatsappUrl = 'https://wa.me/26771573094'
+  const whatsappDisplay = '+267 71 573 094'
+
   const subject = 'Your iTreq Inc client portal access'
   const text =
     `Hello ${name},\n\n` +
-    `You have been invited to the iTreq Inc client portal.\n\n` +
-    `Login email (masked): ${maskedEmail}\n` +
-    `Phone on file: ${phoneLine}\n` +
-    `Temporary password: ${DEFAULT_INVITE_PASSWORD}\n\n` +
-    `Sign in at /login, then change your password on first login.\n\n` +
+    `You now have access to the iTreq Inc client portal, where you can view your invoices, ` +
+    `payments, and account balance online.\n\n` +
+    `Sign in here: ${portalLoginUrl}\n\n` +
+    `Your login details:\n` +
+    `• Email: ${maskedEmail}\n` +
+    `• Phone on file: ${phoneLine}\n` +
+    `• Temporary password: ${DEFAULT_INVITE_PASSWORD}\n\n` +
+    `Please sign in and change your password when prompted.\n\n` +
+    `A note about your account: billing on this portal begins with your August invoice. ` +
+    `Any balance brought forward from our previous system is reflected on your account. ` +
+    `iTreq Inc retains full records from the previous system — if you would like access to ` +
+    `those earlier statements or documents, please let us know.\n\n` +
+    `Questions or need help getting started? Message us on WhatsApp: ${whatsappDisplay}\n` +
+    `${whatsappUrl}\n\n` +
+    `Thank you for trusting iTreq Inc.\n\n` +
     `— iTreq Inc`
   const html =
     `<p>Hello ${name},</p>` +
-    `<p>You have been invited to the iTreq Inc client portal.</p>` +
+    `<p>You now have access to the <strong>iTreq Inc client portal</strong>, where you can view your invoices, payments, and account balance online.</p>` +
+    `<p><a href="${portalLoginUrl}">Sign in to the portal</a><br/>` +
+    `<span style="color:#666;font-size:13px">${portalLoginUrl}</span></p>` +
+    `<p><strong>Your login details</strong></p>` +
     `<ul>` +
-    `<li>Login email (masked): <strong>${maskedEmail}</strong></li>` +
+    `<li>Email: <strong>${maskedEmail}</strong></li>` +
     `<li>Phone on file: <strong>${phoneLine}</strong></li>` +
     `<li>Temporary password: <strong>${DEFAULT_INVITE_PASSWORD}</strong></li>` +
     `</ul>` +
-    `<p>Sign in, then change your password on first login.</p>` +
+    `<p>Please sign in and change your password when prompted.</p>` +
+    `<p><strong>About your account</strong><br/>` +
+    `Billing on this portal begins with your <strong>August invoice</strong>. ` +
+    `Any balance brought forward from our previous system is reflected on your account. ` +
+    `iTreq Inc retains full records from the previous system — if you would like access to those earlier statements or documents, please let us know.</p>` +
+    `<p>Questions or need help getting started? Message us on WhatsApp: ` +
+    `<a href="${whatsappUrl}">${whatsappDisplay}</a></p>` +
+    `<p>Thank you for trusting iTreq Inc.</p>` +
     `<p>— iTreq Inc</p>`
 
   let stubbed = false

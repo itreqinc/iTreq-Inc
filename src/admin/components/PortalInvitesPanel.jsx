@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { authAction } from '../../lib/authApi'
 import { AUTH_BYPASS } from '../../lib/authConfig'
-import { canSendPortalInviteEmail } from '../../lib/portalInvite'
+import { canSendPortalInviteEmail, portalInviteConfirmMessage } from '../../lib/portalInvite'
 import { DetailsCollapse } from '../../components/DetailsCollapse'
 import { AdminIconAction } from '../AdminIconAction'
 import { useOpsAlert } from '../OpsAlertContext'
@@ -126,6 +126,13 @@ export function PortalInvitesPanel() {
       return
     }
 
+    const ok = await confirm({
+      title: 'Send portal invite?',
+      message: portalInviteConfirmMessage(1),
+      confirmLabel: 'Send invite',
+    })
+    if (!ok) return
+
     setBusyId(clientId)
     try {
       const result = await inviteOne(clientId)
@@ -158,7 +165,7 @@ export function PortalInvitesPanel() {
     }
     const ok = await confirm({
       title: resend ? 'Resend selected invites?' : 'Invite selected clients?',
-      message: `${inviteable.length} client${inviteable.length === 1 ? '' : 's'} will receive portal login details.`,
+      message: portalInviteConfirmMessage(inviteable.length),
       confirmLabel: resend ? 'Resend invites' : 'Send invites',
     })
     if (!ok) return

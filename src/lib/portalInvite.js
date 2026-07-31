@@ -31,3 +31,23 @@ export function canSendPortalInviteEmail(email) {
   if (!e) return false
   return !isOfficePlaceholderEmail(e)
 }
+
+const WHATSAPP_DISPLAY = '+267 71 573 094'
+
+/**
+ * Summary shown in the confirm dialog before invites are sent.
+ * Keep in sync with the email body in supabase/functions/auth (invite_client).
+ */
+export function portalInviteConfirmMessage(count = 1) {
+  const who =
+    count === 1
+      ? 'This client will receive an email that includes:'
+      : `${count} clients will each receive an email that includes:`
+  return (
+    `${who}\n\n` +
+    `• Portal sign-in link and temporary password (password123)\n` +
+    `• Note that billing on the portal starts with the August invoice, with any balance carried forward from the previous system\n` +
+    `• Reminder that iTreq Inc still holds earlier records on request\n` +
+    `• WhatsApp support: ${WHATSAPP_DISPLAY}`
+  )
+}
