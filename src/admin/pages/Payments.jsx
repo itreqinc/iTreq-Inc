@@ -83,6 +83,7 @@ export default function PaymentsPage() {
   /** Set when staff arrive from a client's "I've paid" report; closed off on save. */
   const [fromNotification, setFromNotification] = useState(null)
   const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.payments')
+  const [listView, setListView] = useState('payments') // payments | adjustments | all
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -260,15 +261,27 @@ export default function PaymentsPage() {
     [editingId, form, baseline],
   )
 
-  const visibleRows = useMemo(
-    () =>
-      sortByDateDescThenNameAsc(
-        filterByDateRange(rows, dateFrom, dateTo, (row) => row.payment_date),
-        (row) => row.payment_date,
-        (row) => row.clients?.name || '',
-      ),
-    [rows, dateFrom, dateTo],
-  )
+  const visibleRows = useMemo(() => {
+    const filtered = rows.filter((row) => {
+      const isAdj = Boolean(row.is_adjustment)
+      if (listView === 'payments') return !isAdj
+      if (listView === 'adjustments') return isAdj
+      return true
+    })
+    return sortByDateDescThenNameAsc(
+      filterByDateRange(filtered, dateFrom, dateTo, (row) => row.payment_date),
+      (row) => row.payment_date,
+      (row) => row.clients?.name || '',
+    )
+  }, [rows, dateFrom, dateTo, listView])
+
+  const listTotalForFilter = useMemo(() => {
+    if (listView === 'all') return rows.length
+    return rows.filter((row) => {
+      const isAdj = Boolean(row.is_adjustment)
+      return listView === 'adjustments' ? isAdj : !isAdj
+    }).length
+  }, [rows, listView])
 
   const paymentAmount = Number(form.amount) || 0
 
@@ -423,15 +436,40 @@ export default function PaymentsPage() {
         <div>
           <h1 className="font-display text-2xl font-bold text-white">Payments</h1>
           <p className="mt-1 text-sm text-ink-300">
-            Enter the amount received, then tick the invoices to pay. Funds are allocated
-            automatically; anything left stays on the client&apos;s account.
+            {listView === 'adjustments'
+              ? 'Brought-forward credit applications and other non-cash adjustments.'
+              : listView === 'all'
+                ? 'All receipts and adjustments. Collected income counts payments only.'
+                : 'Enter the amount received, then tick the invoices to pay. Funds are allocated automatically; anything left stays on the client’s account.'}
           </p>
         </div>
-        {!showForm ? (
-          <button type="button" onClick={startNew} className={adminBtnPrimary}>
-            Record payment
-          </button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-xl border border-white/10 bg-ink-900/50 p-0.5">
+            {[
+              { id: 'payments', label: 'Payments' },
+              { id: 'adjustments', label: 'Adjustments' },
+              { id: 'all', label: 'All' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setListView(opt.id)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  listView === opt.id
+                    ? 'bg-white/10 text-white'
+                    : 'text-ink-400 hover:text-ink-200'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {!showForm && listView !== 'adjustments' ? (
+            <button type="button" onClick={startNew} className={adminBtnPrimary}>
+              Record payment
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {showForm ? (
@@ -690,7 +728,7 @@ export default function PaymentsPage() {
         onToChange={setDateTo}
         dateLabel="payment date"
         shown={visibleRows.length}
-        total={rows.length}
+        total={listTotalForFilter}
       >
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
@@ -713,9 +751,13 @@ export default function PaymentsPage() {
             ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-ink-400">
-                  {rows.length === 0
-                    ? 'No payments recorded yet.'
-                    : 'No payments in the selected date range.'}
+                  {listTotalForFilter === 0
+                    ? listView === 'adjustments'
+                      ? 'No adjustments recorded yet.'
+                      : listView === 'all'
+                        ? 'No payments recorded yet.'
+                        : 'No payments recorded yet.'
+                    : 'No rows in the selected date range.'}
                 </td>
               </tr>
             ) : (
