@@ -102,6 +102,7 @@ export default function ClientsPage() {
   const [statement, setStatement] = useState(null)
   const [stmtLoading, setStmtLoading] = useState(false)
   const [showAllTx, setShowAllTx] = useState(false)
+  const [txDateSort, setTxDateSort] = useState('asc') // asc = oldest first (statement order)
   const [searchQuery, setSearchQuery] = useState('')
   const [txFrom, setTxFrom, txTo, setTxTo] = usePersistedDateRange(
     'admin.clients.accounts.all',
@@ -557,10 +558,13 @@ export default function ClientsPage() {
 
   const visibleLines = useMemo(() => {
     const lines = statement?.lines || []
-    if (showAllTx) return lines
-    // Draft quotations (and any alwaysShow lines) stay visible; they don't affect balance.
-    return lines.filter((l) => !l.inactive || l.alwaysShow)
-  }, [statement, showAllTx])
+    const filtered = showAllTx
+      ? lines
+      : // Draft quotations (and any alwaysShow lines) stay visible; they don't affect balance.
+        lines.filter((l) => !l.inactive || l.alwaysShow)
+    if (txDateSort === 'desc') return [...filtered].reverse()
+    return filtered
+  }, [statement, showAllTx, txDateSort])
 
   const hasInactive = useMemo(
     () => (statement?.lines || []).some((l) => l.inactive && !l.alwaysShow),
@@ -967,7 +971,39 @@ export default function ClientsPage() {
                   <table className={adminTableClass}>
                     <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
                       <tr>
-                        <th className="px-3 py-2">Date</th>
+                        <th className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setTxDateSort((d) => (d === 'asc' ? 'desc' : 'asc'))
+                            }
+                            className="inline-flex items-center gap-1 rounded-md text-left uppercase tracking-wider text-ink-400 transition hover:text-ink-200"
+                            aria-label={
+                              txDateSort === 'asc'
+                                ? 'Date sorted oldest first. Click for newest first.'
+                                : 'Date sorted newest first. Click for oldest first.'
+                            }
+                            title={
+                              txDateSort === 'asc' ? 'Oldest first' : 'Newest first'
+                            }
+                          >
+                            Date
+                            <svg
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                              className={`h-3.5 w-3.5 shrink-0 transition ${
+                                txDateSort === 'desc' ? 'rotate-180' : ''
+                              }`}
+                              aria-hidden
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          </button>
+                        </th>
                         <th className="px-3 py-2">Description</th>
                         <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Debit</th>
                         <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Credit</th>
