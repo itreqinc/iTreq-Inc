@@ -376,6 +376,62 @@ const directOpsApi = {
     return { data, error: null }
   },
 
+  /** Admin-only: update brought-forward fields without rewriting the whole client. */
+  async updateClientOpeningBalance(id, { opening_balance, opening_balance_date }) {
+    if (!assertAdmin()) return adminRequired()
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Client id is required.' } }
+    }
+    const amount = Math.round((Number(opening_balance) || 0) * 100) / 100
+    let dateRaw = String(opening_balance_date || '').trim().slice(0, 10)
+
+    if (amount === 0) {
+      const { data, error } = await supabase
+        .from('clients')
+        .update({
+          opening_balance: 0,
+          opening_balance_date: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single()
+      if (error) return mapError(error)
+      return { data, error: null }
+    }
+
+    // Remaining balance must keep an as-of date — never wipe it while amount remains.
+    if (!dateRaw) {
+      const { data: existing, error: existingErr } = await supabase
+        .from('clients')
+        .select('opening_balance_date')
+        .eq('id', id)
+        .single()
+      if (existingErr) return mapError(existingErr)
+      dateRaw = String(existing?.opening_balance_date || '').trim().slice(0, 10)
+    }
+    if (!dateRaw) {
+      return {
+        data: null,
+        error: { message: 'Choose an opening balance date when the amount is not zero.' },
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('clients')
+      .update({
+        opening_balance: amount,
+        opening_balance_date: dateRaw,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) return mapError(error)
+    return { data, error: null }
+  },
+
   async deleteClient(id) {
     if (!assertAdmin()) return adminRequired()
     if (!supabase) return dbUnavailable()

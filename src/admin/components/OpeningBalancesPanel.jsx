@@ -5,7 +5,6 @@ import { isAdmin } from '../../lib/authConfig'
 import {
   clientOpeningBalanceAmount,
   clientOpeningBalanceDate,
-  clientToForm,
 } from '../../lib/clientRegistration'
 import { opsApi } from '../../lib/opsApi'
 import {
@@ -293,13 +292,11 @@ export function OpeningBalancesPanel({ ownClientId }) {
       showWarning('Choose an opening balance date when the amount is not zero.')
       return false
     }
-    const formPayload = {
-      ...clientToForm(client),
-      opening_balance: amount === 0 ? '0' : String(amount),
-      opening_balance_date: amount === 0 ? '' : date,
-    }
     setSaving(true)
-    const { error } = await opsApi.updateClient(client.id, formPayload)
+    const { error } = await opsApi.updateClientOpeningBalance(client.id, {
+      opening_balance: amount,
+      opening_balance_date: amount === 0 ? '' : date,
+    })
     setSaving(false)
     if (error) {
       showError(error.message)

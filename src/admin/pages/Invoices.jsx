@@ -1004,10 +1004,10 @@ export default function InvoicesPage() {
             {saving ? 'Issuing…' : `Issue selected (${issueSelectedIds.length})`}
           </button>
         </div>
-        <table className={adminTableClass}>
+        <table className={`${adminTableClass} table-fixed`}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3 w-10">
+              <th className="w-10 px-3 py-3">
                 <input
                   ref={masterIssueCheckboxRef}
                   type="checkbox"
@@ -1022,13 +1022,17 @@ export default function InvoicesPage() {
                   }}
                 />
               </th>
-              <th className="px-4 py-3">Number</th>
-              <th className="px-4 py-3">Client</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Issued</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Due</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Total</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`} />
+              <th className="w-[7.5rem] px-3 py-3 whitespace-nowrap">Number</th>
+              <th className="px-3 py-3">Client</th>
+              <th className={`w-[6.75rem] px-2 py-3 whitespace-nowrap ${adminColSecondary}`}>
+                Issued
+              </th>
+              <th className={`w-[6.75rem] px-2 py-3 whitespace-nowrap ${adminColSecondary}`}>
+                Due
+              </th>
+              <th className="w-[5.5rem] px-2 py-3 whitespace-nowrap">Status</th>
+              <th className="w-[6.5rem] px-2 py-3 whitespace-nowrap text-right">Total</th>
+              <th className="w-12 px-2 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -1061,7 +1065,7 @@ export default function InvoicesPage() {
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       {row.status === 'draft' ? (
                         <input
                           type="checkbox"
@@ -1081,33 +1085,41 @@ export default function InvoicesPage() {
                         />
                       ) : null}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <span className={clickableDocClass}>{row.number || 'Draft'}</span>
                       {unread > 0 ? (
-                        <span className="ml-2 inline-flex rounded-md bg-amber-500/25 px-2 py-0.5 text-xs font-semibold text-amber-100">
+                        <span className="ml-1.5 inline-flex rounded-md bg-amber-500/25 px-1.5 py-0.5 text-xs font-semibold text-amber-100">
                           {unread === 1 ? '1 new' : `${unread} new`}
                         </span>
                       ) : null}
                     </td>
-                    <td className="min-w-0 break-words px-4 py-3 text-ink-300">
-                      {row.clients?.name || '—'}
+                    <td className="px-3 py-3 text-ink-200">
+                      <span className="break-words [overflow-wrap:anywhere]">
+                        {row.clients?.name || '—'}
+                      </span>
                     </td>
-                    <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                    <td
+                      className={`px-2 py-3 whitespace-nowrap text-ink-300 tabular-nums ${adminColSecondary}`}
+                    >
                       {row.issue_date || '—'}
                     </td>
-                    <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                    <td
+                      className={`px-2 py-3 whitespace-nowrap text-ink-300 tabular-nums ${adminColSecondary}`}
+                    >
                       {row.due_date || '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-3 whitespace-nowrap">
                       <span
                         className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${invoiceStatusClass(displayStatus)}`}
                       >
                         {displayStatus}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-ink-200">{formatPula(row.total)}</td>
+                    <td className="px-2 py-3 whitespace-nowrap text-right text-ink-200 tabular-nums">
+                      {formatPula(row.total)}
+                    </td>
                     <td
-                      className="px-4 py-3 text-right"
+                      className="px-2 py-3 text-right"
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >

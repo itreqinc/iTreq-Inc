@@ -1061,6 +1061,57 @@ handlers.update_client = async ({ user, sb }, args) => {
   return data
 }
 
+handlers.update_client_opening_balance = async ({ user, sb }, args) => {
+  assertAdminUser(user)
+  const id = String(args[0] || '')
+  const body = (args[1] || {}) as Record<string, unknown>
+  if (!id) throw new OpsError('Client id is required.')
+  const amount = Math.round((Number(body.opening_balance) || 0) * 100) / 100
+  let dateRaw = String(body.opening_balance_date || '').trim().slice(0, 10)
+
+  if (amount === 0) {
+    const { data, error } = await sb
+      .from('clients')
+      .update({
+        opening_balance: 0,
+        opening_balance_date: null,
+        updated_at: nowIso(),
+      })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw mapDbError(error)
+    return data
+  }
+
+  // Remaining balance must keep an as-of date — never wipe it while amount remains.
+  if (!dateRaw) {
+    const { data: existing, error: existingErr } = await sb
+      .from('clients')
+      .select('opening_balance_date')
+      .eq('id', id)
+      .single()
+    if (existingErr) throw mapDbError(existingErr)
+    dateRaw = String(existing?.opening_balance_date || '').trim().slice(0, 10)
+  }
+  if (!dateRaw) {
+    throw new OpsError('Choose an opening balance date when the amount is not zero.')
+  }
+
+  const { data, error } = await sb
+    .from('clients')
+    .update({
+      opening_balance: amount,
+      opening_balance_date: dateRaw,
+      updated_at: nowIso(),
+    })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw mapDbError(error)
+  return data
+}
+
 handlers.delete_client = async ({ user, sb }, args) => {
   assertAdminUser(user)
   const id = String(args[0] || '')
