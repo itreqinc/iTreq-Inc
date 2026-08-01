@@ -79,6 +79,8 @@ export default function PaymentsPage() {
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [openInvoices, setOpenInvoices] = useState([])
   const [accountCredit, setAccountCredit] = useState(0)
+  /** Opt-in: apply existing account credit to invoices after recording this payment. */
+  const [applyAccountCredit, setApplyAccountCredit] = useState(false)
   const [form, setForm] = useState(emptyPaymentForm)
   /** Set when staff arrive from a client's "I've paid" report; closed off on save. */
   const [fromNotification, setFromNotification] = useState(null)
@@ -105,6 +107,7 @@ export default function PaymentsPage() {
       if (!clientId) {
         setOpenInvoices([])
         setAccountCredit(0)
+        setApplyAccountCredit(false)
         return []
       }
       const [invRes, creditRes] = await Promise.all([
@@ -115,6 +118,7 @@ export default function PaymentsPage() {
         showError(invRes.error.message)
         setOpenInvoices([])
         setAccountCredit(creditRes.data?.balance ?? 0)
+        setApplyAccountCredit(false)
         return []
       }
       const invoices = invRes.data || []
@@ -127,6 +131,7 @@ export default function PaymentsPage() {
         selectedIds,
       }))
       setAccountCredit(creditRes.data?.balance ?? 0)
+      setApplyAccountCredit(false)
       return selectedIds
     },
     [showError],
@@ -240,6 +245,7 @@ export default function PaymentsPage() {
     setBaseline('')
     setOpenInvoices([])
     setAccountCredit(0)
+    setApplyAccountCredit(false)
     setForm(emptyPaymentForm())
     if (savedId) highlightRow(savedId)
     setFromNotification(null)
@@ -251,6 +257,7 @@ export default function PaymentsPage() {
     setForm(emptyPaymentForm())
     setOpenInvoices([])
     setAccountCredit(0)
+    setApplyAccountCredit(false)
     setFromNotification(null)
     setShowForm(true)
     scrollToForm()
@@ -315,6 +322,35 @@ export default function PaymentsPage() {
   )
 
   const fundsAvailable = remaining > 0.001 && paymentAmount > 0
+
+  /** Invoices that can still take credit after this payment's allocations. */
+  const creditApplyTargets = useMemo(() => {
+    const pool =
+      form.selectedIds.length > 0
+        ? openInvoices.filter((inv) => form.selectedIds.includes(inv.id))
+        : openInvoices
+    return pool
+      .map((inv) => {
+        const due = Number(inv._allocatable ?? invoiceBalanceDue(inv)) || 0
+        const fromPayment = Number(allocations[inv.id]) || 0
+        const remainingDue = Math.round((due - fromPayment) * 100) / 100
+        return { id: inv.id, remainingDue }
+      })
+      .filter((row) => row.remainingDue > 0.001)
+  }, [openInvoices, form.selectedIds, allocations])
+
+  const creditApplyCap = useMemo(() => {
+    const dueTotal = creditApplyTargets.reduce((s, row) => s + row.remainingDue, 0)
+    return Math.round(Math.min(accountCredit, dueTotal) * 100) / 100
+  }, [accountCredit, creditApplyTargets])
+
+  const showApplyCreditPrompt = creditApplyCap > 0.001
+
+  useEffect(() => {
+    if (!showApplyCreditPrompt && applyAccountCredit) {
+      setApplyAccountCredit(false)
+    }
+  }, [showApplyCreditPrompt, applyAccountCredit])
 
   function toggleInvoice(invoiceId, checked) {
     setForm((f) => {
@@ -382,11 +418,41 @@ export default function PaymentsPage() {
     const result = editingId
       ? await opsApi.updatePayment({ id: editingId, ...payload })
       : await opsApi.recordPayment(payload)
-    setSaving(false)
     if (result.error) {
+      setSaving(false)
       showError(result.error.message)
       return
     }
+
+    let creditApplied = 0
+    if (applyAccountCredit && creditApplyCap > 0.001) {
+      let remainingCredit = creditApplyCap
+      for (const target of creditApplyTargets) {
+        if (remainingCredit <= 0.001) break
+        const take = Math.min(remainingCredit, target.remainingDue)
+        const applyRes = await opsApi.applyClientCreditToInvoice(target.id, take)
+        if (applyRes.error) {
+          setSaving(false)
+          showError(
+            `Payment saved, but credit could not be applied: ${applyRes.error.message}`,
+          )
+          const paymentId = result.data?.id || editingId
+          closeForm(paymentId)
+          if (paymentId) {
+            const refreshed = await opsApi.getPayment(paymentId)
+            if (!refreshed.error && refreshed.data) {
+              setRows((prev) => upsertById(prev, refreshed.data))
+            }
+          }
+          return
+        }
+        const applied = Number(applyRes.data?.applied) || 0
+        creditApplied += applied
+        remainingCredit = Math.round((remainingCredit - applied) * 100) / 100
+      }
+    }
+    setSaving(false)
+
     if (fromNotification?.id) {
       await opsApi.resolvePaymentNotification(fromNotification.id, {
         status: 'accepted',
@@ -394,12 +460,16 @@ export default function PaymentsPage() {
       })
     }
 
+    const creditNote =
+      creditApplied > 0.001
+        ? ` ${formatPula(creditApplied)} applied from account credit.`
+        : ''
     showSuccess(
       fromNotification
-        ? 'Payment recorded and the client\u2019s report marked as confirmed.'
+        ? `Payment recorded and the client\u2019s report marked as confirmed.${creditNote}`
         : editingId
-          ? 'Payment updated.'
-          : 'Payment recorded.',
+          ? `Payment updated.${creditNote}`
+          : `Payment recorded.${creditNote}`,
     )
     const paymentId = result.data?.id || editingId
     closeForm(paymentId)
@@ -579,13 +649,33 @@ export default function PaymentsPage() {
           </label>
 
           {form.client_id ? (
-            <p className="text-sm text-ink-300">
-              Account credit available:{' '}
-              <span className="font-semibold text-brand-300">{formatPula(accountCredit)}</span>
-              {editingId ? (
-                <span className="text-ink-500"> (includes this payment)</span>
+            <div className="space-y-2">
+              <p className="text-sm text-ink-300">
+                Account credit available:{' '}
+                <span className="font-semibold text-brand-300">{formatPula(accountCredit)}</span>
+                {editingId ? (
+                  <span className="text-ink-500"> (includes this payment)</span>
+                ) : null}
+              </p>
+              {showApplyCreditPrompt ? (
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-ink-950/40 px-3 py-2.5 text-sm text-ink-200">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/30 bg-ink-950 text-brand-500 focus:ring-brand-500/40"
+                    checked={applyAccountCredit}
+                    onChange={(e) => setApplyAccountCredit(e.target.checked)}
+                  />
+                  <span>
+                    Also apply {formatPula(creditApplyCap)} account credit to{' '}
+                    {form.selectedIds.length > 0 ? 'selected' : 'open'} invoice
+                    {creditApplyTargets.length === 1 ? '' : 's'}
+                    <span className="mt-0.5 block text-xs text-ink-500">
+                      Leave unchecked to record the payment only.
+                    </span>
+                  </span>
+                </label>
               ) : null}
-            </p>
+            </div>
           ) : null}
 
           {form.client_id ? (
