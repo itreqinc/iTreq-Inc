@@ -1985,12 +1985,14 @@ const directOpsApi = {
     if (type === 'invoice' && docRes.data.status === 'paid') {
       const { data: allocs, error: allocErr } = await supabase
         .from('payment_allocations')
-        .select('amount, payments(payment_date)')
+        .select('amount, payments(payment_date, source_date)')
         .eq('invoice_id', id)
       if (allocErr) return mapError(allocErr)
       for (const row of allocs || []) {
         const pay = row.payments
-        const d = Array.isArray(pay) ? pay[0]?.payment_date : pay?.payment_date
+        const p = Array.isArray(pay) ? pay[0] : pay
+        // Stamp shows original economic date (e.g. B/F as-of); timeline uses payment_date.
+        const d = p?.source_date || p?.payment_date
         if (d && (!paidDate || d > paidDate)) paidDate = d
       }
     }

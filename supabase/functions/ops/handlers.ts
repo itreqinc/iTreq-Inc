@@ -799,12 +799,17 @@ async function getBillingDocumentBundleInternal(
   if (type === 'invoice' && doc.status === 'paid') {
     const { data: allocs, error: allocErr } = await sb
       .from('payment_allocations')
-      .select('amount, payments(payment_date)')
+      .select('amount, payments(payment_date, source_date)')
       .eq('invoice_id', id)
     if (allocErr) throw mapDbError(allocErr)
     for (const row of allocs || []) {
       const pay = relName(row as Record<string, unknown>, 'payments')
-      const d = pay?.payment_date ? String(pay.payment_date) : ''
+      // Stamp shows original economic date (e.g. B/F as-of); timeline uses payment_date.
+      const d = pay?.source_date
+        ? String(pay.source_date)
+        : pay?.payment_date
+          ? String(pay.payment_date)
+          : ''
       if (d && (!paidDate || d > paidDate)) paidDate = d
     }
   }
