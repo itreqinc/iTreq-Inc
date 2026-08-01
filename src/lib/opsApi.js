@@ -3204,7 +3204,7 @@ const directOpsApi = {
     const today = localTodayIso()
     const monthStart = `${today.slice(0, 7)}-01`
 
-    const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes] = await Promise.all([
+    const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes, clientsRes] = await Promise.all([
       supabase
         .from('payment_notifications')
         .select('*, clients(id, name), invoices(id, number)')
@@ -3226,6 +3226,7 @@ const directOpsApi = {
         .select('id, number, status, total, amount_paid, issue_date, due_date, client_id, clients(id, name)')
         .in('status', BALANCE_INVOICE_STATUSES),
       supabase.from('payments').select('amount, payment_date').gte('payment_date', monthStart),
+      supabase.from('clients').select('id, opening_balance'),
     ])
 
     if (notifRes.error) return mapError(notifRes.error)
@@ -3233,9 +3234,16 @@ const directOpsApi = {
     if (quoteRes.error) return mapError(quoteRes.error)
     if (invoiceRes.error) return mapError(invoiceRes.error)
     if (paymentRes.error) return mapError(paymentRes.error)
+    if (clientsRes.error) return mapError(clientsRes.error)
 
     const invoices = invoiceRes.data || []
     const receivables = summarizeReceivables(invoices, today)
+    const broughtForward =
+      Math.round(
+        (clientsRes.data || []).reduce((sum, c) => sum + clientOpeningBalanceAmount(c), 0) * 100,
+      ) / 100
+    receivables.broughtForward = broughtForward
+    receivables.total = Math.round((receivables.total + broughtForward) * 100) / 100
 
     const overdueInvoices = invoices
       .filter((inv) => {

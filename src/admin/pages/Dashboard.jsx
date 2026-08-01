@@ -167,7 +167,13 @@ export default function AdminDashboard() {
         <Kpi
           label="Outstanding"
           value={loading ? '—' : formatPula(receivables?.total)}
-          hint="Unpaid invoices across all clients"
+          hint={
+            loading
+              ? ''
+              : Number(receivables?.broughtForward)
+                ? `Invoices + ${formatPula(receivables.broughtForward)} brought forward`
+                : 'Unpaid invoices and balances brought forward'
+          }
         />
         <Kpi
           label="Overdue"
