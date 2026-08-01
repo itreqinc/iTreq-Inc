@@ -2438,7 +2438,19 @@ handlers.list_opening_balance_clients = async ({ user, sb }, args) => {
   const { data, error } = await q
   if (error) throw mapDbError(error)
   const ownId = portalClientId(user)
-  return (data || []).filter((c) => String(c.id) !== String(ownId || ''))
+  const clients = (data || []).filter((c) => String(c.id) !== String(ownId || ''))
+  const withCredit = []
+  for (const c of clients) {
+    const { data: credit, error: creditErr } = await sb.rpc('get_client_credit_balance', {
+      p_client_id: c.id,
+    })
+    if (creditErr) throw mapDbError(creditErr)
+    withCredit.push({
+      ...c,
+      account_credit: Number(credit) || 0,
+    })
+  }
+  return withCredit
 }
 
 handlers.apply_payment_to_opening_balance = async ({ user, sb }, args) => {
@@ -2473,6 +2485,36 @@ handlers.apply_opening_credit_to_invoice = async ({ user, sb }, args) => {
   const { data, error } = await sb.rpc('apply_opening_credit_to_invoice', {
     p_client_id: clientId,
     p_invoice_id: invoiceId,
+    p_amount: amount,
+  })
+  if (error) throw mapDbError(error)
+  return { applied: Number(data) || 0 }
+}
+
+handlers.apply_opening_credit_to_invoices = async ({ user, sb }, args) => {
+  const clientId = String(args[0] || '')
+  const allocations = (args[1] || []) as Record<string, unknown>[]
+  if (!clientId) throw new OpsError('Client is required.')
+  assertNotOwnClient(user, clientId)
+  const payload = allocations
+    .filter((a) => Number(a.amount) > 0)
+    .map((a) => ({ invoice_id: a.invoice_id, amount: Number(a.amount) }))
+  if (!payload.length) throw new OpsError('Select at least one invoice.')
+  const { data, error } = await sb.rpc('apply_opening_credit_to_invoices', {
+    p_client_id: clientId,
+    p_allocations: payload,
+  })
+  if (error) throw mapDbError(error)
+  return { applied: Number(data) || 0 }
+}
+
+handlers.apply_client_credit_to_opening_balance = async ({ user, sb }, args) => {
+  const clientId = String(args[0] || '')
+  const amount = args[1] != null ? Number(args[1]) : null
+  if (!clientId) throw new OpsError('Client is required.')
+  assertNotOwnClient(user, clientId)
+  const { data, error } = await sb.rpc('apply_client_credit_to_opening_balance', {
+    p_client_id: clientId,
     p_amount: amount,
   })
   if (error) throw mapDbError(error)

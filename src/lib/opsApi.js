@@ -2209,7 +2209,17 @@ const directOpsApi = {
     if (activeOnly) q = q.eq('is_active', true)
     const { data, error } = await q
     if (error) return mapError(error)
-    return { data: data || [], error: null }
+    const clients = data || []
+    const withCredit = await Promise.all(
+      clients.map(async (c) => {
+        const creditRes = await this.getClientCreditBalance(c.id)
+        return {
+          ...c,
+          account_credit: creditRes.error ? 0 : Number(creditRes.data?.balance) || 0,
+        }
+      }),
+    )
+    return { data: withCredit, error: null }
   },
 
   async applyPaymentToOpeningBalance({
@@ -2244,6 +2254,41 @@ const directOpsApi = {
     const { data, error } = await supabase.rpc('apply_opening_credit_to_invoice', {
       p_client_id: clientId,
       p_invoice_id: invoiceId,
+      p_amount: amount != null ? Number(amount) : null,
+    })
+    if (error) return mapError(error)
+    return { data: { applied: Number(data) || 0 }, error: null }
+  },
+
+  async applyOpeningCreditToInvoices(clientId, allocations) {
+    if (!supabase) return dbUnavailable()
+    if (!clientId) {
+      return { data: null, error: { message: 'Client is required.' } }
+    }
+    const payload = (allocations || [])
+      .filter((a) => Number(a.amount) > 0)
+      .map((a) => ({
+        invoice_id: a.invoice_id,
+        amount: Number(a.amount),
+      }))
+    if (!payload.length) {
+      return { data: null, error: { message: 'Select at least one invoice.' } }
+    }
+    const { data, error } = await supabase.rpc('apply_opening_credit_to_invoices', {
+      p_client_id: clientId,
+      p_allocations: payload,
+    })
+    if (error) return mapError(error)
+    return { data: { applied: Number(data) || 0 }, error: null }
+  },
+
+  async applyClientCreditToOpeningBalance(clientId, amount = null) {
+    if (!supabase) return dbUnavailable()
+    if (!clientId) {
+      return { data: null, error: { message: 'Client is required.' } }
+    }
+    const { data, error } = await supabase.rpc('apply_client_credit_to_opening_balance', {
+      p_client_id: clientId,
       p_amount: amount != null ? Number(amount) : null,
     })
     if (error) return mapError(error)
