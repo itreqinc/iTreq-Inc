@@ -11,6 +11,7 @@ import {
   invoiceAffectsClientBalance,
   invoiceEffectiveDueDate,
   localTodayIso,
+  paymentStatementCredit,
   PAYMENT_METHODS,
   summarizeReceivables,
 } from './payments'
@@ -294,7 +295,7 @@ const directOpsApi = {
         .from('invoices')
         .select('client_id, total, status')
         .in('status', BALANCE_INVOICE_STATUSES),
-      supabase.from('payments').select('client_id, amount'),
+      supabase.from('payments').select('client_id, amount, opening_balance_delta'),
     ])
     if (invRes.error) return mapError(invRes.error)
     if (payRes.error) return mapError(payRes.error)
@@ -307,9 +308,8 @@ const directOpsApi = {
     }
     const credits = {}
     for (const pay of payRes.data || []) {
-      // Recorded payments always reduce the client balance.
       const id = pay.client_id
-      credits[id] = (credits[id] || 0) + (Number(pay.amount) || 0)
+      credits[id] = (credits[id] || 0) + paymentStatementCredit(pay)
     }
 
     const data = (clientsRes.data || []).map((c) => {
@@ -2199,6 +2199,57 @@ const directOpsApi = {
     return { data: { applied: Number(data) || 0 }, error: null }
   },
 
+  async listOpeningBalanceClients({ activeOnly = true } = {}) {
+    if (!supabase) return dbUnavailable()
+    let q = supabase
+      .from('clients')
+      .select('id, name, email, phone, cellphone, opening_balance, opening_balance_date, is_active')
+      .neq('opening_balance', 0)
+      .order('name', { ascending: true })
+    if (activeOnly) q = q.eq('is_active', true)
+    const { data, error } = await q
+    if (error) return mapError(error)
+    return { data: data || [], error: null }
+  },
+
+  async applyPaymentToOpeningBalance({
+    client_id,
+    amount,
+    payment_date,
+    method,
+    reference,
+    notes,
+  }) {
+    if (!supabase) return dbUnavailable()
+    if (!client_id) {
+      return { data: null, error: { message: 'Please select a client.' } }
+    }
+    const { data, error } = await supabase.rpc('apply_payment_to_opening_balance', {
+      p_client_id: client_id,
+      p_amount: Number(amount),
+      p_payment_date: payment_date || null,
+      p_method: method || 'cash',
+      p_reference: reference || null,
+      p_notes: notes || null,
+    })
+    if (error) return mapError(error)
+    return { data: { id: data }, error: null }
+  },
+
+  async applyOpeningCreditToInvoice(clientId, invoiceId, amount = null) {
+    if (!supabase) return dbUnavailable()
+    if (!clientId || !invoiceId) {
+      return { data: null, error: { message: 'Client and invoice are required.' } }
+    }
+    const { data, error } = await supabase.rpc('apply_opening_credit_to_invoice', {
+      p_client_id: clientId,
+      p_invoice_id: invoiceId,
+      p_amount: amount != null ? Number(amount) : null,
+    })
+    if (error) return mapError(error)
+    return { data: { applied: Number(data) || 0 }, error: null }
+  },
+
   async getIncomeReport({ from, to }) {
     if (!supabase) return dbUnavailable()
     let q = supabase
@@ -2496,7 +2547,7 @@ const directOpsApi = {
 
     const { data: allPay, error: payErr } = await supabase
       .from('payments')
-      .select('id, payment_date, amount, method, reference')
+      .select('id, payment_date, amount, method, reference, opening_balance_delta')
       .eq('client_id', client_id)
       .order('payment_date', { ascending: true })
     if (payErr) return mapError(payErr)
@@ -2536,7 +2587,7 @@ const directOpsApi = {
       // Payments always affect balance (recorded receipts).
       const d = pay.payment_date || ''
       if (d && d < fromDate) {
-        opening -= Number(pay.amount) || 0
+        opening -= paymentStatementCredit(pay)
       }
     }
 
@@ -2579,16 +2630,21 @@ const directOpsApi = {
     }
     for (const pay of allPay || []) {
       if (!inRange(pay.payment_date)) continue
+      const credit = paymentStatementCredit(pay)
+      const openingApplied = Math.max(0, -(Number(pay.opening_balance_delta) || 0))
       lines.push({
         id: pay.id,
         sortDate: pay.payment_date,
         type: 'payment',
-        label: pay.reference || 'Payment',
+        label:
+          openingApplied > 0 && credit <= 0.001
+            ? 'Payment (brought forward)'
+            : pay.reference || 'Payment',
         method: pay.method,
-        inactive: false,
-        affectsBalance: true,
+        inactive: credit <= 0.001 && openingApplied > 0,
+        affectsBalance: credit > 0.001,
         debit: 0,
-        credit: Number(pay.amount) || 0,
+        credit,
       })
     }
     for (const q of allQuotes || []) {
@@ -3240,7 +3296,10 @@ const directOpsApi = {
     const receivables = summarizeReceivables(invoices, today)
     const broughtForward =
       Math.round(
-        (clientsRes.data || []).reduce((sum, c) => sum + clientOpeningBalanceAmount(c), 0) * 100,
+        (clientsRes.data || []).reduce((sum, c) => {
+          const opening = clientOpeningBalanceAmount(c)
+          return sum + (opening > 0 ? opening : 0)
+        }, 0) * 100,
       ) / 100
     receivables.broughtForward = broughtForward
     receivables.total = Math.round((receivables.total + broughtForward) * 100) / 100

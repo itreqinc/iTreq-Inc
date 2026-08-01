@@ -62,6 +62,14 @@ function invoiceBalanceDue(invoice: Record<string, unknown>) {
   return Math.round((total - paid) * 100) / 100
 }
 
+/** AR statement credit — exclude money applied to positive opening B/F. */
+function paymentStatementCredit(payment: Record<string, unknown>) {
+  const amount = Number(payment?.amount) || 0
+  const delta = Number(payment?.opening_balance_delta) || 0
+  const openingApplied = Math.max(0, -delta)
+  return Math.round((amount - openingApplied) * 100) / 100
+}
+
 function addMonthsIso(isoDate: string, months = 1) {
   const [y, m, d] = String(isoDate || '')
     .slice(0, 10)
@@ -991,7 +999,7 @@ handlers.list_clients_with_balances = async ({ sb }, args) => {
   )
   const [invRes, payRes] = await Promise.all([
     sb.from('invoices').select('client_id, total, status').in('status', [...BALANCE_INVOICE_STATUSES]),
-    sb.from('payments').select('client_id, amount'),
+    sb.from('payments').select('client_id, amount, opening_balance_delta'),
   ])
   if (invRes.error) throw mapDbError(invRes.error)
   if (payRes.error) throw mapDbError(payRes.error)
@@ -1005,7 +1013,7 @@ handlers.list_clients_with_balances = async ({ sb }, args) => {
   const credits: Record<string, number> = {}
   for (const pay of payRes.data || []) {
     const id = String(pay.client_id)
-    credits[id] = (credits[id] || 0) + (Number(pay.amount) || 0)
+    credits[id] = (credits[id] || 0) + paymentStatementCredit(pay as Record<string, unknown>)
   }
 
   return clients.map((c) => ({
@@ -2418,6 +2426,59 @@ handlers.apply_client_credit_to_invoice = async ({ user, sb }, args) => {
   return { applied: Number(data) || 0 }
 }
 
+handlers.list_opening_balance_clients = async ({ user, sb }, args) => {
+  const opts = (args[0] || {}) as { activeOnly?: boolean }
+  const activeOnly = opts.activeOnly !== false
+  let q = sb
+    .from('clients')
+    .select('id, name, email, phone, cellphone, opening_balance, opening_balance_date, is_active')
+    .neq('opening_balance', 0)
+    .order('name', { ascending: true })
+  if (activeOnly) q = q.eq('is_active', true)
+  const { data, error } = await q
+  if (error) throw mapDbError(error)
+  const ownId = portalClientId(user)
+  return (data || []).filter((c) => String(c.id) !== String(ownId || ''))
+}
+
+handlers.apply_payment_to_opening_balance = async ({ user, sb }, args) => {
+  const {
+    client_id,
+    amount,
+    payment_date,
+    method,
+    reference,
+    notes,
+  } = (args[0] || {}) as Record<string, unknown>
+  if (!client_id) throw new OpsError('Please select a client.')
+  assertNotOwnClient(user, String(client_id))
+  const { data, error } = await sb.rpc('apply_payment_to_opening_balance', {
+    p_client_id: client_id,
+    p_amount: Number(amount),
+    p_payment_date: payment_date || null,
+    p_method: method || 'cash',
+    p_reference: reference || null,
+    p_notes: notes || null,
+  })
+  if (error) throw mapDbError(error)
+  return { id: data }
+}
+
+handlers.apply_opening_credit_to_invoice = async ({ user, sb }, args) => {
+  const clientId = String(args[0] || '')
+  const invoiceId = String(args[1] || '')
+  const amount = args[2] != null ? Number(args[2]) : null
+  if (!clientId || !invoiceId) throw new OpsError('Client and invoice are required.')
+  assertNotOwnClient(user, clientId)
+  const { data, error } = await sb.rpc('apply_opening_credit_to_invoice', {
+    p_client_id: clientId,
+    p_invoice_id: invoiceId,
+    p_amount: amount,
+  })
+  if (error) throw mapDbError(error)
+  return { applied: Number(data) || 0 }
+}
+
 handlers.get_income_report = async ({ sb }, args) => {
   const opts = (args[0] || {}) as { from?: string; to?: string }
   return getIncomeReportInternal(sb, opts)
@@ -2564,7 +2625,7 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
 
   const { data: allPay, error: payErr } = await sb
     .from('payments')
-    .select('id, payment_date, amount, method, reference')
+    .select('id, payment_date, amount, method, reference, opening_balance_delta')
     .eq('client_id', scopedId)
     .order('payment_date', { ascending: true })
   if (payErr) throw mapDbError(payErr)
@@ -2598,7 +2659,7 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
   }
   for (const pay of allPay || []) {
     const d = pay.payment_date ? String(pay.payment_date) : ''
-    if (d && d < fromDate) opening -= Number(pay.amount) || 0
+    if (d && d < fromDate) opening -= paymentStatementCredit(pay as Record<string, unknown>)
   }
 
   const openingAmt = clientOpeningBalanceAmount(client as Record<string, unknown>)
@@ -2639,16 +2700,21 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
   }
   for (const pay of allPay || []) {
     if (!inRange(String(pay.payment_date))) continue
+    const credit = paymentStatementCredit(pay as Record<string, unknown>)
+    const openingApplied = Math.max(0, -(Number(pay.opening_balance_delta) || 0))
     lines.push({
       id: pay.id,
       sortDate: pay.payment_date,
       type: 'payment',
-      label: pay.reference || 'Payment',
+      label:
+        openingApplied > 0 && credit <= 0.001
+          ? 'Payment (brought forward)'
+          : pay.reference || 'Payment',
       method: pay.method,
-      inactive: false,
-      affectsBalance: true,
+      inactive: credit <= 0.001 && openingApplied > 0,
+      affectsBalance: credit > 0.001,
       debit: 0,
-      credit: Number(pay.amount) || 0,
+      credit,
     })
   }
   for (const q of allQuotes || []) {
@@ -3280,10 +3346,10 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
   const receivables = summarizeReceivables(invoices, today) as Record<string, number | string>
   const broughtForward =
     Math.round(
-      (clientsRes.data || []).reduce(
-        (sum, c) => sum + clientOpeningBalanceAmount(c as Record<string, unknown>),
-        0,
-      ) * 100,
+      (clientsRes.data || []).reduce((sum, c) => {
+        const opening = clientOpeningBalanceAmount(c as Record<string, unknown>)
+        return sum + (opening > 0 ? opening : 0)
+      }, 0) * 100,
     ) / 100
   receivables.broughtForward = broughtForward
   receivables.total = Math.round((Number(receivables.total) + broughtForward) * 100) / 100

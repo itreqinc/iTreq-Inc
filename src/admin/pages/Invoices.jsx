@@ -42,6 +42,7 @@ import { ActionsMenu } from '../ActionsMenu'
 import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
+import { OpeningBalancesPanel } from '../components/OpeningBalancesPanel'
 import { adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
@@ -148,6 +149,7 @@ export default function InvoicesPage() {
   const [issueSelectedIds, setIssueSelectedIds] = useState([])
   const masterIssueCheckboxRef = useRef(null)
   const [form, setForm] = useState(() => newInvoiceForm())
+  const [listView, setListView] = useState('invoices')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -765,17 +767,52 @@ export default function InvoicesPage() {
         <div>
           <h1 className="font-display text-2xl font-bold text-white">Invoices</h1>
           <p className="mt-1 text-sm text-ink-300">
-            Issued to confirm a sale — that deducts stock levels. Void restores stock levels where applicable.
+            {listView === 'opening'
+              ? 'Brought-forward balances from the previous system — record payments or apply credit to invoices.'
+              : 'Issued to confirm a sale — that deducts stock levels. Void restores stock levels where applicable.'}
           </p>
         </div>
-        {!showForm ? (
-          <button type="button" onClick={startNew} className={adminBtnPrimary}>
-            New invoice
-          </button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-xl border border-white/10 bg-ink-900/50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setListView('invoices')}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                listView === 'invoices'
+                  ? 'bg-white/10 text-white'
+                  : 'text-ink-400 hover:text-ink-200'
+              }`}
+            >
+              Invoices
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setListView('opening')
+                setShowForm(false)
+              }}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                listView === 'opening'
+                  ? 'bg-white/10 text-white'
+                  : 'text-ink-400 hover:text-ink-200'
+              }`}
+            >
+              Brought forward
+            </button>
+          </div>
+          {listView === 'invoices' && !showForm ? (
+            <button type="button" onClick={startNew} className={adminBtnPrimary}>
+              New invoice
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {showForm ? (
+      {listView === 'opening' ? (
+        <OpeningBalancesPanel ownClientId={ownClientId} />
+      ) : null}
+
+      {listView === 'invoices' && showForm ? (
         <form
           ref={formRef}
           onSubmit={handleSave}
@@ -938,7 +975,7 @@ export default function InvoicesPage() {
         </form>
       ) : null}
 
-      {showForm && editingId && form.client_id ? (
+      {listView === 'invoices' && showForm && editingId && form.client_id ? (
         <InvoiceQueryThread
           invoiceId={editingId}
           clientId={form.client_id}
@@ -946,6 +983,7 @@ export default function InvoicesPage() {
         />
       ) : null}
 
+      {listView === 'invoices' ? (
       <DateRangeFilter
         from={dateFrom}
         to={dateTo}
@@ -1085,6 +1123,7 @@ export default function InvoicesPage() {
           </tbody>
         </table>
       </DateRangeFilter>
+      ) : null}
     </div>
   )
 }

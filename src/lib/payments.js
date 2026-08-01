@@ -10,6 +10,17 @@ export function paymentMethodLabel(method) {
   return PAYMENT_METHODS.find((m) => m.value === method)?.label || method || '—'
 }
 
+/**
+ * Statement / AR credit for a payment. Money applied to a positive opening
+ * balance is excluded so reducing clients.opening_balance is not double-counted.
+ */
+export function paymentStatementCredit(payment) {
+  const amount = Number(payment?.amount) || 0
+  const delta = Number(payment?.opening_balance_delta) || 0
+  const openingApplied = Math.max(0, -delta)
+  return Math.round((amount - openingApplied) * 100) / 100
+}
+
 export function invoiceBalanceDue(invoice) {
   const total = Number(invoice.total) || 0
   const paid = Number(invoice.amount_paid) || 0
