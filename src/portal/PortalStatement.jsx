@@ -6,7 +6,7 @@ import { useNavigate,
   useOutletContext } from 'react-router-dom'
 import { YearMonthDaySelect } from '../components/YearMonthDaySelect'
 import { opsApi } from '../lib/opsApi'
-import { invoiceBalanceDue, paymentMethodLabel } from '../lib/payments'
+import { invoiceBalanceDue, statementLineLabel, statementLineMethodSuffix } from '../lib/payments'
 import {
   openStatementDocumentPrintWindow,
   closeStatementDocumentPrintWindow,
@@ -251,12 +251,7 @@ export default function PortalStatement() {
                           ? `/portal/payments/${line.id}`
                           : `/portal/invoices/${line.id}`,
                       )
-                    const label =
-                      line.type === 'invoice'
-                        ? `Invoice ${line.label}`
-                        : line.type === 'opening_balance'
-                          ? line.label || 'Opening balance'
-                          : `Payment ${line.label}`
+                    const label = statementLineLabel(line)
                     return (
                     <tr
                       key={`${line.type}-${line.id}`}
@@ -273,7 +268,7 @@ export default function PortalStatement() {
                         ) : (
                           label
                         )}
-                        {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
+                        {statementLineMethodSuffix(line)}
                         <span className="mt-0.5 block text-xs text-ink-500 sm:hidden">
                           {line.debit
                             ? `Debit ${formatPula(line.debit)}`

@@ -16,6 +16,23 @@ export function paymentDisplayMethod(payment) {
   return paymentMethodLabel(payment?.method)
 }
 
+/** Display label for a statement line (Accounts / portal / print). */
+export function statementLineLabel(line) {
+  if (line?.type === 'invoice') return `Invoice ${line.label}`
+  if (line?.type === 'quotation') return `Quotation ${line.label}`
+  if (line?.type === 'opening_balance') return line.label || 'Opening balance'
+  if (line?.method === 'adjustment' || line?.label === 'Opening credit applied') {
+    return line.label || 'Opening credit applied'
+  }
+  return `Payment ${line.label || ''}`.trim()
+}
+
+/** Method suffix for statement lines; omit for adjustments (already in the label). */
+export function statementLineMethodSuffix(line) {
+  if (!line?.method || line.method === 'adjustment') return ''
+  return ` (${paymentMethodLabel(line.method)})`
+}
+
 /**
  * Statement / AR credit for a payment. Money applied to a positive opening
  * balance is excluded so reducing clients.opening_balance is not double-counted.

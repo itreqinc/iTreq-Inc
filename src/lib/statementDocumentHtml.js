@@ -1,6 +1,6 @@
 import { COMPANY } from '../data/site'
 import { documentLetterheadFromSettings } from './companyDocumentSettings'
-import { paymentMethodLabel } from './payments'
+import { statementLineLabel, statementLineMethodSuffix } from './payments'
 import {
   formatDocMoney,
   getBillingDocumentLogoUrl,
@@ -33,17 +33,10 @@ export function buildStatementDocumentModel({ statement, settings }) {
   const lines = (statement?.lines || [])
     .filter((line) => !line.inactive)
     .map((line) => {
-    const base =
-      line.type === 'invoice'
-        ? `Invoice ${line.label}`
-        : line.type === 'opening_balance'
-          ? line.label || 'Opening balance'
-          : `Payment ${line.label}`
-    const method = line.method ? ` (${paymentMethodLabel(line.method)})` : ''
     return {
       date: line.sortDate || '',
       dateFormatted: formatDocDate(line.sortDate),
-      description: `${base}${method}`,
+      description: `${statementLineLabel(line)}${statementLineMethodSuffix(line)}`,
       debit: line.debit || 0,
       credit: line.credit || 0,
       balance: line.balance,

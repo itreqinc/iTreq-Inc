@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
-import { paymentMethodLabel, summarizeReceivables } from '../lib/payments'
+import { statementLineLabel, statementLineMethodSuffix, summarizeReceivables } from '../lib/payments'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
@@ -242,14 +242,7 @@ export default function PortalHome() {
                   )
                 const unread =
                   line.type === 'invoice' ? unreadByInvoice[line.id] || 0 : 0
-                const label =
-                  line.type === 'invoice'
-                    ? `Invoice ${line.label}`
-                    : line.type === 'opening_balance'
-                      ? line.label || 'Opening balance'
-                      : `Payment ${line.label}${
-                          line.method ? ` (${paymentMethodLabel(line.method)})` : ''
-                        }`
+                const label = `${statementLineLabel(line)}${statementLineMethodSuffix(line)}`
                 return (
                   <tr
                     key={`${line.type}-${line.id}`}

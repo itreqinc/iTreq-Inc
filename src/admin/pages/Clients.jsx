@@ -12,7 +12,7 @@ import { upsertById, removeById } from '../../lib/listState'
 import { clientToForm,
   emptyClientForm } from '../../lib/clientRegistration'
 import { validateClientForm } from '../../lib/clientValidation'
-import { paymentMethodLabel } from '../../lib/payments'
+import { statementLineLabel, statementLineMethodSuffix } from '../../lib/payments'
 import { quotationDisplayStatus } from '../../lib/portalQuote'
 import {
   openStatementDocumentPrintWindow,
@@ -1028,14 +1028,8 @@ export default function ClientsPage() {
                         visibleLines.map((line, i) => {
                           const openable = Boolean(line.id) && line.type !== 'opening_balance'
                           const open = () => openTransaction(line)
-                          const label =
-                            line.type === 'invoice'
-                              ? `Invoice ${line.label}`
-                              : line.type === 'quotation'
-                                ? `Quotation ${line.label}`
-                                : line.type === 'opening_balance'
-                                  ? line.label || 'Opening balance'
-                                  : `Payment ${line.label}`
+                          const label = statementLineLabel(line)
+                          const methodSuffix = statementLineMethodSuffix(line)
                           return (
                           <tr
                             key={`${line.type}-${line.id || i}`}
@@ -1058,7 +1052,7 @@ export default function ClientsPage() {
                               ) : (
                                 label
                               )}
-                              {line.method ? ` (${paymentMethodLabel(line.method)})` : ''}
+                              {methodSuffix}
                               {line.inactive ? (
                                 <span className="ml-1 text-xs text-red-300">
                                   (
