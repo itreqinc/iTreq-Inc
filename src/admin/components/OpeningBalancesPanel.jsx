@@ -17,6 +17,7 @@ import {
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
 import {
+  adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
   adminFieldClass,
@@ -286,29 +287,89 @@ export function OpeningBalancesPanel({ ownClientId }) {
     await load()
   }
 
-  async function submitEditBalance(e) {
-    e.preventDefault()
-    if (!editTarget || !admin) return
-    const opening = Math.round((Number(editAmount) || 0) * 100) / 100
-    if (opening !== 0 && !String(editDate || '').trim()) {
+  async function saveOpeningBalance(client, opening, date) {
+    const amount = Math.round((Number(opening) || 0) * 100) / 100
+    if (amount !== 0 && !String(date || '').trim()) {
       showWarning('Choose an opening balance date when the amount is not zero.')
-      return
+      return false
     }
-
     const formPayload = {
-      ...clientToForm(editTarget),
-      opening_balance: opening === 0 ? '0' : String(opening),
-      opening_balance_date: opening === 0 ? '' : editDate,
+      ...clientToForm(client),
+      opening_balance: amount === 0 ? '0' : String(amount),
+      opening_balance_date: amount === 0 ? '' : date,
     }
-
     setSaving(true)
-    const { error } = await opsApi.updateClient(editTarget.id, formPayload)
+    const { error } = await opsApi.updateClient(client.id, formPayload)
     setSaving(false)
     if (error) {
       showError(error.message)
+      return false
+    }
+    return true
+  }
+
+  async function submitEditBalance(e) {
+    e.preventDefault()
+    if (!editTarget || !admin) return
+    const ok = await saveOpeningBalance(editTarget, editAmount, editDate)
+    if (!ok) return
+    showSuccess('Brought-forward balance updated.')
+    setEditTarget(null)
+    await load()
+  }
+
+  async function clearEditBalance() {
+    if (!editTarget || !admin) return
+    const current = clientOpeningBalanceAmount(editTarget)
+    if (current === 0 && !clientOpeningBalanceDate(editTarget)) {
+      showWarning('This client already has no brought-forward balance.')
       return
     }
-    showSuccess('Brought-forward balance updated.')
+
+    setSaving(true)
+    const appliedRes = await opsApi.getClientOpeningBalanceApplied(editTarget.id)
+    setSaving(false)
+    if (appliedRes.error) {
+      showError(appliedRes.error.message)
+      return
+    }
+
+    const paidToward = Number(appliedRes.data?.paidTowardOpening) || 0
+    const creditApplied = Number(appliedRes.data?.creditAppliedToInvoices) || 0
+    let message = `Set ${editTarget.name}'s remaining brought-forward balance to zero (currently ${formatPula(current)})?`
+
+    if (current > 0 && paidToward > 0.001) {
+      message +=
+        `\n\n${formatPula(paidToward)} has already been applied toward this brought-forward balance and will stay on record. ` +
+        `Clearing only removes the remaining ${formatPula(current)} — it does not reverse those payments.`
+    } else if (current < 0 && creditApplied > 0.001) {
+      message +=
+        `\n\n${formatPula(creditApplied)} of brought-forward credit has already been applied to invoice(s) and will stay on record. ` +
+        `Clearing only removes the remaining ${formatPula(Math.abs(current))} credit — it does not reverse those adjustments.`
+    } else if (paidToward > 0.001 || creditApplied > 0.001) {
+      const parts = []
+      if (paidToward > 0.001) {
+        parts.push(`${formatPula(paidToward)} already paid toward brought forward`)
+      }
+      if (creditApplied > 0.001) {
+        parts.push(`${formatPula(creditApplied)} credit already applied to invoices`)
+      }
+      message +=
+        `\n\nNote: ${parts.join('; ')}. Those records stay as they are. ` +
+        `Clearing only zeros the remaining balance field.`
+    } else {
+      message += ' This does not create a payment or change invoices.'
+    }
+
+    const ok = await confirm({
+      title: 'Clear brought-forward balance?',
+      message,
+      confirmLabel: 'Clear balance',
+    })
+    if (!ok) return
+    const saved = await saveOpeningBalance(editTarget, 0, '')
+    if (!saved) return
+    showSuccess('Brought-forward balance cleared.')
     setEditTarget(null)
     await load()
   }
@@ -618,18 +679,28 @@ export function OpeningBalancesPanel({ ownClientId }) {
               value={editDate}
               onChange={setEditDate}
             />
-            <div className="flex justify-end gap-2 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => setEditTarget(null)}
-                className={adminBtnSecondary}
+                onClick={clearEditBalance}
+                className={adminBtnDanger}
               >
-                Cancel
+                Clear balance
               </button>
-              <button type="submit" disabled={saving} className={adminBtnPrimary}>
-                {saving ? 'Saving…' : 'Save balance'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setEditTarget(null)}
+                  className={adminBtnSecondary}
+                >
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving} className={adminBtnPrimary}>
+                  {saving ? 'Saving…' : 'Save balance'}
+                </button>
+              </div>
             </div>
           </form>
         </div>

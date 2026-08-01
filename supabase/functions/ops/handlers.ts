@@ -2522,6 +2522,29 @@ handlers.apply_client_credit_to_opening_balance = async ({ user, sb }, args) => 
   return { applied: Number(data) || 0 }
 }
 
+handlers.get_client_opening_balance_applied = async ({ user, sb }, args) => {
+  const clientId = String(args[0] || '')
+  if (!clientId) return { paidTowardOpening: 0, creditAppliedToInvoices: 0 }
+  assertNotOwnClient(user, clientId)
+  const { data, error } = await sb
+    .from('payments')
+    .select('opening_balance_delta')
+    .eq('client_id', clientId)
+    .neq('opening_balance_delta', 0)
+  if (error) throw mapDbError(error)
+  let paidTowardOpening = 0
+  let creditAppliedToInvoices = 0
+  for (const row of data || []) {
+    const delta = Number(row.opening_balance_delta) || 0
+    if (delta < 0) paidTowardOpening += -delta
+    else if (delta > 0) creditAppliedToInvoices += delta
+  }
+  return {
+    paidTowardOpening: Math.round(paidTowardOpening * 100) / 100,
+    creditAppliedToInvoices: Math.round(creditAppliedToInvoices * 100) / 100,
+  }
+}
+
 handlers.get_income_report = async ({ sb }, args) => {
   const opts = (args[0] || {}) as { from?: string; to?: string }
   return getIncomeReportInternal(sb, opts)

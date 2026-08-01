@@ -2295,6 +2295,37 @@ const directOpsApi = {
     return { data: { applied: Number(data) || 0 }, error: null }
   },
 
+  /**
+   * How much of this client's brought-forward balance has already been applied
+   * via payments (positive B/F) or invoice adjustments (negative credit).
+   */
+  async getClientOpeningBalanceApplied(clientId) {
+    if (!supabase) return dbUnavailable()
+    if (!clientId) {
+      return { data: { paidTowardOpening: 0, creditAppliedToInvoices: 0 }, error: null }
+    }
+    const { data, error } = await supabase
+      .from('payments')
+      .select('opening_balance_delta')
+      .eq('client_id', clientId)
+      .neq('opening_balance_delta', 0)
+    if (error) return mapError(error)
+    let paidTowardOpening = 0
+    let creditAppliedToInvoices = 0
+    for (const row of data || []) {
+      const delta = Number(row.opening_balance_delta) || 0
+      if (delta < 0) paidTowardOpening += -delta
+      else if (delta > 0) creditAppliedToInvoices += delta
+    }
+    return {
+      data: {
+        paidTowardOpening: Math.round(paidTowardOpening * 100) / 100,
+        creditAppliedToInvoices: Math.round(creditAppliedToInvoices * 100) / 100,
+      },
+      error: null,
+    }
+  },
+
   async getIncomeReport({ from, to }) {
     if (!supabase) return dbUnavailable()
     let q = supabase
