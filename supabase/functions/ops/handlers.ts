@@ -3242,7 +3242,7 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
   const today = localTodayIso()
   const monthStart = `${today.slice(0, 7)}-01`
 
-  const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes] = await Promise.all([
+  const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes, clientsRes] = await Promise.all([
     sb
       .from('payment_notifications')
       .select('*, clients(id, name), invoices(id, number)')
@@ -3266,6 +3266,7 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
       )
       .in('status', [...BALANCE_INVOICE_STATUSES]),
     sb.from('payments').select('amount, payment_date').gte('payment_date', monthStart),
+    sb.from('clients').select('id, opening_balance'),
   ])
 
   if (notifRes.error) throw mapDbError(notifRes.error)
@@ -3273,9 +3274,19 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
   if (quoteRes.error) throw mapDbError(quoteRes.error)
   if (invoiceRes.error) throw mapDbError(invoiceRes.error)
   if (paymentRes.error) throw mapDbError(paymentRes.error)
+  if (clientsRes.error) throw mapDbError(clientsRes.error)
 
   const invoices = (invoiceRes.data || []) as Record<string, unknown>[]
-  const receivables = summarizeReceivables(invoices, today)
+  const receivables = summarizeReceivables(invoices, today) as Record<string, number | string>
+  const broughtForward =
+    Math.round(
+      (clientsRes.data || []).reduce(
+        (sum, c) => sum + clientOpeningBalanceAmount(c as Record<string, unknown>),
+        0,
+      ) * 100,
+    ) / 100
+  receivables.broughtForward = broughtForward
+  receivables.total = Math.round((Number(receivables.total) + broughtForward) * 100) / 100
 
   const overdueInvoices = invoices
     .filter((inv) => {
