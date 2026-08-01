@@ -443,33 +443,11 @@ export default function PaymentsPage() {
                 : 'Enter the amount received, then tick the invoices to pay. Funds are allocated automatically; anything left stays on the client’s account.'}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-white/10 bg-ink-900/50 p-0.5">
-            {[
-              { id: 'payments', label: 'Payments' },
-              { id: 'adjustments', label: 'Adjustments' },
-              { id: 'all', label: 'All' },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setListView(opt.id)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  listView === opt.id
-                    ? 'bg-white/10 text-white'
-                    : 'text-ink-400 hover:text-ink-200'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {!showForm && listView !== 'adjustments' ? (
-            <button type="button" onClick={startNew} className={adminBtnPrimary}>
-              Record payment
-            </button>
-          ) : null}
-        </div>
+        {!showForm && listView !== 'adjustments' ? (
+          <button type="button" onClick={startNew} className={adminBtnPrimary}>
+            Record payment
+          </button>
+        ) : null}
       </div>
 
       {showForm ? (
@@ -729,6 +707,30 @@ export default function PaymentsPage() {
         dateLabel="payment date"
         shown={visibleRows.length}
         total={listTotalForFilter}
+        size="compact"
+        dateClassName="w-[15.5rem] shrink-0"
+        leading={
+          <div className="inline-flex shrink-0 rounded-xl border border-white/10 bg-ink-950/50 p-0.5">
+            {[
+              { id: 'payments', label: 'Payments' },
+              { id: 'adjustments', label: 'Adjustments' },
+              { id: 'all', label: 'All' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setListView(opt.id)}
+                className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition ${
+                  listView === opt.id
+                    ? 'bg-white/10 text-white'
+                    : 'text-ink-400 hover:text-ink-200'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        }
       >
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">

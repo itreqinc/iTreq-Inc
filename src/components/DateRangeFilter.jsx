@@ -5,6 +5,7 @@ import { dateRangeIsBackwards, endOfNextMonthIso, todayIso } from '../lib/dateRa
 /**
  * From/To toolbar + list table in one bordered shell.
  * Pass the `<table>` (or table wrapper contents) as `children`.
+ * Optional `leading` renders before the date controls (e.g. view toggles).
  */
 export function DateRangeFilter({
   from,
@@ -16,10 +17,14 @@ export function DateRangeFilter({
   total,
   children,
   className = '',
+  leading = null,
+  size = 'default',
+  dateClassName = '',
 }) {
   const active = Boolean(from || to)
   const backwards = dateRangeIsBackwards(from, to)
   const toMax = endOfNextMonthIso()
+  const compact = size === 'compact'
 
   function clear() {
     onFromChange('')
@@ -29,14 +34,29 @@ export function DateRangeFilter({
   return (
     <div className={`${adminTableShellClass} bg-ink-900/40 ${className}`.trim()}>
       <div className="flex flex-wrap items-end gap-3 border-b border-white/10 p-4">
+        {leading}
         <YearMonthDaySelect
+          size={size}
           label="From"
           value={from}
           onChange={onFromChange}
           maxYmd={todayIso()}
+          className={dateClassName || undefined}
         />
-        <YearMonthDaySelect label="To" value={to} onChange={onToChange} maxYmd={toMax} />
-        <button type="button" onClick={clear} disabled={!active} className={adminBtnSecondary}>
+        <YearMonthDaySelect
+          size={size}
+          label="To"
+          value={to}
+          onChange={onToChange}
+          maxYmd={toMax}
+          className={dateClassName || undefined}
+        />
+        <button
+          type="button"
+          onClick={clear}
+          disabled={!active}
+          className={compact ? `${adminBtnSecondary} px-3 py-1.5 text-[13px]` : adminBtnSecondary}
+        >
           Clear
         </button>
         <p className="ml-auto max-w-xs text-xs text-ink-400">
