@@ -70,6 +70,28 @@ function paymentStatementCredit(payment: Record<string, unknown>) {
   return Math.round((amount - openingApplied) * 100) / 100
 }
 
+/**
+ * Economic B/F for Accounts: remaining opening minus opening-credit adjustments
+ * (apply-to-invoice stays off the timeline).
+ */
+function statementOpeningBalance(
+  client: Record<string, unknown> | null | undefined,
+  payments: Record<string, unknown>[] = [],
+) {
+  const remaining = clientOpeningBalanceAmount(client)
+  let applied = 0
+  let fallbackDate = ''
+  for (const pay of payments || []) {
+    if (!pay?.is_adjustment) continue
+    applied += Number(pay.amount) || 0
+    const src = String(pay.source_date || pay.payment_date || '').slice(0, 10)
+    if (src && (!fallbackDate || src < fallbackDate)) fallbackDate = src
+  }
+  const amount = Math.round((remaining - applied) * 100) / 100
+  const date = clientOpeningBalanceDate(client) || fallbackDate
+  return { amount, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '' }
+}
+
 function addMonthsIso(isoDate: string, months = 1) {
   const [y, m, d] = String(isoDate || '')
     .slice(0, 10)
@@ -2747,7 +2769,9 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
 
   const { data: allPay, error: payErr } = await sb
     .from('payments')
-    .select('id, payment_date, amount, method, reference, opening_balance_delta, is_adjustment')
+    .select(
+      'id, payment_date, source_date, amount, method, reference, opening_balance_delta, is_adjustment',
+    )
     .eq('client_id', scopedId)
     .order('payment_date', { ascending: true })
   if (payErr) throw mapDbError(payErr)
@@ -2773,6 +2797,11 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
   const quoteSortDate = (q: Record<string, unknown>) =>
     String(q.issue_date || String(q.created_at || '').slice(0, 10) || '')
 
+  const { amount: openingAmt, date: openingDate } = statementOpeningBalance(
+    client as Record<string, unknown>,
+    (allPay || []) as Record<string, unknown>[],
+  )
+
   let opening = 0
   for (const inv of allInv || []) {
     if (!invoiceAffectsClientBalance(String(inv.status))) continue
@@ -2780,12 +2809,11 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     if (d && d < fromDate) opening += Number(inv.total) || 0
   }
   for (const pay of allPay || []) {
+    if (pay.is_adjustment) continue
     const d = pay.payment_date ? String(pay.payment_date) : ''
     if (d && d < fromDate) opening -= paymentStatementCredit(pay as Record<string, unknown>)
   }
 
-  const openingAmt = clientOpeningBalanceAmount(client as Record<string, unknown>)
-  const openingDate = clientOpeningBalanceDate(client as Record<string, unknown>)
   if (openingAmt !== 0 && openingDate && openingDate < fromDate) {
     opening += openingAmt
   }
@@ -2821,20 +2849,19 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     })
   }
   for (const pay of allPay || []) {
+    if (pay.is_adjustment) continue
     if (!inRange(String(pay.payment_date))) continue
     const credit = paymentStatementCredit(pay as Record<string, unknown>)
     const openingApplied = Math.max(0, -(Number(pay.opening_balance_delta) || 0))
-    const isAdjustment = Boolean(pay.is_adjustment)
     lines.push({
       id: pay.id,
       sortDate: pay.payment_date,
       type: 'payment',
-      label: isAdjustment
-        ? 'Opening credit applied'
-        : openingApplied > 0 && credit <= 0.001
+      label:
+        openingApplied > 0 && credit <= 0.001
           ? 'Payment (brought forward)'
           : pay.reference || 'Payment',
-      method: isAdjustment ? 'adjustment' : pay.method,
+      method: pay.method,
       inactive: credit <= 0.001 && openingApplied > 0,
       affectsBalance: credit > 0.001,
       debit: 0,

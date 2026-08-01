@@ -36,12 +36,37 @@ export function statementLineMethodSuffix(line) {
 /**
  * Statement / AR credit for a payment. Money applied to a positive opening
  * balance is excluded so reducing clients.opening_balance is not double-counted.
+ * Opening-credit adjustments still count here for client AR totals; they are
+ * omitted from statement *lines* (see statementOpeningBalance).
  */
 export function paymentStatementCredit(payment) {
   const amount = Number(payment?.amount) || 0
   const delta = Number(payment?.opening_balance_delta) || 0
   const openingApplied = Math.max(0, -delta)
   return Math.round((amount - openingApplied) * 100) / 100
+}
+
+/**
+ * Brought-forward amount/date for Accounts. clients.opening_balance is remaining
+ * credit/debt available to apply; statement shows the economic B/F (remaining
+ * minus opening-credit adjustments) so apply-to-invoice stays off the timeline.
+ */
+export function statementOpeningBalance(client, payments = []) {
+  const remaining = Math.round((Number(client?.opening_balance) || 0) * 100) / 100
+  let applied = 0
+  let fallbackDate = ''
+  for (const pay of payments || []) {
+    if (!pay?.is_adjustment) continue
+    applied += Number(pay.amount) || 0
+    const src = String(pay.source_date || pay.payment_date || '').slice(0, 10)
+    if (src && (!fallbackDate || src < fallbackDate)) fallbackDate = src
+  }
+  const amount = Math.round((remaining - applied) * 100) / 100
+  const date =
+    String(client?.opening_balance_date || '')
+      .trim()
+      .slice(0, 10) || fallbackDate
+  return { amount, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '' }
 }
 
 export function invoiceBalanceDue(invoice) {

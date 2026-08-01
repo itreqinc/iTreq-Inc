@@ -13,6 +13,7 @@ import {
   localTodayIso,
   paymentStatementCredit,
   PAYMENT_METHODS,
+  statementOpeningBalance,
   summarizeReceivables,
 } from './payments'
 import { disputeUnreadCount } from './invoiceDisputes'
@@ -2682,7 +2683,9 @@ const directOpsApi = {
 
     const { data: allPay, error: payErr } = await supabase
       .from('payments')
-      .select('id, payment_date, amount, method, reference, opening_balance_delta, is_adjustment')
+      .select(
+        'id, payment_date, source_date, amount, method, reference, opening_balance_delta, is_adjustment',
+      )
       .eq('client_id', client_id)
       .order('payment_date', { ascending: true })
     if (payErr) return mapError(payErr)
@@ -2710,6 +2713,11 @@ const directOpsApi = {
       return q.issue_date || String(q.created_at || '').slice(0, 10) || ''
     }
 
+    const { amount: openingAmt, date: openingDate } = statementOpeningBalance(
+      clientRes.data,
+      allPay || [],
+    )
+
     let opening = 0
     for (const inv of allInv || []) {
       if (!invoiceAffectsClientBalance(inv.status)) continue
@@ -2719,15 +2727,14 @@ const directOpsApi = {
       }
     }
     for (const pay of allPay || []) {
-      // Payments always affect balance (recorded receipts).
+      // Opening-credit adjustments are folded into the B/F line, not timeline credits.
+      if (pay.is_adjustment) continue
       const d = pay.payment_date || ''
       if (d && d < fromDate) {
         opening -= paymentStatementCredit(pay)
       }
     }
 
-    const openingAmt = clientOpeningBalanceAmount(clientRes.data)
-    const openingDate = clientOpeningBalanceDate(clientRes.data)
     if (openingAmt !== 0 && openingDate && openingDate < fromDate) {
       opening += openingAmt
     }
@@ -2764,20 +2771,19 @@ const directOpsApi = {
       })
     }
     for (const pay of allPay || []) {
+      if (pay.is_adjustment) continue
       if (!inRange(pay.payment_date)) continue
       const credit = paymentStatementCredit(pay)
       const openingApplied = Math.max(0, -(Number(pay.opening_balance_delta) || 0))
-      const isAdjustment = Boolean(pay.is_adjustment)
       lines.push({
         id: pay.id,
         sortDate: pay.payment_date,
         type: 'payment',
-        label: isAdjustment
-          ? 'Opening credit applied'
-          : openingApplied > 0 && credit <= 0.001
+        label:
+          openingApplied > 0 && credit <= 0.001
             ? 'Payment (brought forward)'
             : pay.reference || 'Payment',
-        method: isAdjustment ? 'adjustment' : pay.method,
+        method: pay.method,
         inactive: credit <= 0.001 && openingApplied > 0,
         affectsBalance: credit > 0.001,
         debit: 0,
