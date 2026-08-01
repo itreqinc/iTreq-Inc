@@ -10,7 +10,10 @@ import { isAdmin } from '../../lib/authConfig'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { clientToForm,
-  emptyClientForm } from '../../lib/clientRegistration'
+  emptyClientForm,
+  clientOpeningBalanceAmount,
+  clientOpeningBalanceDate,
+} from '../../lib/clientRegistration'
 import { validateClientForm } from '../../lib/clientValidation'
 import { statementLineLabel, statementLineMethodSuffix } from '../../lib/payments'
 import { quotationDisplayStatus } from '../../lib/portalQuote'
@@ -30,6 +33,7 @@ import {
   todayIso as rangeTodayIso,
 } from '../../lib/dateRange'
 import { ActionsMenu } from '../ActionsMenu'
+import { useOpeningBalanceActions } from '../components/OpeningBalanceActions'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { adminBtnPrimary,
@@ -92,13 +96,10 @@ export default function ClientsPage() {
   const [stmtModalClient, setStmtModalClient] = useState(null)
   const [stmtFrom, setStmtFrom] = useState(monthStartIso)
   const [stmtTo, setStmtTo] = useState(todayIso)
-  const [openingModalClient, setOpeningModalClient] = useState(null)
-  const [openingAmount, setOpeningAmount] = useState('')
-  const [openingDate, setOpeningDate] = useState('')
-  const [openingSaving, setOpeningSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
 
   const [selectedId, setSelectedId] = useState(null)
+  const [selectedAccountCredit, setSelectedAccountCredit] = useState(0)
   const [statement, setStatement] = useState(null)
   const [stmtLoading, setStmtLoading] = useState(false)
   const [showAllTx, setShowAllTx] = useState(false)
@@ -143,10 +144,56 @@ export default function ClientsPage() {
     setClients(data || [])
   }, [showError, view, showAllClients])
 
+  const refreshSelectedStatement = useCallback(async () => {
+    if (view !== 'accounts' || !selectedId || txRangeBackwards) return
+    const { data, error } = await opsApi.getClientStatement({
+      client_id: selectedId,
+      from: txFrom || undefined,
+      to: txTo || undefined,
+    })
+    if (error) {
+      showError(error.message)
+      return
+    }
+    setStatement(data)
+  }, [view, selectedId, txFrom, txTo, txRangeBackwards, showError])
+
+  const onOpeningBalanceDone = useCallback(async () => {
+    await load()
+    await refreshSelectedStatement()
+    if (selectedId) {
+      const creditRes = await opsApi.getClientCreditBalance(selectedId)
+      if (!creditRes.error) {
+        setSelectedAccountCredit(Number(creditRes.data?.balance) || 0)
+      }
+    }
+  }, [load, refreshSelectedStatement, selectedId])
+
+  const { menuItemsFor: openingBalanceMenuItems, dialogs: openingBalanceDialogs } =
+    useOpeningBalanceActions({ onDone: onOpeningBalanceDone })
+
   useEffect(() => {
     load()
   }, [load])
 
+  useEffect(() => {
+    if (view !== 'accounts' || !selectedId) {
+      setSelectedAccountCredit(0)
+      return
+    }
+    let cancelled = false
+    opsApi.getClientCreditBalance(selectedId).then(({ data, error }) => {
+      if (cancelled) return
+      if (error) {
+        setSelectedAccountCredit(0)
+        return
+      }
+      setSelectedAccountCredit(Number(data?.balance) || 0)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [view, selectedId])
   useEffect(() => {
     if (!stmtModalClient) return undefined
     const prev = document.body.style.overflow
@@ -244,72 +291,6 @@ export default function ClientsPage() {
   function closeStatementRangeModal() {
     if (printingStmt) return
     setStmtModalClient(null)
-  }
-
-  function openOpeningBalanceModal(client) {
-    const amount = Number(client.opening_balance)
-    setOpeningAmount(
-      Number.isFinite(amount) && amount !== 0 ? String(amount) : amount === 0 ? '0' : '',
-    )
-    setOpeningDate(
-      client.opening_balance_date ? String(client.opening_balance_date).slice(0, 10) : '',
-    )
-    setOpeningModalClient(client)
-  }
-
-  function closeOpeningBalanceModal() {
-    if (openingSaving) return
-    setOpeningModalClient(null)
-  }
-
-  async function saveOpeningBalance() {
-    if (!openingModalClient) return
-    const opening = Math.round((Number(openingAmount) || 0) * 100) / 100
-    if (opening !== 0 && !String(openingDate || '').trim()) {
-      showWarning('Choose an opening balance date when the amount is not zero.')
-      return
-    }
-
-    const formPayload = {
-      ...clientToForm(openingModalClient),
-      opening_balance: opening === 0 ? '0' : String(opening),
-      opening_balance_date: opening === 0 ? '' : openingDate,
-    }
-
-    setOpeningSaving(true)
-    const { data, error } = await opsApi.updateClient(openingModalClient.id, formPayload)
-    setOpeningSaving(false)
-    if (error) {
-      showError(error.message)
-      return
-    }
-
-    showSuccess('Opening balance updated.')
-    setOpeningModalClient(null)
-    setClients((prev) => {
-      const existing = prev.find((c) => c.id === data.id)
-      return upsertById(prev, {
-        ...existing,
-        ...data,
-        balance: existing?.balance,
-        has_financial_records: existing?.has_financial_records,
-      })
-    })
-    // Refresh list balances and on-screen statement for this client.
-    if (view === 'accounts') {
-      const { data: withBalances } = await opsApi.listClientsWithBalances({
-        activeOnly: !showAllClients,
-      })
-      if (withBalances) setClients(withBalances)
-      if (selectedId === data.id) {
-        const { data: stmt } = await opsApi.getClientStatement({
-          client_id: data.id,
-          from: txFrom || undefined,
-          to: txTo || undefined,
-        })
-        if (stmt) setStatement(stmt)
-      }
-    }
   }
 
   async function printClientStatement(clientId, from, to) {
@@ -419,17 +400,13 @@ export default function ClientsPage() {
 
   function clientMenuItems(client) {
     const actions = clientIconActions(client)
+    const bfClient =
+      client.id === selectedId
+        ? { ...client, account_credit: selectedAccountCredit }
+        : client
     const items = [
       { label: 'Edit client', icon: 'pencil', onClick: actions.onEdit },
-      ...(admin
-        ? [
-            {
-              label: 'Opening balance',
-              icon: 'payment',
-              onClick: () => openOpeningBalanceModal(client),
-            },
-          ]
-        : []),
+      ...openingBalanceMenuItems(bfClient),
       { label: 'New invoice', icon: 'invoice', onClick: actions.onInvoice },
       { label: 'Record payment', icon: 'payment', onClick: actions.onPayment },
       {
@@ -938,6 +915,25 @@ export default function ClientsPage() {
                         </span>
                       </p>
                     ) : null}
+                    {selectedClient &&
+                    Math.abs(clientOpeningBalanceAmount(selectedClient)) > 0.001 ? (
+                      <p className="mt-1 text-sm text-ink-300">
+                        Brought forward remaining:{' '}
+                        <span
+                          className={`font-semibold ${balanceClass(
+                            clientOpeningBalanceAmount(selectedClient),
+                          )}`}
+                        >
+                          {formatPula(clientOpeningBalanceAmount(selectedClient))}
+                        </span>
+                        {clientOpeningBalanceDate(selectedClient) ? (
+                          <span className="text-ink-500">
+                            {' '}
+                            · as of {clientOpeningBalanceDate(selectedClient)}
+                          </span>
+                        ) : null}
+                      </p>
+                    ) : null}
                     <p className="mt-1 text-sm text-ink-300">
                       Closing balance:{' '}
                       <span
@@ -1110,71 +1106,7 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {openingModalClient ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="absolute inset-0 bg-ink-950/50 backdrop-blur-[2px]"
-            aria-label="Close dialog"
-            onClick={closeOpeningBalanceModal}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="opening-balance-title"
-            className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-ink-900 p-5 shadow-xl"
-          >
-            <h2 id="opening-balance-title" className="text-base font-semibold text-white">
-              Opening balance
-            </h2>
-            <p className="mt-1 text-sm text-ink-300">
-              Carry-in amount for{' '}
-              <span className="text-ink-100">{openingModalClient.name}</span>. Positive means
-              they owe iTreq.
-            </p>
-            <div className="mt-4 flex flex-wrap items-end gap-2.5">
-              <label className="block min-w-[8rem] flex-1">
-                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-ink-400">
-                  Amount (P)
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  className={`${adminFieldClass} py-1.5 text-[13px]`}
-                  value={openingAmount}
-                  onChange={(e) => setOpeningAmount(e.target.value)}
-                  placeholder="0.00"
-                />
-              </label>
-              <YearMonthDaySelect
-                size="compact"
-                label="As of"
-                value={openingDate}
-                onChange={setOpeningDate}
-                className="w-[14rem] shrink-0"
-              />
-            </div>
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                disabled={openingSaving}
-                onClick={closeOpeningBalanceModal}
-                className={adminBtnSecondary}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={openingSaving}
-                onClick={saveOpeningBalance}
-                className={adminBtnPrimary}
-              >
-                {openingSaving ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {openingBalanceDialogs}
 
       {stmtModalClient ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
