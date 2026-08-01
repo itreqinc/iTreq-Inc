@@ -10,6 +10,12 @@ export function paymentMethodLabel(method) {
   return PAYMENT_METHODS.find((m) => m.value === method)?.label || method || '—'
 }
 
+/** Display label for a payment row (adjustments are not bank collections). */
+export function paymentDisplayMethod(payment) {
+  if (payment?.is_adjustment) return 'Adjustment'
+  return paymentMethodLabel(payment?.method)
+}
+
 /**
  * Statement / AR credit for a payment. Money applied to a positive opening
  * balance is excluded so reducing clients.opening_balance is not double-counted.

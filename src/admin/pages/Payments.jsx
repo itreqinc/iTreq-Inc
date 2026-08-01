@@ -6,6 +6,7 @@ import {
   autoAllocatePayment,
   invoiceBalanceDue,
   PAYMENT_METHODS,
+  paymentDisplayMethod,
   paymentMethodLabel,
 } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
@@ -735,7 +736,7 @@ export default function PaymentsPage() {
                     <span className={clickableDocClass}>{row.clients?.name || '—'}</span>
                   </td>
                   <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
-                    {paymentMethodLabel(row.method)}
+                    {paymentDisplayMethod(row)}
                   </td>
                   <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                     {row.reference || '—'}

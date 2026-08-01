@@ -835,6 +835,7 @@ async function getIncomeReportInternal(
   let q = sb
     .from('payments')
     .select('id, amount, method, payment_date, reference, notes, clients(name)')
+    .eq('is_adjustment', false)
     .order('payment_date', { ascending: true })
     .order('created_at', { ascending: true })
   if (from) q = q.gte('payment_date', from)
@@ -2667,7 +2668,7 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
 
   const { data: allPay, error: payErr } = await sb
     .from('payments')
-    .select('id, payment_date, amount, method, reference, opening_balance_delta')
+    .select('id, payment_date, amount, method, reference, opening_balance_delta, is_adjustment')
     .eq('client_id', scopedId)
     .order('payment_date', { ascending: true })
   if (payErr) throw mapDbError(payErr)
@@ -2744,15 +2745,17 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     if (!inRange(String(pay.payment_date))) continue
     const credit = paymentStatementCredit(pay as Record<string, unknown>)
     const openingApplied = Math.max(0, -(Number(pay.opening_balance_delta) || 0))
+    const isAdjustment = Boolean(pay.is_adjustment)
     lines.push({
       id: pay.id,
       sortDate: pay.payment_date,
       type: 'payment',
-      label:
-        openingApplied > 0 && credit <= 0.001
+      label: isAdjustment
+        ? 'Opening credit applied'
+        : openingApplied > 0 && credit <= 0.001
           ? 'Payment (brought forward)'
           : pay.reference || 'Payment',
-      method: pay.method,
+      method: isAdjustment ? 'adjustment' : pay.method,
       inactive: credit <= 0.001 && openingApplied > 0,
       affectsBalance: credit > 0.001,
       debit: 0,
@@ -3373,7 +3376,7 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
         'id, number, status, total, amount_paid, issue_date, due_date, client_id, clients(id, name)',
       )
       .in('status', [...BALANCE_INVOICE_STATUSES]),
-    sb.from('payments').select('amount, payment_date').gte('payment_date', monthStart),
+    sb.from('payments').select('amount, payment_date').eq('is_adjustment', false).gte('payment_date', monthStart),
     sb.from('clients').select('id, opening_balance'),
   ])
 
