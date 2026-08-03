@@ -2173,6 +2173,7 @@ const directOpsApi = {
     reference,
     notes,
     allocations,
+    opening_amount = 0,
   }) {
     if (!supabase) return dbUnavailable()
     if (!client_id) {
@@ -2192,6 +2193,7 @@ const directOpsApi = {
       p_reference: reference || null,
       p_notes: notes || null,
       p_allocations: payload,
+      p_opening_amount: Math.max(0, Number(opening_amount) || 0),
     })
     if (error) return mapError(error)
     return { data: { id: data }, error: null }
@@ -2205,6 +2207,7 @@ const directOpsApi = {
     reference,
     notes,
     allocations,
+    opening_amount = 0,
   }) {
     if (!supabase) return dbUnavailable()
     if (!id) {
@@ -2224,6 +2227,7 @@ const directOpsApi = {
       p_reference: reference || null,
       p_notes: notes || null,
       p_allocations: payload,
+      p_opening_amount: Math.max(0, Number(opening_amount) || 0),
     })
     if (error) return mapError(error)
     return { data: { id: data }, error: null }

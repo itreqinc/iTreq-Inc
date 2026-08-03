@@ -33,6 +33,8 @@ export function statementLineMethodSuffix(line) {
   return ` (${paymentMethodLabel(line.method)})`
 }
 
+export const OPENING_BALANCE_ALLOC_ID = '__opening_balance__'
+
 /**
  * Statement / AR credit for a payment. Money applied to a positive opening
  * balance is excluded so reducing clients.opening_balance is not double-counted.

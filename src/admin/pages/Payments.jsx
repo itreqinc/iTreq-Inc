@@ -5,10 +5,12 @@ import { upsertById, removeById } from '../../lib/listState'
 import {
   autoAllocatePayment,
   invoiceBalanceDue,
+  OPENING_BALANCE_ALLOC_ID,
   PAYMENT_METHODS,
   paymentDisplayMethod,
   paymentMethodLabel,
 } from '../../lib/payments'
+import { clientOpeningBalanceAmount } from '../../lib/clientRegistration'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
@@ -78,6 +80,8 @@ export default function PaymentsPage() {
   const [baseline, setBaseline] = useState('')
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [openInvoices, setOpenInvoices] = useState([])
+  /** Positive brought-forward remaining (includes this payment's B/F share when editing). */
+  const [openingBalanceDue, setOpeningBalanceDue] = useState(0)
   const [accountCredit, setAccountCredit] = useState(0)
   /** Opt-in: apply existing account credit to invoices after recording this payment. */
   const [applyAccountCredit, setApplyAccountCredit] = useState(false)
@@ -103,28 +107,44 @@ export default function PaymentsPage() {
   }, [showError, ownClientId])
 
   const loadOpenInvoices = useCallback(
-    async (clientId, paymentId = null, seedSelectedIds = null) => {
+    async (clientId, paymentId = null, seedSelectedIds = null, opts = {}) => {
       if (!clientId) {
         setOpenInvoices([])
+        setOpeningBalanceDue(0)
         setAccountCredit(0)
         setApplyAccountCredit(false)
         return []
       }
-      const [invRes, creditRes] = await Promise.all([
+      const [invRes, creditRes, clientRes] = await Promise.all([
         opsApi.listOpenInvoicesForClient(clientId, { editingPaymentId: paymentId }),
         opsApi.getClientCreditBalance(clientId),
+        opsApi.getClient(clientId),
       ])
       if (invRes.error) {
         showError(invRes.error.message)
         setOpenInvoices([])
+        setOpeningBalanceDue(0)
         setAccountCredit(creditRes.data?.balance ?? 0)
         setApplyAccountCredit(false)
         return []
       }
+      if (clientRes.error) {
+        showError(clientRes.error.message)
+      }
       const invoices = invRes.data || []
-      const selectedIds = seedSelectedIds
-        ? seedSelectedIds.filter((id) => invoices.some((inv) => inv.id === id))
-        : []
+      const editingOpeningApplied = Math.max(
+        0,
+        -(Number(opts.openingBalanceDelta) || 0),
+      )
+      const currentOpening = Math.max(0, clientOpeningBalanceAmount(clientRes.data))
+      const openingDue =
+        Math.round((currentOpening + editingOpeningApplied) * 100) / 100
+      setOpeningBalanceDue(openingDue)
+
+      const selectedIds = (seedSelectedIds || []).filter(
+        (id) =>
+          id === OPENING_BALANCE_ALLOC_ID || invoices.some((inv) => inv.id === id),
+      )
       setOpenInvoices(invoices)
       setForm((f) => ({
         ...f,
@@ -152,6 +172,8 @@ export default function PaymentsPage() {
       const selectedIds = (data.allocations || [])
         .filter((a) => Number(a.amount) > 0)
         .map((a) => a.invoice_id)
+      const openingApplied = Math.max(0, -(Number(data.opening_balance_delta) || 0))
+      if (openingApplied > 0.001) selectedIds.push(OPENING_BALANCE_ALLOC_ID)
       setEditingId(data.id)
       const nextForm = {
         client_id: data.client_id,
@@ -165,7 +187,9 @@ export default function PaymentsPage() {
       setForm(nextForm)
       setShowForm(true)
       scrollToForm()
-      const appliedIds = await loadOpenInvoices(data.client_id, data.id, selectedIds)
+      const appliedIds = await loadOpenInvoices(data.client_id, data.id, selectedIds, {
+        openingBalanceDelta: data.opening_balance_delta,
+      })
       setBaseline(
         snapshotPaymentForm({
           ...nextForm,
@@ -173,7 +197,7 @@ export default function PaymentsPage() {
         }),
       )
     },
-    [showError, loadOpenInvoices, isBlocked, blockMessage],
+    [showError, loadOpenInvoices, isBlocked, blockMessage, scrollToForm],
   )
 
   useEffect(() => {
@@ -244,6 +268,7 @@ export default function PaymentsPage() {
     setEditingId(null)
     setBaseline('')
     setOpenInvoices([])
+    setOpeningBalanceDue(0)
     setAccountCredit(0)
     setApplyAccountCredit(false)
     setForm(emptyPaymentForm())
@@ -256,6 +281,7 @@ export default function PaymentsPage() {
     setBaseline('')
     setForm(emptyPaymentForm())
     setOpenInvoices([])
+    setOpeningBalanceDue(0)
     setAccountCredit(0)
     setApplyAccountCredit(false)
     setFromNotification(null)
@@ -292,6 +318,20 @@ export default function PaymentsPage() {
 
   const paymentAmount = Number(form.amount) || 0
 
+  const allocationTargets = useMemo(() => {
+    const targets = []
+    if (openingBalanceDue > 0.001) {
+      targets.push({
+        id: OPENING_BALANCE_ALLOC_ID,
+        number: 'Brought forward',
+        _allocatable: openingBalanceDue,
+        _isOpening: true,
+      })
+    }
+    for (const inv of openInvoices) targets.push(inv)
+    return targets
+  }, [openingBalanceDue, openInvoices])
+
   async function printSavedPayment(id) {
     const opened = openPaymentDocumentPrintWindow()
     if (!opened.ok) {
@@ -312,8 +352,8 @@ export default function PaymentsPage() {
   }
 
   const { allocations, remaining } = useMemo(
-    () => autoAllocatePayment(paymentAmount, openInvoices, form.selectedIds),
-    [paymentAmount, openInvoices, form.selectedIds],
+    () => autoAllocatePayment(paymentAmount, allocationTargets, form.selectedIds),
+    [paymentAmount, allocationTargets, form.selectedIds],
   )
 
   const allocationTotal = useMemo(
@@ -321,12 +361,14 @@ export default function PaymentsPage() {
     [allocations],
   )
 
+  const openingAllocated = Math.round((Number(allocations[OPENING_BALANCE_ALLOC_ID]) || 0) * 100) / 100
+
   const fundsAvailable = remaining > 0.001 && paymentAmount > 0
 
   /** Invoices that can still take credit after this payment's allocations. */
   const creditApplyTargets = useMemo(() => {
     const pool =
-      form.selectedIds.length > 0
+      form.selectedIds.filter((id) => id !== OPENING_BALANCE_ALLOC_ID).length > 0
         ? openInvoices.filter((inv) => form.selectedIds.includes(inv.id))
         : openInvoices
     return pool
@@ -379,23 +421,32 @@ export default function PaymentsPage() {
     }
 
     const allocationRows = Object.entries(allocations)
+      .filter(([invoice_id]) => invoice_id !== OPENING_BALANCE_ALLOC_ID)
       .map(([invoice_id, amount]) => ({
         invoice_id,
         amount: Number(amount) || 0,
       }))
       .filter((a) => a.amount > 0)
 
+    const openingAmount = openingAllocated
     const creditPortion = Math.round((paymentAmount - allocationTotal) * 100) / 100
 
+    const parts = []
+    if (openingAmount > 0.001) parts.push(`${formatPula(openingAmount)} to brought forward`)
+    if (allocationRows.length) {
+      parts.push(
+        `${formatPula(allocationTotal - openingAmount)} to ${allocationRows.length} invoice(s)`,
+      )
+    }
+    if (creditPortion > 0.001) parts.push(`${formatPula(creditPortion)} left on account`)
+
     let confirmMessage
-    if (allocationRows.length === 0) {
+    if (parts.length === 0) {
       confirmMessage = editingId
-        ? `Save ${formatPula(paymentAmount)} on this client's account (no invoice allocation)?`
-        : `No invoices selected — ${formatPula(paymentAmount)} will be placed on their account.`
-    } else if (creditPortion > 0) {
-      confirmMessage = `${editingId ? 'Update' : 'Record'} ${formatPula(paymentAmount)}: allocate ${formatPula(allocationTotal)} to invoice(s), ${formatPula(creditPortion)} left on account?`
+        ? `Save ${formatPula(paymentAmount)} on this client's account (no allocation)?`
+        : `No invoices or brought forward selected — ${formatPula(paymentAmount)} will be placed on their account.`
     } else {
-      confirmMessage = `${editingId ? 'Update' : 'Record'} ${formatPula(paymentAmount)} applied to ${allocationRows.length} invoice(s)?`
+      confirmMessage = `${editingId ? 'Update' : 'Record'} ${formatPula(paymentAmount)}: ${parts.join(', ')}?`
     }
 
     const ok = await confirm({
@@ -414,6 +465,7 @@ export default function PaymentsPage() {
       reference: form.reference,
       notes: form.notes,
       allocations: allocationRows,
+      opening_amount: openingAmount,
     }
     const result = editingId
       ? await opsApi.updatePayment({ id: editingId, ...payload })
@@ -681,20 +733,21 @@ export default function PaymentsPage() {
           {form.client_id ? (
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-wider text-ink-400">
-                Tick invoices to pay
+                Tick what to pay
               </p>
-              {openInvoices.length === 0 ? (
+              {allocationTargets.length === 0 ? (
                 <p className="text-sm text-ink-400">
-                  No open invoices — the full payment will stay on this client&apos;s account until
-                  you issue an invoice and apply the credit.
+                  No open invoices or brought-forward balance — the full payment will stay on this
+                  client&apos;s account until you issue an invoice and apply the credit.
                 </p>
               ) : (
                 <ul className="divide-y divide-white/10 rounded-xl border border-white/10">
-                  {openInvoices.map((inv) => {
+                  {allocationTargets.map((inv) => {
                     const due = inv._allocatable ?? invoiceBalanceDue(inv)
                     const selected = form.selectedIds.includes(inv.id)
                     const applied = Number(allocations[inv.id]) || 0
                     const checkboxDisabled = !selected && !fundsAvailable
+                    const isOpening = inv.id === OPENING_BALANCE_ALLOC_ID
                     return (
                       <li
                         key={inv.id}
@@ -712,10 +765,13 @@ export default function PaymentsPage() {
                           />
                           <span className="min-w-0">
                             <span className="block font-medium text-white">
-                              {inv.number || inv.id.slice(0, 8)}
+                              {isOpening
+                                ? 'Brought forward'
+                                : inv.number || inv.id.slice(0, 8)}
                             </span>
                             <span className="block text-xs text-ink-400">
-                              Balance due {formatPula(due)}
+                              {isOpening ? 'Balance ' : 'Balance due '}
+                              {formatPula(due)}
                               {selected
                                 ? ` · Applying ${formatPula(applied)}`
                                 : checkboxDisabled
@@ -731,6 +787,9 @@ export default function PaymentsPage() {
               )}
               <p className="text-xs text-ink-400">
                 Allocated: {formatPula(allocationTotal)}
+                {openingAllocated > 0.001
+                  ? ` · Brought forward: ${formatPula(openingAllocated)}`
+                  : null}
                 {paymentAmount > 0 ? ` · Payment: ${formatPula(paymentAmount)}` : null}
                 {paymentAmount > allocationTotal + 0.001
                   ? ` · To account: ${formatPula(paymentAmount - allocationTotal)}`

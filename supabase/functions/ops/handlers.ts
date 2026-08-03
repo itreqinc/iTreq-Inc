@@ -2423,6 +2423,7 @@ handlers.record_payment = async ({ user, sb }, args) => {
     reference,
     notes,
     allocations,
+    opening_amount,
   } = (args[0] || {}) as Record<string, unknown>
   if (!client_id) throw new OpsError('Please select a client.')
   assertNotOwnClient(user, String(client_id))
@@ -2437,6 +2438,7 @@ handlers.record_payment = async ({ user, sb }, args) => {
     p_reference: reference || null,
     p_notes: notes || null,
     p_allocations: payload,
+    p_opening_amount: Math.max(0, Number(opening_amount) || 0),
   })
   if (error) throw mapDbError(error)
   return { id: data }
@@ -2451,6 +2453,7 @@ handlers.update_payment = async ({ user, sb }, args) => {
     reference,
     notes,
     allocations,
+    opening_amount,
   } = (args[0] || {}) as Record<string, unknown>
   if (!id) throw new OpsError('Payment id is required.')
   const existing = await getPaymentInternal(sb, String(id))
@@ -2466,6 +2469,7 @@ handlers.update_payment = async ({ user, sb }, args) => {
     p_reference: reference || null,
     p_notes: notes || null,
     p_allocations: payload,
+    p_opening_amount: Math.max(0, Number(opening_amount) || 0),
   })
   if (error) throw mapDbError(error)
   return { id: data }
