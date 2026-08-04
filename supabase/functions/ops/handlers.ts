@@ -281,8 +281,14 @@ function clientOpeningBalanceDate(client: Record<string, unknown> | null | undef
 function applyOpeningBalanceFields(
   user: UserRow,
   row: Record<string, unknown>,
+  clientId?: string | null,
 ) {
-  if (!isAdmin(user)) {
+  if (!isStaffLike(user)) {
+    delete row.opening_balance
+    delete row.opening_balance_date
+    return
+  }
+  if (clientId && String(portalClientId(user) || '') === String(clientId)) {
     delete row.opening_balance
     delete row.opening_balance_date
     return
@@ -1077,7 +1083,7 @@ handlers.update_client = async ({ user, sb }, args) => {
   const displayName = buildClientDisplayName(form)
   if (!displayName) throw new OpsError('First name or surname is required.')
   const row = formToClientRow(form)
-  applyOpeningBalanceFields(user, row)
+  applyOpeningBalanceFields(user, row, id)
   const { data, error } = await sb
     .from('clients')
     .update({ ...row, updated_at: nowIso() })
@@ -1089,8 +1095,11 @@ handlers.update_client = async ({ user, sb }, args) => {
 }
 
 handlers.update_client_opening_balance = async ({ user, sb }, args) => {
-  assertAdminUser(user)
+  if (!isStaffLike(user)) {
+    throw new OpsError('Staff access required for this action.', 403)
+  }
   const id = String(args[0] || '')
+  assertNotOwnClient(user, id)
   const body = (args[1] || {}) as Record<string, unknown>
   if (!id) throw new OpsError('Client id is required.')
   const amount = Math.round((Number(body.opening_balance) || 0) * 100) / 100

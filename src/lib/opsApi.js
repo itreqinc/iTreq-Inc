@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from './supabase'
 import { invokeFn } from './invokeFn'
-import { AUTH_BYPASS, isAdmin, readSessionRole } from './authConfig'
+import { AUTH_BYPASS, isAdmin, isStaffLike, readSessionRole, canSessionEditOpeningBalance } from './authConfig'
 import { buildClientDisplayName, formToClientRow, formToContactSubmissionRow, clientOpeningBalanceAmount, clientOpeningBalanceDate } from './clientRegistration'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
@@ -337,7 +337,7 @@ const directOpsApi = {
       return { data: null, error: { message: 'First name or surname is required.' } }
     }
     const row = formToClientRow(form)
-    if (!assertAdmin()) {
+    if (!canSessionEditOpeningBalance()) {
       delete row.opening_balance
       delete row.opening_balance_date
     } else if (clientOpeningBalanceAmount(row) !== 0 && !clientOpeningBalanceDate(row)) {
@@ -358,7 +358,7 @@ const directOpsApi = {
       return { data: null, error: { message: 'First name or surname is required.' } }
     }
     const row = formToClientRow(form)
-    if (!assertAdmin()) {
+    if (!canSessionEditOpeningBalance(id)) {
       delete row.opening_balance
       delete row.opening_balance_date
     } else if (clientOpeningBalanceAmount(row) !== 0 && !clientOpeningBalanceDate(row)) {
@@ -377,9 +377,18 @@ const directOpsApi = {
     return { data, error: null }
   },
 
-  /** Admin-only: update brought-forward fields without rewriting the whole client. */
+  /** Staff: update brought-forward fields without rewriting the whole client. */
   async updateClientOpeningBalance(id, { opening_balance, opening_balance_date }) {
-    if (!assertAdmin()) return adminRequired()
+    if (!canSessionEditOpeningBalance(id)) {
+      return {
+        data: null,
+        error: {
+          message: isStaffLike(readSessionRole())
+            ? 'You cannot edit your own brought-forward balance in staff view.'
+            : 'Staff access required for this action.',
+        },
+      }
+    }
     if (!supabase) return dbUnavailable()
     if (!id) {
       return { data: null, error: { message: 'Client id is required.' } }

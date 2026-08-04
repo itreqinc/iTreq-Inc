@@ -13,6 +13,8 @@ export const DEV_AUTH_SWITCHER =
 export const BYPASS_ROLE_KEY = 'itreq_ops_bypass_role'
 /** Cached signed-in role for client-side admin checks (opsApi). */
 export const SESSION_ROLE_KEY = 'itreq_ops_role'
+/** Linked client id when staff also has a portal client record (own-account guard). */
+export const SESSION_CLIENT_ID_KEY = 'itreq_ops_client_id'
 /** Client clock for last successful validate_session / login (idle logout). */
 export const SESSION_LAST_VALIDATE_KEY = 'itreq_session_last_validate'
 /** Max idle time without validate_session before auto logout (must match auth Edge). */
@@ -85,9 +87,42 @@ export function writeSessionRole(role) {
 export function clearSessionRole() {
   try {
     localStorage.removeItem(SESSION_ROLE_KEY)
+    localStorage.removeItem(SESSION_CLIENT_ID_KEY)
   } catch {
     /* ignore */
   }
+}
+
+export function writeSessionClientId(clientId) {
+  try {
+    const id = String(clientId || '').trim()
+    if (id) localStorage.setItem(SESSION_CLIENT_ID_KEY, id)
+    else localStorage.removeItem(SESSION_CLIENT_ID_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readSessionClientId() {
+  try {
+    return String(localStorage.getItem(SESSION_CLIENT_ID_KEY) || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+/** Staff may edit brought-forward balance except on their own linked client. */
+export function canStaffEditOpeningBalance(user, clientId = null, viewMode = VIEW_MODES.staff) {
+  if (!user || !isStaffLike(user.role)) return false
+  if (clientId && isOwnClientDocument(user, clientId, viewMode)) return false
+  return true
+}
+
+export function canSessionEditOpeningBalance(clientId = null) {
+  if (!isStaffLike(readSessionRole())) return false
+  const own = readSessionClientId()
+  if (own && clientId && String(own) === String(clientId)) return false
+  return true
 }
 
 export function markSessionValidated(at = Date.now()) {

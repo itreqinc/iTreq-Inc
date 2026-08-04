@@ -23,6 +23,7 @@ import {
   readLastSessionValidatedAt,
   readViewMode,
   writeSessionRole,
+  writeSessionClientId,
   writeViewMode,
 } from '../lib/authConfig'
 import { authAction } from '../lib/authApi'
@@ -103,6 +104,7 @@ export function AuthProvider({ children }) {
     if (data?.user) {
       setUser(data.user)
       writeSessionRole(data.user.role)
+      writeSessionClientId(data.user.client_id)
     }
     if (data?.ops_access) setOpsAccess(data.ops_access)
     else if (data?.user) setOpsAccess(null)
@@ -121,6 +123,7 @@ export function AuthProvider({ children }) {
       const role = readBypassRole()
       setUser(bypassUser(role))
       writeSessionRole(role)
+      writeSessionClientId(bypassUser(role).client_id)
       setOpsAccess({ allowed: true, reason: 'bypass' })
       setLoading(false)
       return
@@ -159,6 +162,7 @@ export function AuthProvider({ children }) {
       if (userFromLogin) {
         setUser(userFromLogin)
         writeSessionRole(userFromLogin.role)
+        writeSessionClientId(userFromLogin.client_id)
         setLoading(false)
         return
       }
@@ -217,7 +221,11 @@ export function AuthProvider({ children }) {
       /* ignore */
     }
     writeSessionRole(next)
-    if (AUTH_BYPASS) setUser(bypassUser(next))
+    if (AUTH_BYPASS) {
+      const u = bypassUser(next)
+      setUser(u)
+      writeSessionClientId(u.client_id)
+    }
   }, [])
 
   useEffect(() => {
@@ -225,6 +233,7 @@ export function AuthProvider({ children }) {
       const role = readBypassRole()
       setUser(bypassUser(role))
       writeSessionRole(role)
+      writeSessionClientId(bypassUser(role).client_id)
       setOpsAccess({ allowed: true, reason: 'bypass' })
       setLoading(false)
       return

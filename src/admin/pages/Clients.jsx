@@ -6,7 +6,7 @@ import {
   useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { isAdmin } from '../../lib/authConfig'
+import { isAdmin, isStaffLike, canStaffEditOpeningBalance, VIEW_MODES } from '../../lib/authConfig'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { clientToForm,
@@ -81,6 +81,7 @@ export default function ClientsPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const admin = isAdmin(user?.role)
+  const staffLike = isStaffLike(user?.role)
   const { showError, showSuccess, showWarning, confirm } = useOpsAlert()
   const [view, setView] = useState('directory')
   // Directory filter: default to active clients only.
@@ -89,6 +90,8 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(emptyClientForm)
   const [editingId, setEditingId] = useState(null)
+  const canEditOpeningOnForm =
+    staffLike && canStaffEditOpeningBalance(user, editingId || null, VIEW_MODES.staff)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
@@ -487,7 +490,7 @@ export default function ClientsPage() {
       showWarning(check.message)
       return
     }
-    if (admin) {
+    if (canEditOpeningOnForm || (!editingId && staffLike)) {
       const opening = Math.round((Number(form.opening_balance) || 0) * 100) / 100
       if (opening !== 0 && !String(form.opening_balance_date || '').trim()) {
         showWarning('Choose an opening balance date when the amount is not zero.')
@@ -643,13 +646,13 @@ export default function ClientsPage() {
             </button>
           </div>
           <ClientRegistrationFields form={form} setForm={setForm} fieldClass={adminFieldClass} />
-          {admin ? (
+          {canEditOpeningOnForm || (!editingId && staffLike) ? (
             <div className="space-y-3 rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4">
               <div>
                 <p className="text-sm font-semibold text-white">Opening balance</p>
                 <p className="mt-1 text-xs text-ink-400">
                   Carry-in amount as of a date. Positive means the client owes iTreq (same as an
-                  invoice). Only admins can edit this.
+                  invoice).
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

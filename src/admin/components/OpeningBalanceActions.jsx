@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { useAuth } from '../../contexts/AuthContext'
-import { isAdmin } from '../../lib/authConfig'
+import { isStaffLike, canStaffEditOpeningBalance, VIEW_MODES } from '../../lib/authConfig'
 import {
   clientOpeningBalanceAmount,
   clientOpeningBalanceDate,
@@ -29,7 +29,8 @@ import {
 export function useOpeningBalanceActions({ onDone } = {}) {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const admin = isAdmin(user?.role)
+  const canEditOpening = (client) =>
+    canStaffEditOpeningBalance(user, client?.id, VIEW_MODES.staff)
   const { showError, showSuccess, showWarning, confirm } = useOpsAlert()
   const [saving, setSaving] = useState(false)
 
@@ -152,7 +153,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
       })
     }
 
-    if (admin && (opening !== 0 || includeEditWhenZero)) {
+    if (canEditOpening(client) && (opening !== 0 || includeEditWhenZero)) {
       items.push({
         label: compactLabels
           ? 'Edit balance'
@@ -253,7 +254,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
 
   async function submitEditBalance(e) {
     e.preventDefault()
-    if (!editTarget || !admin) return
+    if (!editTarget || !canEditOpening(editTarget)) return
     const ok = await saveOpeningBalance(editTarget, editAmount, editDate)
     if (!ok) return
     showSuccess('Brought-forward balance updated.')
@@ -262,7 +263,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
   }
 
   async function clearEditBalance() {
-    if (!editTarget || !admin) return
+    if (!editTarget || !canEditOpening(editTarget)) return
     const current = clientOpeningBalanceAmount(editTarget)
     if (current === 0 && !clientOpeningBalanceDate(editTarget)) {
       showWarning('This client already has no brought-forward balance.')
@@ -507,7 +508,6 @@ export function useOpeningBalanceActions({ onDone } = {}) {
   )
 
   return {
-    admin,
     saving,
     menuItemsFor,
     dialogs,
