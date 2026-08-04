@@ -60,6 +60,11 @@ export function LineItemsEditor({
   taxRate = 0,
   discountAmount = 0,
   onDiscountChange,
+  /** When set (e.g. invoices), Add line saves first then appends a blank line. */
+  onPersistAddBlankLine = null,
+  /** When set, roaming add persists the full next lines array (save + keep open). */
+  onPersistLines = null,
+  persistBusy = false,
 }) {
   const { confirm } = useOpsAlert()
   const usageProducts = useMemo(
@@ -108,10 +113,14 @@ export function LineItemsEditor({
   }
 
   function addLine() {
+    if (onPersistAddBlankLine) {
+      onPersistAddBlankLine()
+      return
+    }
     onChange([...lines, emptyLine(lines.length + 1)])
   }
 
-  function addRoamingLine() {
+  async function addRoamingLine() {
     if (!roamingProduct || roamingQty < 1) return
     const description = buildRoamingDescription(roamingProduct.name, roaming.description)
     const line = {
@@ -122,7 +131,12 @@ export function LineItemsEditor({
       quantity: roamingQty,
       unit_price: Number(roamingProduct.unit_price) || 0,
     }
-    onChange([...lines, line])
+    const nextLines = [...lines, line]
+    if (onPersistLines) {
+      await onPersistLines(nextLines)
+    } else {
+      onChange(nextLines)
+    }
     setRoaming((r) => ({
       ...r,
       product_id: roamingProduct.id,
@@ -281,8 +295,18 @@ export function LineItemsEditor({
 
       {!readOnly ? (
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={addLine} className={adminBtnSecondary}>
-            Add line
+          <button
+            type="button"
+            disabled={persistBusy}
+            onClick={addLine}
+            className={adminBtnSecondary}
+            title={
+              onPersistAddBlankLine
+                ? 'Save the current line(s) to the draft, then start a new blank line'
+                : undefined
+            }
+          >
+            {persistBusy ? 'Saving…' : 'Add line'}
           </button>
         </div>
       ) : null}
@@ -293,7 +317,10 @@ export function LineItemsEditor({
             <h3 className="text-sm font-semibold text-white">Add roaming / usage</h3>
             <p className="mt-0.5 text-xs text-ink-400">
               Put registrations, dates, and any other detail in the description. Quantity defaults
-              to 1 — change it before adding if needed.
+              to 1
+              {onPersistLines
+                ? '. Adding a line saves it to the draft first.'
+                : ' — change it before adding if needed.'}
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
@@ -340,11 +367,16 @@ export function LineItemsEditor({
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              disabled={!roamingProduct || roamingQty < 1}
+              disabled={!roamingProduct || roamingQty < 1 || persistBusy}
               onClick={addRoamingLine}
               className={adminBtnSecondary}
+              title={
+                onPersistLines
+                  ? 'Add this roaming line and save it to the draft'
+                  : undefined
+              }
             >
-              Add line
+              {persistBusy ? 'Saving…' : 'Add line'}
             </button>
             {roamingPreview ? (
               <p className="min-w-0 text-xs text-ink-400">

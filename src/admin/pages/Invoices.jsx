@@ -26,7 +26,8 @@ import { withUnreadRows } from '../../lib/invoiceDisputes'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
-  mapDocLinesForEditor } from '../../lib/billing'
+  mapDocLinesForEditor,
+  normalizeLines } from '../../lib/billing'
 import { invoiceBalanceDue,
   dueDateFromIssueDate,
   invoiceDisplayStatus } from '../../lib/payments'
@@ -371,6 +372,90 @@ export default function InvoicesPage() {
     }
     if (saved?.id) setRows((prev) => upsertById(prev, saved))
     closeForm(saved?.id || editingId)
+  }
+
+  /**
+   * Save draft without closing the form. Used by Add line so each line is
+   * persisted before starting the next.
+   * @param {object} [formOverride] form payload to save (defaults to current form)
+   * @param {{ appendBlank?: boolean }} [opts]
+   */
+  async function persistDraftKeepingOpen(formOverride = null, { appendBlank = false } = {}) {
+    if (form.status !== 'draft') return false
+    const payload = formOverride || form
+    if (!payload.client_id) {
+      showError('Please select a client.')
+      return false
+    }
+    const usable = normalizeLines(payload.lines)
+    if (!usable.length) {
+      showError('Fill in the current line (description or product) before adding another.')
+      return false
+    }
+
+    setSaving(true)
+    const { data: saved, error: err } = await opsApi.saveInvoice({
+      id: editingId,
+      ...payload,
+      lines: usable,
+    })
+    if (err) {
+      setSaving(false)
+      showError(err.message)
+      return false
+    }
+
+    const id = saved?.id || editingId
+    if (!editingId && saved?.issue_date) {
+      setDefaultNewInvoiceIssueDate(saved.issue_date)
+    }
+    if (saved?.id) setRows((prev) => upsertById(prev, saved))
+
+    const { data: fresh, error: reloadErr } = await opsApi.getInvoice(id)
+    setSaving(false)
+    if (reloadErr) {
+      showError(reloadErr.message)
+      return false
+    }
+
+    const issue = fresh.issue_date || todayIso()
+    let nextLines = mapDocLinesForEditor(fresh.lines, trackableItems)
+    if (appendBlank) {
+      nextLines = [...nextLines, emptyLine(nextLines.length + 1)]
+    }
+    const nextForm = {
+      client_id: fresh.client_id,
+      issue_date: issue,
+      due_date: fresh.due_date || dueDateFromIssueDate(issue),
+      billing_period: fresh.billing_period || '',
+      notes: fresh.notes || '',
+      status: fresh.status,
+      number: fresh.number || '',
+      total: Number(fresh.total) || 0,
+      amount_paid: Number(fresh.amount_paid) || 0,
+      discount_amount: Number(fresh.discount_amount) || 0,
+      quotation_id: fresh.quotation_id || '',
+      lines: nextLines,
+    }
+    setEditingId(id)
+    setForm(nextForm)
+    // Baseline matches saved lines only — trailing blank line counts as dirty until filled/saved.
+    setBaseline(
+      snapshotInvoiceForm({
+        ...nextForm,
+        lines: appendBlank ? nextLines.slice(0, -1) : nextLines,
+      }),
+    )
+    showSuccess(appendBlank ? 'Line saved. Add the next one below.' : 'Line saved.')
+    return true
+  }
+
+  async function handlePersistAddBlankLine() {
+    await persistDraftKeepingOpen(null, { appendBlank: true })
+  }
+
+  async function handlePersistLines(nextLines) {
+    await persistDraftKeepingOpen({ ...form, lines: nextLines }, { appendBlank: false })
   }
 
   async function handleIssue(invoiceId = editingId) {
@@ -895,6 +980,9 @@ export default function InvoicesPage() {
               setForm((f) => ({ ...f, discount_amount }))
             }
             onChange={(lines) => setForm((f) => ({ ...f, lines }))}
+            onPersistAddBlankLine={readOnly ? null : handlePersistAddBlankLine}
+            onPersistLines={readOnly ? null : handlePersistLines}
+            persistBusy={saving}
           />
 
           <div className="flex flex-wrap gap-2">

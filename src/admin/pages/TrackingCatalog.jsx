@@ -32,6 +32,20 @@ function emptyComponent() {
   return { product_id: '', quantity: 1, sort_order: 10 }
 }
 
+function snapshotCatalogEditor(itemForm, components) {
+  return JSON.stringify({
+    name: String(itemForm?.name || '').trim(),
+    blurb: String(itemForm?.blurb || '').trim(),
+    active: itemForm?.active !== false,
+    sort_order: Number(itemForm?.sort_order) || 0,
+    components: (components || []).map((c) => ({
+      product_id: c.product_id || '',
+      quantity: String(c.quantity ?? ''),
+      sort_order: Number(c.sort_order) || 0,
+    })),
+  })
+}
+
 function StatusBadge({ ready, active }) {
   if (ready) {
     return (
@@ -66,6 +80,9 @@ export default function TrackingCatalogPage() {
   const [creating, setCreating] = useState(false)
   const [itemForm, setItemForm] = useState(emptyItem())
   const [components, setComponents] = useState([emptyComponent()])
+  const [baseline, setBaseline] = useState(() =>
+    snapshotCatalogEditor(emptyItem(), [emptyComponent()]),
+  )
   const [saving, setSaving] = useState(false)
   const [didApplyQuery, setDidApplyQuery] = useState(false)
 
@@ -108,19 +125,33 @@ export default function TrackingCatalogPage() {
       sort_order: item.sort_order ?? 0,
     })
     const comps = item.components || []
-    setComponents(
-      comps.length
-        ? comps.map((c) => ({
-            product_id: c.product_id,
-            quantity: Number(c.quantity) || 1,
-            sort_order: c.sort_order ?? 10,
-          }))
-        : [emptyComponent()],
+    const nextComponents = comps.length
+      ? comps.map((c) => ({
+          product_id: c.product_id,
+          quantity: Number(c.quantity) || 1,
+          sort_order: c.sort_order ?? 10,
+        }))
+      : [emptyComponent()]
+    setComponents(nextComponents)
+    setBaseline(
+      snapshotCatalogEditor(
+        {
+          name: item.name || '',
+          blurb: item.blurb || '',
+          active: item.active !== false,
+          sort_order: item.sort_order ?? 0,
+        },
+        nextComponents,
+      ),
     )
   }, [loading, didApplyQuery, searchParams, items])
 
   const health = useMemo(() => catalogHealthCounts(items), [items])
 
+  const isDirty = useMemo(
+    () => snapshotCatalogEditor(itemForm, components) !== baseline,
+    [itemForm, components, baseline],
+  )
   const previewLines = useMemo(() => {
     const item = trackableItemForPreview({
       id: selectedId,
@@ -137,42 +168,50 @@ export default function TrackingCatalogPage() {
   )
 
   function startNew() {
+    const nextForm = emptyItem()
+    const nextComponents = [emptyComponent()]
     setSelectedId(null)
     setCreating(true)
-    setItemForm(emptyItem())
-    setComponents([emptyComponent()])
+    setItemForm(nextForm)
+    setComponents(nextComponents)
+    setBaseline(snapshotCatalogEditor(nextForm, nextComponents))
   }
 
   function clearRight() {
+    const nextForm = emptyItem()
+    const nextComponents = [emptyComponent()]
     setSelectedId(null)
     setCreating(false)
-    setItemForm(emptyItem())
-    setComponents([emptyComponent()])
+    setItemForm(nextForm)
+    setComponents(nextComponents)
+    setBaseline(snapshotCatalogEditor(nextForm, nextComponents))
   }
 
   function selectItem(item) {
     setCreating(false)
     setSelectedId(item.id)
-    setItemForm({
+    const nextForm = {
       name: item.name || '',
       blurb: item.blurb || '',
       active: item.active !== false,
       sort_order: item.sort_order ?? 0,
-    })
+    }
     const comps = item.components || []
-    setComponents(
-      comps.length
-        ? comps.map((c) => ({
-            product_id: c.product_id,
-            quantity: Number(c.quantity) || 1,
-            sort_order: c.sort_order ?? 10,
-          }))
-        : [emptyComponent()],
-    )
+    const nextComponents = comps.length
+      ? comps.map((c) => ({
+          product_id: c.product_id,
+          quantity: Number(c.quantity) || 1,
+          sort_order: c.sort_order ?? 10,
+        }))
+      : [emptyComponent()]
+    setItemForm(nextForm)
+    setComponents(nextComponents)
+    setBaseline(snapshotCatalogEditor(nextForm, nextComponents))
   }
 
   async function saveAll(e) {
     e.preventDefault()
+    if (!isDirty) return
 
     const mappedProducts = components.filter((c) => c.product_id)
     if (itemForm.active && !isBundleComplete(components)) {
@@ -543,7 +582,12 @@ export default function TrackingCatalogPage() {
 
             {canManage ? (
               <div className="flex flex-wrap items-center gap-2">
-                <button type="submit" disabled={saving} className={adminBtnPrimary}>
+                <button
+                  type="submit"
+                  disabled={saving || !isDirty}
+                  title={!isDirty ? 'Change something before saving' : undefined}
+                  className={adminBtnPrimary}
+                >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
                 {portalReady ? (

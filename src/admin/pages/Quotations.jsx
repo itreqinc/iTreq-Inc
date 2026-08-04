@@ -9,7 +9,8 @@ import { useNavigate,
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
-  mapDocLinesForEditor } from '../../lib/billing'
+  mapDocLinesForEditor,
+  normalizeLines } from '../../lib/billing'
 import { portalQuoteAwaitingApproval,
   quotationDisplayStatus } from '../../lib/portalQuote'
 import { LineItemsEditor } from '../LineItemsEditor'
@@ -290,6 +291,87 @@ export default function QuotationsPage() {
     closeForm(saved?.id || editingId)
   }
 
+  /**
+   * Save quotation without closing the form. Used by Add line so each line is
+   * persisted before starting the next.
+   */
+  async function persistQuoteKeepingOpen(formOverride = null, { appendBlank = false } = {}) {
+    if (readOnly) return false
+    const payload = formOverride || form
+    const recip = parseRecipientKey(payload.recipient_key)
+    if (!recip.client_id && !recip.contact_submission_id) {
+      showError('Please select a client or lead.')
+      return false
+    }
+    const usable = normalizeLines(payload.lines)
+    if (!usable.length) {
+      showError('Fill in the current line (description or product) before adding another.')
+      return false
+    }
+
+    setSaving(true)
+    const { data: saved, error: err } = await opsApi.saveQuotation({
+      id: editingId,
+      client_id: recip.client_id,
+      contact_submission_id: recip.contact_submission_id,
+      issue_date: payload.issue_date,
+      notes: payload.notes,
+      status: payload.status,
+      source: payload.source,
+      discount_amount: payload.discount_amount,
+      lines: usable,
+    })
+    if (err) {
+      setSaving(false)
+      showError(err.message)
+      return false
+    }
+
+    const id = saved?.id || editingId
+    if (saved?.id) setRows((prev) => upsertById(prev, saved))
+
+    const { data: fresh, error: reloadErr } = await opsApi.getQuotation(id)
+    setSaving(false)
+    if (reloadErr) {
+      showError(reloadErr.message)
+      return false
+    }
+
+    let nextLines = mapDocLinesForEditor(fresh.lines, trackableItems)
+    if (appendBlank) {
+      nextLines = [...nextLines, emptyLine(nextLines.length + 1)]
+    }
+    const nextForm = {
+      number: fresh.number || '',
+      recipient_key: recipientKeyFromQuotation(fresh),
+      issue_date: fresh.issue_date,
+      notes: fresh.notes || '',
+      status: fresh.status,
+      source: fresh.source || 'staff',
+      decline_reason: fresh.decline_reason || '',
+      discount_amount: Number(fresh.discount_amount) || 0,
+      lines: nextLines,
+    }
+    setEditingId(id)
+    setForm(nextForm)
+    setBaseline(
+      snapshotQuotationForm({
+        ...nextForm,
+        lines: appendBlank ? nextLines.slice(0, -1) : nextLines,
+      }),
+    )
+    showSuccess(appendBlank ? 'Line saved. Add the next one below.' : 'Line saved.')
+    return true
+  }
+
+  async function handlePersistAddBlankLine() {
+    await persistQuoteKeepingOpen(null, { appendBlank: true })
+  }
+
+  async function handlePersistLines(nextLines) {
+    await persistQuoteKeepingOpen({ ...form, lines: nextLines }, { appendBlank: false })
+  }
+
   async function handleApprove() {
     if (!canApprove) return
 
@@ -523,6 +605,9 @@ export default function QuotationsPage() {
               setForm((f) => ({ ...f, discount_amount }))
             }
             onChange={(lines) => setForm((f) => ({ ...f, lines }))}
+            onPersistAddBlankLine={readOnly ? null : handlePersistAddBlankLine}
+            onPersistLines={readOnly ? null : handlePersistLines}
+            persistBusy={saving}
           />
 
           <div className="flex flex-wrap gap-2">
