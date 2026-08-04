@@ -1012,6 +1012,73 @@ async function handleInviteClient(
   })
 }
 
+async function handleResetClientPassword(
+  supabase: ReturnType<typeof adminClient>,
+  body: Record<string, unknown>,
+  req: Request,
+) {
+  const gate = await requireStaffOps(supabase, req, body)
+  if (gate.error) return gate.error
+
+  const clientId = String(body.client_id || '').trim()
+  if (!clientId) {
+    return json(400, { success: false, message: 'client_id is required' })
+  }
+
+  const { data: client, error: clientErr } = await supabase
+    .from('clients')
+    .select('id, name')
+    .eq('id', clientId)
+    .maybeSingle()
+  if (clientErr) throw clientErr
+  if (!client) {
+    return json(404, { success: false, message: 'Client not found.' })
+  }
+
+  const { data: target, error: tErr } = await supabase
+    .from('users')
+    .select('id, name, email, client_id')
+    .eq('client_id', clientId)
+    .eq('role', 'client')
+    .maybeSingle()
+  if (tErr) throw tErr
+  if (!target) {
+    return json(404, {
+      success: false,
+      message:
+        'This client has no portal login yet. Send a portal invite first.',
+    })
+  }
+
+  const password_hash = await hashPassword(DEFAULT_INVITE_PASSWORD)
+  const now = new Date().toISOString()
+  const { error } = await supabase
+    .from('users')
+    .update({
+      password_hash,
+      must_change_password: true,
+      updated_at: now,
+      is_active: true,
+    })
+    .eq('id', target.id)
+    .eq('role', 'client')
+  if (error) throw error
+
+  await supabase
+    .from('auth_sessions')
+    .update({ revoked_at: now })
+    .eq('user_id', target.id)
+    .is('revoked_at', null)
+
+  return json(200, {
+    success: true,
+    client_id: clientId,
+    user_id: target.id,
+    name: client.name || target.name,
+    temporary_password: DEFAULT_INVITE_PASSWORD,
+  })
+}
+
 async function handleListPortalInvites(
   supabase: ReturnType<typeof adminClient>,
   body: Record<string, unknown>,
@@ -1244,6 +1311,8 @@ serve(async (req) => {
         return await handleUpdateProfile(supabase, body, req)
       case 'invite_client':
         return await handleInviteClient(supabase, body, req)
+      case 'reset_client_password':
+        return await handleResetClientPassword(supabase, body, req)
       case 'list_portal_invites':
         return await handleListPortalInvites(supabase, body, req)
       case 'set_after_hours':

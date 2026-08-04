@@ -32,7 +32,9 @@ import {
   endOfNextMonthIso,
   todayIso as rangeTodayIso,
 } from '../../lib/dateRange'
+import { resetClientPassword } from '../../lib/authApi'
 import { ActionsMenu } from '../ActionsMenu'
+import { AdminIconAction } from '../AdminIconAction'
 import { useOpeningBalanceActions } from '../components/OpeningBalanceActions'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
@@ -48,6 +50,23 @@ import { adminBtnPrimary,
   adminTableClass,
   adminColSecondary,
 } from '../ui'
+
+const dash = (value) => {
+  const text = String(value ?? '').trim()
+  return text || '—'
+}
+
+const genderLabel = (value) =>
+  value === 'M' ? 'Male' : value === 'F' ? 'Female' : '—'
+
+function DetailField({ label, children, className = '' }) {
+  return (
+    <div className={className}>
+      <dt className="text-xs uppercase tracking-wide text-ink-500">{label}</dt>
+      <dd className="mt-1 whitespace-pre-line break-words text-sm text-ink-100">{children}</dd>
+    </div>
+  )
+}
 
 function monthStartIso() {
   const d = new Date()
@@ -93,6 +112,7 @@ export default function ClientsPage() {
   const canEditOpeningOnForm =
     staffLike && canStaffEditOpeningBalance(user, editingId || null, VIEW_MODES.staff)
   const [showForm, setShowForm] = useState(false)
+  const [viewId, setViewId] = useState(null)
   const [saving, setSaving] = useState(false)
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [printingStmt, setPrintingStmt] = useState(false)
@@ -264,14 +284,27 @@ export default function ClientsPage() {
 
   function startNew() {
     setEditingId(null)
+    setViewId(null)
     setForm(emptyClientForm())
     setShowForm(true)
     setView('directory')
     scrollToForm()
   }
 
+  function openViewProfile(client) {
+    setViewId(client.id)
+    setShowForm(false)
+    setEditingId(null)
+    setView('directory')
+  }
+
+  function closeViewProfile() {
+    setViewId(null)
+  }
+
   function startEdit(client) {
     setEditingId(client.id)
+    setViewId(null)
     setForm(clientToForm(client))
     setShowForm(true)
     setView('directory')
@@ -283,6 +316,23 @@ export default function ClientsPage() {
     setForm(emptyClientForm())
     setShowForm(false)
     if (savedId) highlightRow(savedId)
+  }
+
+  async function resetPassword(client) {
+    const ok = await confirm({
+      title: 'Reset password?',
+      message: `${client.name}'s portal password will be set to password123. They must change it on next sign-in. Active sessions will be signed out.`,
+      confirmLabel: 'Reset to password123',
+    })
+    if (!ok) return
+    const { data, error } = await resetClientPassword(client.id)
+    if (error || data?.success === false) {
+      showError(error?.message || data?.message || 'Could not reset password')
+      return
+    }
+    showSuccess(
+      `Password reset for ${client.name}. Temporary password: ${data.temporary_password || 'password123'}`,
+    )
   }
 
   function openStatementRangeModal(client) {
@@ -335,6 +385,7 @@ export default function ClientsPage() {
   function openClientDetails(client) {
     setSelectedId(client.id)
     setShowForm(false)
+    setViewId(null)
     setView('accounts')
   }
 
@@ -398,6 +449,7 @@ export default function ClientsPage() {
       setSelectedId(null)
       setStatement(null)
     }
+    if (viewId === client.id) setViewId(null)
     setClients((prev) => removeById(prev, client.id))
   }
 
@@ -408,7 +460,17 @@ export default function ClientsPage() {
         ? { ...client, account_credit: selectedAccountCredit }
         : client
     const items = [
+      {
+        label: 'View Profile',
+        icon: 'eye',
+        onClick: () => openViewProfile(client),
+      },
       { label: 'Edit client', icon: 'pencil', onClick: actions.onEdit },
+      {
+        label: 'Reset Password',
+        icon: 'key',
+        onClick: () => resetPassword(client),
+      },
       ...openingBalanceMenuItems(bfClient),
       { label: 'New invoice', icon: 'invoice', onClick: actions.onInvoice },
       { label: 'Record payment', icon: 'payment', onClick: actions.onPayment },
@@ -535,6 +597,7 @@ export default function ClientsPage() {
   }
 
   const selectedClient = clients.find((c) => c.id === selectedId)
+  const viewing = viewId ? clients.find((c) => c.id === viewId) : null
 
   const visibleLines = useMemo(() => {
     const lines = statement?.lines || []
@@ -613,6 +676,7 @@ export default function ClientsPage() {
               onClick={() => {
                 setView('accounts')
                 setShowForm(false)
+                setViewId(null)
               }}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 view === 'accounts'
@@ -623,13 +687,63 @@ export default function ClientsPage() {
               Accounts
             </button>
           </div>
-          {!showForm ? (
+          {!showForm && !viewing ? (
             <button type="button" onClick={startNew} className={adminBtnPrimary}>
               New client
             </button>
           ) : null}
         </div>
       </div>
+
+      {viewing && !showForm && view === 'directory' ? (
+        <section className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-white">{viewing.name}</h2>
+              <p className="mt-1 text-xs text-ink-400">
+                Client profile ·{' '}
+                <span className={viewing.is_active === false ? 'text-red-300' : 'text-brand-300'}>
+                  {viewing.is_active === false ? 'Inactive' : 'Active'}
+                </span>
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <AdminIconAction
+                label="Edit"
+                icon="pencil"
+                onClick={() => startEdit(viewing)}
+              />
+              <AdminIconAction
+                label="Close"
+                icon="x"
+                tone="muted"
+                onClick={closeViewProfile}
+              />
+            </div>
+          </div>
+
+          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <DetailField label="First name">{dash(viewing.first_name)}</DetailField>
+            <DetailField label="Middle name">{dash(viewing.middle_name)}</DetailField>
+            <DetailField label="Last name">{dash(viewing.surname)}</DetailField>
+            <DetailField label="Gender">{genderLabel(viewing.gender)}</DetailField>
+            <DetailField label="ID number">{dash(viewing.id_number)}</DetailField>
+            <DetailField label="Country">{dash(viewing.country)}</DetailField>
+            <DetailField label="Email">{dash(viewing.email)}</DetailField>
+            <DetailField label="Cellphone">{dash(viewing.cellphone || viewing.phone)}</DetailField>
+            <DetailField label="Landline">{dash(viewing.landline)}</DetailField>
+            <DetailField label="Postal address" className="sm:col-span-2 lg:col-span-3">
+              {dash(viewing.postal_address)}
+            </DetailField>
+            <DetailField label="Physical address" className="sm:col-span-2 lg:col-span-3">
+              {dash(viewing.physical_address || viewing.address)}
+            </DetailField>
+            <DetailField label="Notes" className="sm:col-span-2 lg:col-span-3">
+              {dash(viewing.notes)}
+            </DetailField>
+          </dl>
+        </section>
+      ) : null}
 
       {showForm && view === 'directory' ? (
         <form

@@ -18,3 +18,7 @@ export async function authAction(action, body = {}, { withAuth = false } = {}) {
   }
   return invokeFn('auth', { body: { action, ...body } }, { withAuth })
 }
+
+export function resetClientPassword(clientId) {
+  return authAction('reset_client_password', { client_id: clientId }, { withAuth: true })
+}
