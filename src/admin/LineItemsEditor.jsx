@@ -12,10 +12,7 @@ import {
   catalogComponentDescription,
   isUsageProduct,
 } from '../lib/productKind'
-import {
-  buildRoamingDescription,
-  inclusiveDayCount,
-} from '../lib/roamingLine'
+import { buildRoamingDescription } from '../lib/roamingLine'
 import { useOpsAlert } from './OpsAlertContext'
 
 function componentProduct(comp) {
@@ -54,11 +51,6 @@ export function linesFromTrackableItem(item, quantity = 1, startSort = 1) {
   })
 }
 
-function todayIso() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 export function LineItemsEditor({
   lines,
   products,
@@ -76,23 +68,16 @@ export function LineItemsEditor({
   )
   const [roaming, setRoaming] = useState(() => ({
     product_id: '',
-    registration: '',
-    from_date: todayIso(),
-    to_date: todayIso(),
+    description: '',
+    quantity: '1',
   }))
 
   const roamingProductId = roaming.product_id || usageProducts[0]?.id || ''
   const roamingProduct = products.find((p) => p.id === roamingProductId)
-  const roamingDays = inclusiveDayCount(roaming.from_date, roaming.to_date)
-  const roamingPreview =
-    roamingProduct && (roaming.registration.trim() || roaming.from_date)
-      ? buildRoamingDescription(
-          roamingProduct.name,
-          roaming.registration,
-          roaming.from_date,
-          roaming.to_date,
-        )
-      : ''
+  const roamingQty = Math.max(1, Math.round(Number(roaming.quantity) || 1))
+  const roamingPreview = roamingProduct
+    ? buildRoamingDescription(roamingProduct.name, roaming.description)
+    : ''
 
   function updateLine(index, patch) {
     const next = lines.map((line, i) => (i === index ? { ...line, ...patch } : line))
@@ -127,26 +112,22 @@ export function LineItemsEditor({
   }
 
   function addRoamingLine() {
-    if (!roamingProduct || roamingDays < 1) return
-    const description = buildRoamingDescription(
-      roamingProduct.name,
-      roaming.registration,
-      roaming.from_date,
-      roaming.to_date,
-    )
+    if (!roamingProduct || roamingQty < 1) return
+    const description = buildRoamingDescription(roamingProduct.name, roaming.description)
     const line = {
       ...emptyLine(lines.length + 1),
       product_id: roamingProduct.id,
       trackable_item_id: '',
       description,
-      quantity: roamingDays,
+      quantity: roamingQty,
       unit_price: Number(roamingProduct.unit_price) || 0,
     }
     onChange([...lines, line])
     setRoaming((r) => ({
       ...r,
       product_id: roamingProduct.id,
-      registration: '',
+      description: '',
+      quantity: '1',
     }))
   }
 
@@ -183,19 +164,19 @@ export function LineItemsEditor({
         <table className={adminTableClass}>
           <thead className="bg-ink-950/60 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-3 py-2">Item to track</th>
+              <th className={`px-3 py-2 ${adminColSecondary}`}>Item to track</th>
               <th className={`px-3 py-2 ${adminColSecondary}`}>Product</th>
-              <th className={`px-3 py-2 ${adminColSecondary}`}>Description</th>
+              <th className="px-3 py-2">Description</th>
               <th className="px-3 py-2">Qty</th>
               <th className="px-3 py-2">Unit price</th>
               <th className={`px-3 py-2 ${adminColSecondary}`}>Line</th>
-              {!readOnly ? <th className="px-3 py-2" /> : null}
+              {!readOnly ? <th className="px-3 py-2 text-right"> </th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {lines.map((line, index) => (
               <tr key={line.id || index} className="align-top">
-                <td className="px-3 py-2">
+                <td className={`px-3 py-2 ${adminColSecondary}`}>
                   <select
                     disabled={readOnly || !catalog.length}
                     className={`${adminFieldClass} min-w-0 w-full sm:min-w-[10rem]`}
@@ -226,10 +207,10 @@ export function LineItemsEditor({
                     ))}
                   </select>
                 </td>
-                <td className={`px-3 py-2 ${adminColSecondary}`}>
+                <td className="px-3 py-2">
                   <input
                     disabled={readOnly}
-                    className={adminFieldClass}
+                    className={`${adminFieldClass} min-w-[10rem]`}
                     value={line.description || ''}
                     placeholder={readOnly ? '' : descriptionPlaceholder(line)}
                     title={
@@ -282,11 +263,11 @@ export function LineItemsEditor({
                   {formatPula(calcLineTotal(line.quantity, line.unit_price))}
                 </td>
                 {!readOnly ? (
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button
                       type="button"
                       onClick={() => removeLine(index)}
-                      className="text-xs text-red-300 hover:text-red-200"
+                      className="text-xs font-medium text-red-300 hover:text-red-200"
                     >
                       Remove
                     </button>
@@ -309,14 +290,14 @@ export function LineItemsEditor({
       {!readOnly && usageProducts.length > 0 ? (
         <div className="space-y-3 rounded-xl border border-amber-400/20 bg-amber-500/5 p-3 sm:p-4">
           <div>
-            <h3 className="text-sm font-semibold text-white">Add roaming / usage days</h3>
+            <h3 className="text-sm font-semibold text-white">Add roaming / usage</h3>
             <p className="mt-0.5 text-xs text-ink-400">
-              Builds a draft line with registration and dates. Qty is set to the number of days
-              (inclusive). You can still edit the description afterward.
+              Put registrations, dates, and any other detail in the description. Quantity defaults
+              to 1 — change it before adding if needed.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            <label className="block lg:col-span-2">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+            <label className="block sm:col-span-2 lg:col-span-2">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
                 Usage SKU
               </span>
@@ -332,45 +313,38 @@ export function LineItemsEditor({
                 ))}
               </select>
             </label>
-            <label className="block">
+            <label className="block sm:col-span-2 lg:col-span-3">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Registration
+                Description
               </span>
               <input
                 className={adminFieldClass}
-                value={roaming.registration}
-                onChange={(e) => setRoaming((r) => ({ ...r, registration: e.target.value }))}
-                placeholder="B 123 ABC"
+                value={roaming.description}
+                onChange={(e) => setRoaming((r) => ({ ...r, description: e.target.value }))}
+                placeholder="e.g. B 123 ABC, 12–15 Jul 2026"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">From</span>
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Qty</span>
               <input
-                type="date"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
                 className={adminFieldClass}
-                value={roaming.from_date}
-                onChange={(e) => setRoaming((r) => ({ ...r, from_date: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">To</span>
-              <input
-                type="date"
-                className={adminFieldClass}
-                value={roaming.to_date}
-                min={roaming.from_date || undefined}
-                onChange={(e) => setRoaming((r) => ({ ...r, to_date: e.target.value }))}
+                value={roaming.quantity}
+                onChange={(e) => setRoaming((r) => ({ ...r, quantity: e.target.value }))}
               />
             </label>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              disabled={!roamingProduct || roamingDays < 1}
+              disabled={!roamingProduct || roamingQty < 1}
               onClick={addRoamingLine}
               className={adminBtnSecondary}
             >
-              Add {roamingDays > 0 ? `${roamingDays} day${roamingDays === 1 ? '' : 's'}` : 'line'}
+              Add line
             </button>
             {roamingPreview ? (
               <p className="min-w-0 text-xs text-ink-400">
