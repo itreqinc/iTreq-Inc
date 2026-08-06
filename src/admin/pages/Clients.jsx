@@ -888,9 +888,9 @@ export default function ClientsPage() {
           <table className={adminTableClass}>
             <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
               <tr>
-                <th className="px-4 py-3">Name</th>
+                <th className="min-w-[11rem] px-4 py-3 sm:min-w-[14rem]">Name</th>
                 <th className={`px-4 py-3 ${adminColSecondary}`}>ID</th>
-                <th className="px-4 py-3">Phone</th>
+                <th className="whitespace-nowrap px-4 py-3">Phone</th>
                 <th className={`px-4 py-3 ${adminColSecondary}`}>Email</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -929,8 +929,12 @@ export default function ClientsPage() {
                       onClick={open}
                       onKeyDown={(e) => activateRowKey(e, open)}
                     >
-                      <td className="min-w-0 break-words px-4 py-3">
-                        <span className={clickableDocClass}>{c.name}</span>
+                      <td className="min-w-[11rem] px-4 py-3 sm:min-w-[14rem]">
+                        <span
+                          className={`${clickableDocClass} break-words [overflow-wrap:anywhere]`}
+                        >
+                          {c.name}
+                        </span>
                         {c.is_active === false ? (
                           <span className="ml-2 text-xs text-red-300">Inactive</span>
                         ) : null}
@@ -938,9 +942,17 @@ export default function ClientsPage() {
                       <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                         {c.id_number || '—'}
                       </td>
-                      <td className="px-4 py-3 text-ink-300">{c.cellphone || c.phone || '—'}</td>
-                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
-                        {c.email || '—'}
+                      <td className="whitespace-nowrap px-4 py-3 text-ink-300">
+                        {c.cellphone || c.phone || '—'}
+                      </td>
+                      <td className={`max-w-[10rem] px-4 py-3 text-ink-300 sm:max-w-[14rem] ${adminColSecondary}`}>
+                        {c.email ? (
+                          <span className="block truncate" title={c.email}>
+                            {c.email}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <ClientRowActions
@@ -1027,7 +1039,9 @@ export default function ClientsPage() {
                             : 'text-ink-200 hover:bg-white/5'
                         }`}
                       >
-                        <span className="min-w-0 font-medium leading-snug">{c.name}</span>
+                        <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] font-medium leading-snug">
+                          {c.name}
+                        </span>
                         <span
                           className={`shrink-0 self-center text-xs font-semibold tabular-nums ${balanceClass(c.balance)}`}
                         >
