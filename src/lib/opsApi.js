@@ -276,14 +276,35 @@ const directOpsApi = {
     return { data: { ok: true }, error: null }
   },
 
+  async attachPortalLoginEmails(clients) {
+    if (!supabase || !clients?.length) return clients || []
+    const ids = clients.map((c) => c.id).filter(Boolean)
+    if (!ids.length) return clients
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('client_id, email')
+      .eq('role', 'client')
+      .eq('is_active', true)
+      .in('client_id', ids)
+    if (error) return clients
+    const byClient = Object.fromEntries(
+      (users || []).map((u) => [String(u.client_id), u.email || null]),
+    )
+    return clients.map((c) => ({
+      ...c,
+      portal_login_email: byClient[String(c.id)] || null,
+    }))
+  },
+
   async listClients({ activeOnly = false } = {}) {
     if (!supabase) return dbUnavailable()
     let q = supabase.from('clients').select('*').order('name', { ascending: true })
     if (activeOnly) q = q.eq('is_active', true)
     const { data, error } = await q
     if (error) return mapError(error)
-    if (activeOnly) return { data, error: null }
-    return { data: await enrichClientsFinancialFlagsLocal(data || []), error: null }
+    const rows = activeOnly ? data || [] : await enrichClientsFinancialFlagsLocal(data || [])
+    const enriched = await this.attachPortalLoginEmails(rows)
+    return { data: enriched, error: null }
   },
 
   async listClientsWithBalances({ activeOnly = false } = {}) {

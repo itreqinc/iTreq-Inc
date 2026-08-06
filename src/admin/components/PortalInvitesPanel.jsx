@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { authAction } from '../../lib/authApi'
-import { AUTH_BYPASS } from '../../lib/authConfig'
+import { AUTH_BYPASS, truncateEmail } from '../../lib/authConfig'
 import { canSendPortalInviteEmail, portalInviteConfirmMessage } from '../../lib/portalInvite'
 import { DetailsCollapse } from '../../components/DetailsCollapse'
 import { AdminIconAction } from '../AdminIconAction'
@@ -45,6 +45,10 @@ function toggleId(list, id, checked) {
 
 function rowInviteable(row) {
   return canSendPortalInviteEmail(row?.email)
+}
+
+function rowLoginEmail(row) {
+  return row?.login_email || row?.email || ''
 }
 
 export function PortalInvitesPanel() {
@@ -293,7 +297,7 @@ export function PortalInvitesPanel() {
                           />
                         </th>
                         <th className="px-3 py-2">Client</th>
-                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Login email</th>
                         <th className="w-12 px-3 py-2" />
                       </tr>
                     </thead>
@@ -317,7 +321,12 @@ export function PortalInvitesPanel() {
                               />
                             </td>
                             <td className="px-3 py-2 text-white">{row.client_name}</td>
-                            <td className="break-all px-3 py-2 text-ink-300">{row.email}</td>
+                            <td
+                              className="px-3 py-2 text-ink-300"
+                              title={rowLoginEmail(row) || undefined}
+                            >
+                              {rowLoginEmail(row) ? truncateEmail(rowLoginEmail(row)) : '—'}
+                            </td>
                             <td className="px-3 py-2 text-right">
                               {inviteable ? (
                                 <AdminIconAction
@@ -392,6 +401,7 @@ export function PortalInvitesPanel() {
                           />
                         </th>
                         <th className="px-3 py-2">Client</th>
+                        <th className="px-3 py-2">Login email</th>
                         <th className="px-3 py-2">Notified</th>
                         <th className="w-12 px-3 py-2" />
                       </tr>
@@ -416,6 +426,12 @@ export function PortalInvitesPanel() {
                               />
                             </td>
                             <td className="px-3 py-2 text-white">{row.client_name}</td>
+                            <td
+                              className="px-3 py-2 text-ink-300"
+                              title={rowLoginEmail(row) || undefined}
+                            >
+                              {rowLoginEmail(row) ? truncateEmail(rowLoginEmail(row)) : '—'}
+                            </td>
                             <td className="px-3 py-2 text-ink-300">{formatWhen(row.invited_at)}</td>
                             <td className="px-3 py-2 text-right">
                               {inviteable ? (
@@ -433,7 +449,7 @@ export function PortalInvitesPanel() {
                       })}
                       {!notified.length ? (
                         <tr>
-                          <td colSpan={4} className="px-3 py-4 text-ink-500">
+                          <td colSpan={5} className="px-3 py-4 text-ink-500">
                             No pending activations.
                           </td>
                         </tr>

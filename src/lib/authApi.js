@@ -22,3 +22,7 @@ export async function authAction(action, body = {}, { withAuth = false } = {}) {
 export function resetClientPassword(clientId) {
   return authAction('reset_client_password', { client_id: clientId }, { withAuth: true })
 }
+
+export function syncClientLoginEmail(clientId) {
+  return authAction('sync_client_login_email', { client_id: clientId }, { withAuth: true })
+}

@@ -1079,6 +1079,105 @@ async function handleResetClientPassword(
   })
 }
 
+async function handleSyncClientLoginEmail(
+  supabase: ReturnType<typeof adminClient>,
+  body: Record<string, unknown>,
+  req: Request,
+) {
+  const gate = await requireStaffOps(supabase, req, body)
+  if (gate.error) return gate.error
+
+  const clientId = String(body.client_id || '').trim()
+  if (!clientId) {
+    return json(400, { success: false, message: 'client_id is required' })
+  }
+
+  const { data: client, error: clientErr } = await supabase
+    .from('clients')
+    .select('id, name, email')
+    .eq('id', clientId)
+    .maybeSingle()
+  if (clientErr) throw clientErr
+  if (!client) {
+    return json(404, { success: false, message: 'Client not found.' })
+  }
+
+  const profileEmail = String(client.email || '').trim().toLowerCase()
+  if (!profileEmail) {
+    return json(400, { success: false, message: 'Client profile needs an email first.' })
+  }
+  if (profileEmail === 'info@itreqinc.com') {
+    return json(400, {
+      success: false,
+      message:
+        'This client uses the office email placeholder and cannot use it as a portal login.',
+    })
+  }
+
+  const { data: portalUser, error: userErr } = await supabase
+    .from('users')
+    .select('id, name, email, client_id')
+    .eq('client_id', clientId)
+    .eq('role', 'client')
+    .eq('is_active', true)
+    .maybeSingle()
+  if (userErr) throw userErr
+  if (!portalUser) {
+    return json(404, {
+      success: false,
+      message: 'This client has no portal login yet. Send a portal invite first.',
+    })
+  }
+
+  const currentLogin = String(portalUser.email || '').trim().toLowerCase()
+  if (currentLogin === profileEmail) {
+    return json(200, {
+      success: true,
+      unchanged: true,
+      login_email: profileEmail,
+    })
+  }
+
+  const { data: emailOwner, error: emailOwnerErr } = await supabase
+    .from('users')
+    .select('id, client_id, role, name, email')
+    .ilike('email', profileEmail)
+    .maybeSingle()
+  if (emailOwnerErr) throwDb(emailOwnerErr)
+  if (emailOwner && emailOwner.id !== portalUser.id) {
+    const who =
+      emailOwner.role === 'client'
+        ? `another client account (${emailOwner.name || 'unnamed'})`
+        : `a ${emailOwner.role} account (${emailOwner.name || emailOwner.email})`
+    return json(400, {
+      success: false,
+      message: `Cannot use ${profileEmail}: email is already used by ${who}.`,
+    })
+  }
+
+  const now = new Date().toISOString()
+  const { error: updateErr } = await supabase
+    .from('users')
+    .update({ email: profileEmail, updated_at: now })
+    .eq('id', portalUser.id)
+    .eq('role', 'client')
+  if (updateErr) throwDb(updateErr)
+
+  await supabase
+    .from('auth_sessions')
+    .update({ revoked_at: now })
+    .eq('user_id', portalUser.id)
+    .is('revoked_at', null)
+
+  return json(200, {
+    success: true,
+    client_id: clientId,
+    user_id: portalUser.id,
+    login_email: profileEmail,
+    previous_login_email: currentLogin,
+  })
+}
+
 async function handleListPortalInvites(
   supabase: ReturnType<typeof adminClient>,
   body: Record<string, unknown>,
@@ -1127,11 +1226,13 @@ async function handleListPortalInvites(
     const email = String(c.email || '').trim()
     if (!email) continue
     const u = byClient.get(c.id)
+    const loginEmail = u?.email ? String(u.email).trim() : null
     if (!u) {
       pending.push({
         client_id: c.id,
         client_name: c.name,
         email: c.email,
+        login_email: null,
         phone: c.cellphone || c.phone || null,
       })
       continue
@@ -1142,6 +1243,7 @@ async function handleListPortalInvites(
         client_id: c.id,
         client_name: c.name,
         email: c.email,
+        login_email: loginEmail,
         phone: c.cellphone || c.phone || null,
         user_id: u.id,
       })
@@ -1150,6 +1252,7 @@ async function handleListPortalInvites(
         client_id: c.id,
         client_name: c.name,
         email: c.email,
+        login_email: loginEmail,
         phone: c.cellphone || c.phone || null,
         user_id: u.id,
         invited_at: u.invited_at,
@@ -1313,6 +1416,8 @@ serve(async (req) => {
         return await handleInviteClient(supabase, body, req)
       case 'reset_client_password':
         return await handleResetClientPassword(supabase, body, req)
+      case 'sync_client_login_email':
+        return await handleSyncClientLoginEmail(supabase, body, req)
       case 'list_portal_invites':
         return await handleListPortalInvites(supabase, body, req)
       case 'set_after_hours':

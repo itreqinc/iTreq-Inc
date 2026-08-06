@@ -6,7 +6,8 @@ import {
   useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { isAdmin, isStaffLike, canStaffEditOpeningBalance, VIEW_MODES } from '../../lib/authConfig'
+import { isAdmin, isStaffLike, canStaffEditOpeningBalance, VIEW_MODES, truncateEmail } from '../../lib/authConfig'
+import { syncClientLoginEmail, resetClientPassword } from '../../lib/authApi'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { clientToForm,
@@ -14,7 +15,7 @@ import { clientToForm,
   clientOpeningBalanceAmount,
   clientOpeningBalanceDate,
 } from '../../lib/clientRegistration'
-import { validateClientForm } from '../../lib/clientValidation'
+import { validateClientForm, normEmail } from '../../lib/clientValidation'
 import { statementLineLabel, statementLineMethodSuffix } from '../../lib/payments'
 import { quotationDisplayStatus } from '../../lib/portalQuote'
 import {
@@ -32,7 +33,6 @@ import {
   endOfNextMonthIso,
   todayIso as rangeTodayIso,
 } from '../../lib/dateRange'
-import { resetClientPassword } from '../../lib/authApi'
 import { ActionsMenu } from '../ActionsMenu'
 import { AdminIconAction } from '../AdminIconAction'
 import { useOpeningBalanceActions } from '../components/OpeningBalanceActions'
@@ -113,6 +113,7 @@ export default function ClientsPage() {
     staffLike && canStaffEditOpeningBalance(user, editingId || null, VIEW_MODES.staff)
   const [showForm, setShowForm] = useState(false)
   const [viewId, setViewId] = useState(null)
+  const [editEmailBaseline, setEditEmailBaseline] = useState({ profile: '', login: null })
   const [saving, setSaving] = useState(false)
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [printingStmt, setPrintingStmt] = useState(false)
@@ -285,6 +286,7 @@ export default function ClientsPage() {
   function startNew() {
     setEditingId(null)
     setViewId(null)
+    setEditEmailBaseline({ profile: '', login: null })
     setForm(emptyClientForm())
     setShowForm(true)
     setView('directory')
@@ -305,6 +307,10 @@ export default function ClientsPage() {
   function startEdit(client) {
     setEditingId(client.id)
     setViewId(null)
+    setEditEmailBaseline({
+      profile: normEmail(client.email),
+      login: client.portal_login_email ? normEmail(client.portal_login_email) : null,
+    })
     setForm(clientToForm(client))
     setShowForm(true)
     setView('directory')
@@ -313,6 +319,7 @@ export default function ClientsPage() {
 
   function closeForm(savedId) {
     setEditingId(null)
+    setEditEmailBaseline({ profile: '', login: null })
     setForm(emptyClientForm())
     setShowForm(false)
     if (savedId) highlightRow(savedId)
@@ -578,18 +585,62 @@ export default function ClientsPage() {
       showError(result.error.message)
       return
     }
+
+    const saved = result.data
+    const savedId = saved?.id || editingId
+    const newProfileEmail = normEmail(form.email)
+    const emailChanged = Boolean(editingId && newProfileEmail !== editEmailBaseline.profile)
+    const canSyncLogin =
+      emailChanged &&
+      editEmailBaseline.login != null &&
+      newProfileEmail &&
+      newProfileEmail !== editEmailBaseline.login
+
+    if (canSyncLogin) {
+      const syncOk = await confirm({
+        title: 'Update portal login email?',
+        message: `Profile email is now ${newProfileEmail}. Also change portal login from ${truncateEmail(editEmailBaseline.login)} to match? Active portal sessions will be signed out.`,
+        confirmLabel: 'Update login email',
+        cancelLabel: 'Profile only',
+      })
+      if (syncOk) {
+        const syncRes = await syncClientLoginEmail(savedId)
+        if (syncRes.error || syncRes.data?.success === false) {
+          showWarning(
+            syncRes.error?.message ||
+              syncRes.data?.message ||
+              'Client saved, but portal login email could not be updated.',
+            'Profile saved',
+          )
+        } else if (!syncRes.data?.unchanged) {
+          showSuccess('Client profile and portal login email updated.')
+          setClients((prev) =>
+            upsertById(prev, {
+              ...saved,
+              portal_login_email: syncRes.data.login_email || newProfileEmail,
+              balance: prev.find((c) => c.id === savedId)?.balance ?? 0,
+              has_financial_records:
+                prev.find((c) => c.id === savedId)?.has_financial_records ?? false,
+            }),
+          )
+          closeForm(savedId)
+          return
+        }
+      }
+    }
+
     showSuccess(
       editingId
         ? "The Client's details have been updated."
         : 'A new Client has been added to the system.',
     )
-    const saved = result.data
-    closeForm(saved?.id || editingId)
+    closeForm(savedId)
     if (!saved?.id) return
     setClients((prev) => {
       const existing = prev.find((c) => c.id === saved.id)
       return upsertById(prev, {
         ...saved,
+        portal_login_email: existing?.portal_login_email ?? editEmailBaseline.login ?? null,
         balance: existing?.balance ?? 0,
         has_financial_records: existing?.has_financial_records ?? false,
       })
