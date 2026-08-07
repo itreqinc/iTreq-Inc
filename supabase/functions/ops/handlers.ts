@@ -2505,6 +2505,77 @@ handlers.get_client_credit_balance = async ({ user, sb }, args) => {
   return { balance: Number(data) || 0 }
 }
 
+handlers.list_client_credit_balances = async ({ sb }, args) => {
+  const raw = args[0]
+  const ids = Array.isArray(raw)
+    ? [...new Set(raw.map((id) => String(id || '').trim()).filter(Boolean))]
+    : []
+  if (!ids.length) return {}
+  const pairs = await Promise.all(
+    ids.map(async (id) => {
+      const { data, error } = await sb.rpc('get_client_credit_balance', { p_client_id: id })
+      if (error) throw mapDbError(error)
+      return [id, Number(data) || 0] as const
+    }),
+  )
+  return Object.fromEntries(pairs)
+}
+
+/** Unallocated payment leftovers + clients with unpaid invoices (list UI hints). */
+handlers.get_payment_list_credit_hints = async ({ sb }) => {
+  const [paymentsRes, allocsRes, invoicesRes] = await Promise.all([
+    sb.from('payments').select('id, client_id, amount, opening_balance_delta'),
+    sb.from('payment_allocations').select('payment_id, amount'),
+    sb
+      .from('invoices')
+      .select('client_id, total, amount_paid, status')
+      .in('status', ['issued', 'partial']),
+  ])
+  if (paymentsRes.error) throw mapDbError(paymentsRes.error)
+  if (allocsRes.error) throw mapDbError(allocsRes.error)
+  if (invoicesRes.error) throw mapDbError(invoicesRes.error)
+
+  const allocByPayment: Record<string, number> = {}
+  for (const row of allocsRes.data || []) {
+    const pid = String((row as { payment_id: string }).payment_id)
+    allocByPayment[pid] =
+      (allocByPayment[pid] || 0) + (Number((row as { amount: number }).amount) || 0)
+  }
+
+  const unallocatedByPaymentId: Record<string, number> = {}
+  for (const p of paymentsRes.data || []) {
+    const row = p as {
+      id: string
+      amount: number
+      opening_balance_delta?: number
+    }
+    const openingApplied = Math.max(0, -(Number(row.opening_balance_delta) || 0))
+    const unallocated =
+      Math.round(
+        ((Number(row.amount) || 0) - (allocByPayment[row.id] || 0) - openingApplied) * 100,
+      ) / 100
+    if (unallocated > 0.001) unallocatedByPaymentId[row.id] = unallocated
+  }
+
+  const clientIdsWithUnpaidInvoices: string[] = []
+  const seen = new Set<string>()
+  for (const inv of invoicesRes.data || []) {
+    const row = inv as {
+      client_id: string
+      total: number
+      amount_paid: number
+    }
+    const due = Math.round((Number(row.total) - Number(row.amount_paid)) * 100) / 100
+    const cid = String(row.client_id)
+    if (due > 0.001 && !seen.has(cid)) {
+      seen.add(cid)
+      clientIdsWithUnpaidInvoices.push(cid)
+    }
+  }
+
+  return { unallocatedByPaymentId, clientIdsWithUnpaidInvoices }
+}
+
 handlers.apply_client_credit_to_invoice = async ({ user, sb }, args) => {
   const invoiceId = String(args[0] || '')
   const amount = args[1] != null ? Number(args[1]) : null
