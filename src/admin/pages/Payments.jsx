@@ -26,6 +26,7 @@ import { DateRangeFilter } from '../../components/DateRangeFilter'
 import { filterByDateRange, sortByDateDescThenNameAsc } from '../../lib/dateRange'
 import { ClientSelect } from '../ClientSelect'
 import { AdminIconAction } from '../AdminIconAction'
+import { CornerHintIcon } from '../components/CornerHintIcon'
 import {
   adminBtnDanger,
   adminBtnPrimary,
@@ -90,12 +91,15 @@ export default function PaymentsPage() {
   const [fromNotification, setFromNotification] = useState(null)
   const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.payments')
   const [listView, setListView] = useState('payments') // payments | adjustments | all
+  const [unallocatedByPayment, setUnallocatedByPayment] = useState({})
+  const [clientsWithUnpaidInvoices, setClientsWithUnpaidInvoices] = useState(() => new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, c] = await Promise.all([
+    const [p, c, hints] = await Promise.all([
       opsApi.listPayments(),
       opsApi.listClients({ activeOnly: true }),
+      opsApi.getPaymentListCreditHints(),
     ])
     setLoading(false)
     if (p.error) {
@@ -104,6 +108,16 @@ export default function PaymentsPage() {
     }
     setRows((p.data || []).filter((r) => String(r.client_id) !== String(ownClientId || '')))
     setClients((c.data || []).filter((cl) => String(cl.id) !== String(ownClientId || '')))
+    if (hints.error) {
+      showError(hints.error.message)
+      setUnallocatedByPayment({})
+      setClientsWithUnpaidInvoices(new Set())
+      return
+    }
+    setUnallocatedByPayment(hints.data?.unallocatedByPaymentId || {})
+    setClientsWithUnpaidInvoices(
+      new Set(hints.data?.clientIdsWithUnpaidInvoices || []),
+    )
   }, [showError, ownClientId])
 
   const loadOpenInvoices = useCallback(
@@ -934,7 +948,24 @@ export default function PaymentsPage() {
                   <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                     {row.reference || '—'}
                   </td>
-                  <td className="px-4 py-3 font-medium text-ink-100">{formatPula(row.amount)}</td>
+                  <td className="px-4 py-3 font-medium text-ink-100">
+                    <span className="relative inline-block tabular-nums">
+                      {formatPula(row.amount)}
+                      {(() => {
+                        const unallocated = unallocatedByPayment[row.id] || 0
+                        const showInvoiceHint =
+                          !row.is_adjustment &&
+                          unallocated > 0.001 &&
+                          clientsWithUnpaidInvoices.has(String(row.client_id))
+                        return showInvoiceHint ? (
+                          <CornerHintIcon
+                            icon="invoice"
+                            title={`${formatPula(unallocated)} from this payment is still on account — client has unpaid invoices`}
+                          />
+                        ) : null
+                      })()}
+                    </span>
+                  </td>
                   <td
                     className="px-4 py-3 text-right"
                     onClick={(e) => e.stopPropagation()}

@@ -2282,6 +2282,68 @@ const directOpsApi = {
     return { data: { balance: Number(data) || 0 }, error: null }
   },
 
+  async listClientCreditBalances(clientIds) {
+    if (!supabase) return dbUnavailable()
+    const unique = [...new Set((clientIds || []).map(String).filter(Boolean))]
+    if (!unique.length) return { data: {}, error: null }
+    const pairs = await Promise.all(
+      unique.map(async (id) => {
+        const res = await this.getClientCreditBalance(id)
+        return [id, res.error ? 0 : Number(res.data?.balance) || 0]
+      }),
+    )
+    return { data: Object.fromEntries(pairs), error: null }
+  },
+
+  /** Per-payment unallocated amounts and clients with unpaid invoices (list hints). */
+  async getPaymentListCreditHints() {
+    if (!supabase) return dbUnavailable()
+    const [paymentsRes, allocsRes, invoicesRes] = await Promise.all([
+      supabase.from('payments').select('id, client_id, amount, opening_balance_delta'),
+      supabase.from('payment_allocations').select('payment_id, amount'),
+      supabase
+        .from('invoices')
+        .select('client_id, total, amount_paid, status')
+        .in('status', ['issued', 'partial']),
+    ])
+    if (paymentsRes.error) return mapError(paymentsRes.error)
+    if (allocsRes.error) return mapError(allocsRes.error)
+    if (invoicesRes.error) return mapError(invoicesRes.error)
+
+    const allocByPayment = {}
+    for (const row of allocsRes.data || []) {
+      const pid = row.payment_id
+      allocByPayment[pid] = (allocByPayment[pid] || 0) + (Number(row.amount) || 0)
+    }
+
+    const unallocatedByPaymentId = {}
+    for (const p of paymentsRes.data || []) {
+      const openingApplied = Math.max(0, -(Number(p.opening_balance_delta) || 0))
+      const unallocated =
+        Math.round(
+          ((Number(p.amount) || 0) - (allocByPayment[p.id] || 0) - openingApplied) * 100,
+        ) / 100
+      if (unallocated > 0.001) unallocatedByPaymentId[p.id] = unallocated
+    }
+
+    const clientIdsWithUnpaidInvoices = []
+    const seen = new Set()
+    for (const inv of invoicesRes.data || []) {
+      const due =
+        Math.round((Number(inv.total) - Number(inv.amount_paid)) * 100) / 100
+      const cid = String(inv.client_id)
+      if (due > 0.001 && !seen.has(cid)) {
+        seen.add(cid)
+        clientIdsWithUnpaidInvoices.push(cid)
+      }
+    }
+
+    return {
+      data: { unallocatedByPaymentId, clientIdsWithUnpaidInvoices },
+      error: null,
+    }
+  },
+
   async applyClientCreditToInvoice(invoiceId, amount = null) {
     if (!supabase) return dbUnavailable()
     const { data, error } = await supabase.rpc('apply_client_credit_to_invoice', {

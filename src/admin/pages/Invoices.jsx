@@ -44,6 +44,7 @@ import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { OpeningBalancesPanel } from '../components/OpeningBalancesPanel'
+import { CornerHintIcon } from '../components/CornerHintIcon'
 import { adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
@@ -151,6 +152,7 @@ export default function InvoicesPage() {
   const masterIssueCheckboxRef = useRef(null)
   const [form, setForm] = useState(() => newInvoiceForm())
   const [listView, setListView] = useState('invoices')
+  const [creditByClient, setCreditByClient] = useState({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -167,7 +169,14 @@ export default function InvoicesPage() {
       showError(inv.error.message)
       return
     }
-    setRows((inv.data || []).filter((r) => String(r.client_id) !== String(ownClientId || '')))
+    const invoiceRows = (inv.data || []).filter(
+      (r) => String(r.client_id) !== String(ownClientId || ''),
+    )
+    setRows(invoiceRows)
+    const clientIds = [...new Set(invoiceRows.map((r) => r.client_id).filter(Boolean))]
+    const creditRes = await opsApi.listClientCreditBalances(clientIds)
+    if (creditRes.error) showError(creditRes.error.message)
+    else setCreditByClient(creditRes.data || {})
     setClients((c.data || []).filter((cl) => String(cl.id) !== String(ownClientId || '')))
     setProducts(p.data || [])
     setTaxRate(Number(s.data?.default_tax_rate) || 0)
@@ -1197,11 +1206,29 @@ export default function InvoicesPage() {
                       {row.due_date || '—'}
                     </td>
                     <td className="px-2 py-3 whitespace-nowrap">
-                      <span
-                        className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${invoiceStatusClass(displayStatus)}`}
-                      >
-                        {displayStatus}
-                      </span>
+                      {(() => {
+                        const clientCredit = creditByClient[row.client_id] || 0
+                        const balanceDue = invoiceBalanceDue(row)
+                        const showCreditHint =
+                          clientCredit > 0.001 &&
+                          (displayStatus === 'due' ||
+                            displayStatus === 'overdue' ||
+                            displayStatus === 'partial') &&
+                          balanceDue > 0.001
+                        return (
+                          <span
+                            className={`relative inline-block rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${invoiceStatusClass(displayStatus)}`}
+                          >
+                            {displayStatus}
+                            {showCreditHint ? (
+                              <CornerHintIcon
+                                icon="payment"
+                                title={`${row.clients?.name || 'Client'} has ${formatPula(clientCredit)} on account — apply credit`}
+                              />
+                            ) : null}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className="px-2 py-3 whitespace-nowrap text-right text-ink-200 tabular-nums">
                       {formatPula(row.total)}
