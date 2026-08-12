@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -665,6 +666,263 @@ export default function ClientsPage() {
     [statement],
   )
 
+  function renderAccountsClientButton(c) {
+    const active = c.id === selectedId
+    return (
+      <button
+        type="button"
+        onClick={() => setSelectedId(c.id)}
+        className={`flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm ${
+          active ? 'accounts-tab-active text-white' : 'text-ink-200 hover:bg-white/5'
+        }`}
+      >
+        <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] font-medium leading-snug">
+          {c.name}
+        </span>
+        <span
+          className={`shrink-0 self-center text-xs font-semibold tabular-nums ${balanceClass(c.balance)}`}
+        >
+          {formatPula(c.balance)}
+        </span>
+      </button>
+    )
+  }
+
+  function renderAccountsClientListEmpty() {
+    if (loading) return <p className="px-3 py-6 text-sm text-ink-400">Loading…</p>
+    if (clients.length === 0) {
+      return <p className="px-3 py-6 text-sm text-ink-400">No clients yet.</p>
+    }
+    if (filteredClients.length === 0) {
+      return <p className="px-3 py-6 text-sm text-ink-400">No clients match your search.</p>
+    }
+    return null
+  }
+
+  function renderAccountsDetailPanel({ className = '' } = {}) {
+    return (
+      <div
+        className={`min-h-[16rem] min-w-0 p-4 sm:p-5 ${selectedId ? 'accounts-surface' : ''} ${className}`}
+      >
+        {!selectedId ? (
+          <p className="text-sm text-ink-400">Select a client to view transactions.</p>
+        ) : txRangeBackwards ? (
+          <p className="text-sm text-ink-400">Fix the date range to load transactions.</p>
+        ) : stmtLoading ? (
+          <p className="text-sm text-ink-400">Loading transactions…</p>
+        ) : !statement ? (
+          <p className="text-sm text-ink-400">No statement data.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  {selectedClient?.name || statement.client?.name}
+                </h2>
+                {txFrom || txTo ? (
+                  <p className="mt-1 text-xs text-ink-500">
+                    Period:{' '}
+                    <span className="text-ink-300">
+                      {txFrom || '…'} → {txTo || '…'}
+                    </span>
+                  </p>
+                ) : null}
+                {txFrom ? (
+                  <p className="mt-1 text-sm text-ink-300">
+                    Opening balance
+                    {openingAsOf ? (
+                      <span className="text-ink-500"> (as of {openingAsOf})</span>
+                    ) : null}
+                    :{' '}
+                    <span className={`font-semibold ${balanceClass(statement.openingBalance)}`}>
+                      {formatPula(statement.openingBalance)}
+                    </span>
+                  </p>
+                ) : null}
+                {selectedClient &&
+                Math.abs(clientOpeningBalanceAmount(selectedClient)) > 0.001 ? (
+                  <p className="mt-1 text-sm text-ink-300">
+                    Brought forward remaining:{' '}
+                    <span
+                      className={`font-semibold ${balanceClass(
+                        clientOpeningBalanceAmount(selectedClient),
+                      )}`}
+                    >
+                      {formatPula(clientOpeningBalanceAmount(selectedClient))}
+                    </span>
+                    {clientOpeningBalanceDate(selectedClient) ? (
+                      <span className="text-ink-500">
+                        {' '}
+                        · as of {clientOpeningBalanceDate(selectedClient)}
+                      </span>
+                    ) : null}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-sm text-ink-300">
+                  Closing balance:{' '}
+                  <span className={`font-semibold ${balanceClass(statement.closingBalance)}`}>
+                    {formatPula(statement.closingBalance)}
+                  </span>
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {hasInactive ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTx((v) => !v)}
+                    aria-pressed={showAllTx}
+                    className={showAllTx ? adminBtnPrimary : adminBtnSecondary}
+                  >
+                    Show all
+                  </button>
+                ) : null}
+                {selectedClient ? (
+                  <ClientRowActions
+                    label={`Actions for ${selectedClient.name}`}
+                    items={clientMenuItems(selectedClient)}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            <div className={`${adminTableShellSmClass} bg-ink-950/30`}>
+              <table className={adminTableClass}>
+                <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
+                  <tr>
+                    <th className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setTxDateSort((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                        className="inline-flex items-center gap-1 rounded-md text-left uppercase tracking-wider text-ink-400 transition hover:text-ink-200"
+                        aria-label={
+                          txDateSort === 'asc'
+                            ? 'Date sorted oldest first. Click for newest first.'
+                            : 'Date sorted newest first. Click for oldest first.'
+                        }
+                        title={txDateSort === 'asc' ? 'Oldest first' : 'Newest first'}
+                      >
+                        Date
+                        <svg
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          className={`h-3.5 w-3.5 shrink-0 transition ${
+                            txDateSort === 'desc' ? 'rotate-180' : ''
+                          }`}
+                          aria-hidden
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">Description</th>
+                    <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Debit</th>
+                    <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Credit</th>
+                    <th className="px-3 py-2 text-right">Balance</th>
+                    <th className="w-10 px-2 py-2" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {visibleLines.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-3 py-6 text-ink-400">
+                        {txFrom || txTo
+                          ? showAllTx
+                            ? 'No invoices, quotations, or payments in this date range.'
+                            : 'No active transactions in this date range.'
+                          : showAllTx
+                            ? 'No invoices, quotations, or payments for this client yet.'
+                            : 'No active transactions for this client.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleLines.map((line, i) => {
+                      const openable = Boolean(line.id) && line.type !== 'opening_balance'
+                      const open = () => openTransaction(line)
+                      const label = statementLineLabel(line)
+                      const methodSuffix = statementLineMethodSuffix(line)
+                      return (
+                        <tr
+                          key={`${line.type}-${line.id || i}`}
+                          role={openable ? 'link' : undefined}
+                          tabIndex={openable ? 0 : undefined}
+                          className={`group ${line.inactive ? 'opacity-50' : ''} ${
+                            openable ? clickableRowClass : ''
+                          }`}
+                          onClick={openable ? open : undefined}
+                          onKeyDown={openable ? (e) => activateRowKey(e, open) : undefined}
+                        >
+                          <td className="px-3 py-2 whitespace-nowrap text-ink-300">
+                            {line.sortDate}
+                          </td>
+                          <td className="min-w-0 break-words px-3 py-2 text-ink-200">
+                            {openable ? (
+                              <span className={clickableDocClass}>{label}</span>
+                            ) : (
+                              label
+                            )}
+                            {methodSuffix}
+                            {line.inactive ? (
+                              <span className="ml-1 text-xs text-red-300">
+                                (
+                                {line.type === 'quotation'
+                                  ? quotationDisplayStatus(line)
+                                  : line.status || 'inactive'}
+                                )
+                              </span>
+                            ) : null}
+                            <span className="mt-0.5 block text-xs text-ink-500 sm:hidden">
+                              {line.debit
+                                ? `Debit ${formatPula(line.debit)}`
+                                : line.credit
+                                  ? `Credit ${formatPula(line.credit)}`
+                                  : null}
+                            </span>
+                          </td>
+                          <td
+                            className={`px-3 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}
+                          >
+                            {line.debit ? formatPula(line.debit) : '—'}
+                          </td>
+                          <td
+                            className={`px-3 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}
+                          >
+                            {line.credit ? formatPula(line.credit) : '—'}
+                          </td>
+                          <td
+                            className={`px-3 py-2 text-right tabular-nums font-medium ${
+                              line.inactive ? 'text-ink-500' : balanceClass(line.balance)
+                            }`}
+                          >
+                            {line.inactive ? '—' : formatPula(line.balance)}
+                          </td>
+                          <td
+                            className="px-1 py-1 text-right"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
+                            <ActionsMenu
+                              items={transactionMenuItems(line)}
+                              align="right"
+                              label="Transaction actions"
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1014,276 +1272,40 @@ export default function ClientsPage() {
             <p className="text-sm text-amber-200">The “From” date is after the “To” date.</p>
           ) : null}
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:grid-cols-[minmax(0,17rem)_1fr]">
-          <aside className="admin-scroll max-h-[70vh] overflow-y-auto border-b border-white/10 lg:border-b-0">
+          {/* Mobile: detail panel inline below the selected client */}
+          <div className="lg:hidden">
             <div className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
               Clients
             </div>
-            {loading ? (
-              <p className="px-3 py-6 text-sm text-ink-400">Loading…</p>
-            ) : clients.length === 0 ? (
-              <p className="px-3 py-6 text-sm text-ink-400">No clients yet.</p>
-            ) : filteredClients.length === 0 ? (
-              <p className="px-3 py-6 text-sm text-ink-400">No clients match your search.</p>
-            ) : (
+            {renderAccountsClientListEmpty() ?? (
               <ul className="py-3">
-                {filteredClients.map((c) => {
-                  const active = c.id === selectedId
-                  return (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedId(c.id)}
-                        className={`flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm ${
-                          active
-                            ? 'accounts-tab-active text-white'
-                            : 'text-ink-200 hover:bg-white/5'
-                        }`}
-                      >
-                        <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] font-medium leading-snug">
-                          {c.name}
-                        </span>
-                        <span
-                          className={`shrink-0 self-center text-xs font-semibold tabular-nums ${balanceClass(c.balance)}`}
-                        >
-                          {formatPula(c.balance)}
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
+                {filteredClients.map((c) => (
+                  <Fragment key={c.id}>
+                    <li>{renderAccountsClientButton(c)}</li>
+                    {c.id === selectedId ? (
+                      <li className="border-b border-white/10">{renderAccountsDetailPanel()}</li>
+                    ) : null}
+                  </Fragment>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Desktop: client list + detail pane */}
+          <aside className="admin-scroll hidden max-h-[70vh] overflow-y-auto border-b border-white/10 lg:block lg:border-b-0">
+            <div className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
+              Clients
+            </div>
+            {renderAccountsClientListEmpty() ?? (
+              <ul className="py-3">
+                {filteredClients.map((c) => (
+                  <li key={c.id}>{renderAccountsClientButton(c)}</li>
+                ))}
               </ul>
             )}
           </aside>
 
-          <section
-            className={`min-h-[16rem] min-w-0 p-4 sm:p-5 ${
-              selectedId ? 'accounts-surface' : ''
-            }`}
-          >
-            {!selectedId ? (
-              <p className="text-sm text-ink-400">Select a client to view transactions.</p>
-            ) : txRangeBackwards ? (
-              <p className="text-sm text-ink-400">Fix the date range to load transactions.</p>
-            ) : stmtLoading ? (
-              <p className="text-sm text-ink-400">Loading transactions…</p>
-            ) : !statement ? (
-              <p className="text-sm text-ink-400">No statement data.</p>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-semibold text-white">
-                      {selectedClient?.name || statement.client?.name}
-                    </h2>
-                    {txFrom || txTo ? (
-                      <p className="mt-1 text-xs text-ink-500">
-                        Period:{' '}
-                        <span className="text-ink-300">
-                          {txFrom || '…'} → {txTo || '…'}
-                        </span>
-                      </p>
-                    ) : null}
-                    {txFrom ? (
-                      <p className="mt-1 text-sm text-ink-300">
-                        Opening balance
-                        {openingAsOf ? (
-                          <span className="text-ink-500"> (as of {openingAsOf})</span>
-                        ) : null}
-                        :{' '}
-                        <span
-                          className={`font-semibold ${balanceClass(statement.openingBalance)}`}
-                        >
-                          {formatPula(statement.openingBalance)}
-                        </span>
-                      </p>
-                    ) : null}
-                    {selectedClient &&
-                    Math.abs(clientOpeningBalanceAmount(selectedClient)) > 0.001 ? (
-                      <p className="mt-1 text-sm text-ink-300">
-                        Brought forward remaining:{' '}
-                        <span
-                          className={`font-semibold ${balanceClass(
-                            clientOpeningBalanceAmount(selectedClient),
-                          )}`}
-                        >
-                          {formatPula(clientOpeningBalanceAmount(selectedClient))}
-                        </span>
-                        {clientOpeningBalanceDate(selectedClient) ? (
-                          <span className="text-ink-500">
-                            {' '}
-                            · as of {clientOpeningBalanceDate(selectedClient)}
-                          </span>
-                        ) : null}
-                      </p>
-                    ) : null}
-                    <p className="mt-1 text-sm text-ink-300">
-                      Closing balance:{' '}
-                      <span
-                        className={`font-semibold ${balanceClass(statement.closingBalance)}`}
-                      >
-                        {formatPula(statement.closingBalance)}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {hasInactive ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllTx((v) => !v)}
-                        aria-pressed={showAllTx}
-                        className={showAllTx ? adminBtnPrimary : adminBtnSecondary}
-                      >
-                        Show all
-                      </button>
-                    ) : null}
-                    {selectedClient ? (
-                      <ClientRowActions
-                        label={`Actions for ${selectedClient.name}`}
-                        items={clientMenuItems(selectedClient)}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className={`${adminTableShellSmClass} bg-ink-950/30`}>
-                  <table className={adminTableClass}>
-                    <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
-                      <tr>
-                        <th className="px-3 py-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setTxDateSort((d) => (d === 'asc' ? 'desc' : 'asc'))
-                            }
-                            className="inline-flex items-center gap-1 rounded-md text-left uppercase tracking-wider text-ink-400 transition hover:text-ink-200"
-                            aria-label={
-                              txDateSort === 'asc'
-                                ? 'Date sorted oldest first. Click for newest first.'
-                                : 'Date sorted newest first. Click for oldest first.'
-                            }
-                            title={
-                              txDateSort === 'asc' ? 'Oldest first' : 'Newest first'
-                            }
-                          >
-                            Date
-                            <svg
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                              className={`h-3.5 w-3.5 shrink-0 transition ${
-                                txDateSort === 'desc' ? 'rotate-180' : ''
-                              }`}
-                              aria-hidden
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          </button>
-                        </th>
-                        <th className="px-3 py-2">Description</th>
-                        <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Debit</th>
-                        <th className={`px-3 py-2 text-right ${adminColSecondary}`}>Credit</th>
-                        <th className="px-3 py-2 text-right">Balance</th>
-                        <th className="w-10 px-2 py-2" />
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {visibleLines.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="px-3 py-6 text-ink-400">
-                            {txFrom || txTo
-                              ? showAllTx
-                                ? 'No invoices, quotations, or payments in this date range.'
-                                : 'No active transactions in this date range.'
-                              : showAllTx
-                                ? 'No invoices, quotations, or payments for this client yet.'
-                                : 'No active transactions for this client.'}
-                          </td>
-                        </tr>
-                      ) : (
-                        visibleLines.map((line, i) => {
-                          const openable = Boolean(line.id) && line.type !== 'opening_balance'
-                          const open = () => openTransaction(line)
-                          const label = statementLineLabel(line)
-                          const methodSuffix = statementLineMethodSuffix(line)
-                          return (
-                          <tr
-                            key={`${line.type}-${line.id || i}`}
-                            role={openable ? 'link' : undefined}
-                            tabIndex={openable ? 0 : undefined}
-                            className={`group ${line.inactive ? 'opacity-50' : ''} ${
-                              openable ? clickableRowClass : ''
-                            }`}
-                            onClick={openable ? open : undefined}
-                            onKeyDown={
-                              openable ? (e) => activateRowKey(e, open) : undefined
-                            }
-                          >
-                            <td className="px-3 py-2 whitespace-nowrap text-ink-300">
-                              {line.sortDate}
-                            </td>
-                            <td className="min-w-0 break-words px-3 py-2 text-ink-200">
-                              {openable ? (
-                                <span className={clickableDocClass}>{label}</span>
-                              ) : (
-                                label
-                              )}
-                              {methodSuffix}
-                              {line.inactive ? (
-                                <span className="ml-1 text-xs text-red-300">
-                                  (
-                                  {line.type === 'quotation'
-                                    ? quotationDisplayStatus(line)
-                                    : line.status || 'inactive'}
-                                  )
-                                </span>
-                              ) : null}
-                              <span className="mt-0.5 block text-xs text-ink-500 sm:hidden">
-                                {line.debit
-                                  ? `Debit ${formatPula(line.debit)}`
-                                  : line.credit
-                                    ? `Credit ${formatPula(line.credit)}`
-                                    : null}
-                              </span>
-                            </td>
-                            <td className={`px-3 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
-                              {line.debit ? formatPula(line.debit) : '—'}
-                            </td>
-                            <td className={`px-3 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
-                              {line.credit ? formatPula(line.credit) : '—'}
-                            </td>
-                            <td
-                              className={`px-3 py-2 text-right tabular-nums font-medium ${
-                                line.inactive
-                                  ? 'text-ink-500'
-                                  : balanceClass(line.balance)
-                              }`}
-                            >
-                              {line.inactive ? '—' : formatPula(line.balance)}
-                            </td>
-                            <td
-                              className="px-1 py-1 text-right"
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            >
-                              <ActionsMenu
-                                items={transactionMenuItems(line)}
-                                align="right"
-                                label="Transaction actions"
-                              />
-                            </td>
-                          </tr>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </section>
+          <section className="hidden min-w-0 lg:block">{renderAccountsDetailPanel()}</section>
         </div>
         </div>
       )}
