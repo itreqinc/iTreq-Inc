@@ -71,6 +71,63 @@ export function statementOpeningBalance(client, payments = []) {
   return { amount, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '' }
 }
 
+/** Totals from payment rows that touched brought-forward balance. */
+export function openingBalanceAppliedFromPayments(payments = []) {
+  let paidTowardOpening = 0
+  let creditAppliedToInvoices = 0
+  for (const pay of payments || []) {
+    const delta = Number(pay?.opening_balance_delta) || 0
+    if (delta < 0) paidTowardOpening += -delta
+    else if (delta > 0) creditAppliedToInvoices += delta
+  }
+  return {
+    paidTowardOpening: Math.round(paidTowardOpening * 100) / 100,
+    creditAppliedToInvoices: Math.round(creditAppliedToInvoices * 100) / 100,
+  }
+}
+
+/**
+ * Original carry-in and settlement status for Accounts. clients.opening_balance is
+ * remaining only; rebuild the setup amount from payment activity when paid down.
+ */
+export function openingBalanceCarryIn(client, payments = []) {
+  const remaining = Math.round((Number(client?.opening_balance) || 0) * 100) / 100
+  const { paidTowardOpening, creditAppliedToInvoices } =
+    openingBalanceAppliedFromPayments(payments)
+  const originalAmount =
+    Math.round((remaining + paidTowardOpening - creditAppliedToInvoices) * 100) / 100
+
+  let asOfDate = String(client?.opening_balance_date || '')
+    .trim()
+    .slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) {
+    let earliest = ''
+    for (const pay of payments || []) {
+      const delta = Number(pay?.opening_balance_delta) || 0
+      if (delta === 0 && !(pay?.is_adjustment && Number(pay?.amount))) continue
+      const src = String(pay.source_date || pay.payment_date || '').slice(0, 10)
+      if (src && (!earliest || src < earliest)) earliest = src
+    }
+    asOfDate = earliest
+  }
+
+  const hasHistory =
+    Math.abs(originalAmount) > 0.001 ||
+    paidTowardOpening > 0.001 ||
+    creditAppliedToInvoices > 0.001
+  const isSettled = hasHistory && Math.abs(remaining) <= 0.001
+
+  return {
+    originalAmount,
+    asOfDate: /^\d{4}-\d{2}-\d{2}$/.test(asOfDate) ? asOfDate : '',
+    remaining,
+    hasHistory,
+    isSettled,
+    paidTowardOpening,
+    creditAppliedToInvoices,
+  }
+}
+
 export function invoiceBalanceDue(invoice) {
   const total = Number(invoice.total) || 0
   const paid = Number(invoice.amount_paid) || 0

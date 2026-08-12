@@ -4,7 +4,7 @@ import {
   useMemo,
   useRef,
   useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import { useAuth } from '../../contexts/AuthContext'
@@ -24,6 +24,11 @@ import {
 } from '../../lib/invoiceDefaults'
 import { withUnreadRows } from '../../lib/invoiceDisputes'
 import { opsApi } from '../../lib/opsApi'
+import {
+  clearClientsReturnParams,
+  clientsAccountsUrl,
+  readClientsReturnFromParams,
+} from '../../lib/clientsReturnNav'
 import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
   mapDocLinesForEditor,
@@ -131,7 +136,9 @@ function snapshotInvoiceForm(form) {
 
 export default function InvoicesPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const clientsReturnClientIdRef = useRef(null)
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm, runWithProgress } = useOpsAlert()
   const [rows, setRows] = useState([])
@@ -243,11 +250,16 @@ export default function InvoicesPage() {
   )
 
   useEffect(() => {
+    const returnClientId = readClientsReturnFromParams(params)
+    if (returnClientId) clientsReturnClientIdRef.current = returnClientId
+
     const openId = params.get('open')
     if (openId) {
       openRow(openId).then(() => {
-        params.delete('open')
-        setParams(params, { replace: true })
+        const next = new URLSearchParams(params)
+        next.delete('open')
+        clearClientsReturnParams(next)
+        setParams(next, { replace: true })
       })
       return
     }
@@ -259,8 +271,9 @@ export default function InvoicesPage() {
       setForm(nextForm)
       setBaseline(snapshotInvoiceForm(nextForm))
       setShowForm(true)
-      params.delete('client')
-      setParams(params, { replace: true })
+      const next = new URLSearchParams(params)
+      clearClientsReturnParams(next)
+      setParams(next, { replace: true })
     }
   }, [params, setParams, openRow])
 
@@ -275,6 +288,12 @@ export default function InvoicesPage() {
   }
 
   function closeForm(savedId) {
+    const returnClientId = clientsReturnClientIdRef.current
+    if (returnClientId) {
+      clientsReturnClientIdRef.current = null
+      navigate(clientsAccountsUrl(returnClientId))
+      return
+    }
     setShowForm(false)
     setEditingId(null)
     setBaseline('')

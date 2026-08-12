@@ -5,7 +5,7 @@ import {
   useMemo,
   useRef,
   useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { isAdmin, isStaffLike, canStaffEditOpeningBalance, VIEW_MODES, truncateEmail } from '../../lib/authConfig'
 import { syncClientLoginEmail, resetClientPassword } from '../../lib/authApi'
@@ -13,10 +13,12 @@ import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { clientToForm,
   emptyClientForm,
-  clientOpeningBalanceAmount,
-  clientOpeningBalanceDate,
 } from '../../lib/clientRegistration'
 import { validateClientForm, normEmail } from '../../lib/clientValidation'
+import {
+  invoiceUrlFromClients,
+  paymentUrlFromClients,
+} from '../../lib/clientsReturnNav'
 import { statementLineLabel, statementLineMethodSuffix } from '../../lib/payments'
 import { quotationDisplayStatus } from '../../lib/portalQuote'
 import {
@@ -99,6 +101,7 @@ function ClientRowActions({ items, label = 'Client actions' }) {
 
 export default function ClientsPage() {
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const { user } = useAuth()
   const admin = isAdmin(user?.role)
   const staffLike = isStaffLike(user?.role)
@@ -202,6 +205,19 @@ export default function ClientsPage() {
   }, [load])
 
   useEffect(() => {
+    const accountId = String(params.get('account') || '').trim()
+    if (!accountId) return
+    setView('accounts')
+    setSelectedId(accountId)
+    setShowForm(false)
+    setViewId(null)
+    highlightRow(accountId)
+    const next = new URLSearchParams(params)
+    next.delete('account')
+    setParams(next, { replace: true })
+  }, [params, setParams, highlightRow])
+
+  useEffect(() => {
     if (view !== 'accounts' || !selectedId) {
       setSelectedAccountCredit(0)
       return
@@ -275,6 +291,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     if (view !== 'accounts') return
+    if (loading) return
     if (!filteredClients.length) {
       if (selectedId) setSelectedId(null)
       return
@@ -282,7 +299,7 @@ export default function ClientsPage() {
     if (!selectedId || !filteredClients.some((c) => c.id === selectedId)) {
       setSelectedId(filteredClients[0]?.id || null)
     }
-  }, [view, filteredClients, selectedId])
+  }, [view, filteredClients, selectedId, loading])
 
   function startNew() {
     setEditingId(null)
@@ -400,8 +417,8 @@ export default function ClientsPage() {
   function clientIconActions(client) {
     return {
       onEdit: () => startEdit(client),
-      onInvoice: () => navigate(`/admin/invoices?client=${client.id}`),
-      onPayment: () => navigate(`/admin/payments?client=${client.id}`),
+      onInvoice: () => navigate(invoiceUrlFromClients(client.id)),
+      onPayment: () => navigate(paymentUrlFromClients(client.id)),
       onPrint: () => openStatementRangeModal(client),
       printing: printingStmt,
     }
@@ -519,10 +536,14 @@ export default function ClientsPage() {
   }
 
   function openTransaction(line) {
-    if (!line?.id) return
-    if (line.type === 'invoice') navigate(`/admin/invoices?open=${line.id}`)
-    else if (line.type === 'payment') navigate(`/admin/payments?open=${line.id}`)
-    else if (line.type === 'quotation') navigate(`/admin/quotations?open=${line.id}`)
+    if (!line?.id || !selectedId) return
+    if (line.type === 'invoice') {
+      navigate(invoiceUrlFromClients(selectedId, { openInvoiceId: line.id }))
+    } else if (line.type === 'payment') {
+      navigate(paymentUrlFromClients(selectedId, { openPaymentId: line.id }))
+    } else if (line.type === 'quotation') {
+      navigate(`/admin/quotations?open=${line.id}`)
+    }
   }
 
   function transactionMenuItems(line) {
@@ -671,6 +692,7 @@ export default function ClientsPage() {
     return (
       <button
         type="button"
+        data-row-id={c.id}
         onClick={() => setSelectedId(c.id)}
         className={`flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm ${
           active ? 'accounts-tab-active text-white' : 'text-ink-200 hover:bg-white/5'
@@ -739,21 +761,27 @@ export default function ClientsPage() {
                     </span>
                   </p>
                 ) : null}
-                {selectedClient &&
-                Math.abs(clientOpeningBalanceAmount(selectedClient)) > 0.001 ? (
+                {statement?.carryIn?.hasHistory ? (
                   <p className="mt-1 text-sm text-ink-300">
-                    Brought forward remaining:{' '}
-                    <span
-                      className={`font-semibold ${balanceClass(
-                        clientOpeningBalanceAmount(selectedClient),
-                      )}`}
-                    >
-                      {formatPula(clientOpeningBalanceAmount(selectedClient))}
-                    </span>
-                    {clientOpeningBalanceDate(selectedClient) ? (
+                    Opening balance
+                    {statement.carryIn.asOfDate ? (
                       <span className="text-ink-500">
                         {' '}
-                        · as of {clientOpeningBalanceDate(selectedClient)}
+                        (as of {statement.carryIn.asOfDate})
+                      </span>
+                    ) : null}
+                    :{' '}
+                    <span
+                      className={`font-semibold ${balanceClass(statement.carryIn.originalAmount)}`}
+                    >
+                      {formatPula(statement.carryIn.originalAmount)}
+                    </span>
+                    {statement.carryIn.isSettled ? (
+                      <span className="text-ink-500"> · settled</span>
+                    ) : Math.abs(statement.carryIn.remaining) > 0.001 ? (
+                      <span className="text-ink-500">
+                        {' '}
+                        · {formatPula(statement.carryIn.remaining)} remaining
                       </span>
                     ) : null}
                   </p>

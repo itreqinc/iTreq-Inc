@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
+import {
+  clearClientsReturnParams,
+  clientsAccountsUrl,
+  readClientsReturnFromParams,
+} from '../../lib/clientsReturnNav'
 import {
   autoAllocatePayment,
   invoiceBalanceDue,
@@ -69,7 +74,9 @@ function snapshotPaymentForm(form) {
 }
 
 export default function PaymentsPage() {
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const clientsReturnClientIdRef = useRef(null)
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [rows, setRows] = useState([])
@@ -249,19 +256,26 @@ export default function PaymentsPage() {
   )
 
   useEffect(() => {
+    const returnClientId = readClientsReturnFromParams(params)
+    if (returnClientId) clientsReturnClientIdRef.current = returnClientId
+
     const openId = params.get('open')
     if (openId) {
       startEdit(openId).then(() => {
-        params.delete('open')
-        setParams(params, { replace: true })
+        const next = new URLSearchParams(params)
+        next.delete('open')
+        clearClientsReturnParams(next)
+        setParams(next, { replace: true })
       })
       return
     }
     const notificationId = params.get('notification')
     if (notificationId) {
       startFromNotification(notificationId).then(() => {
-        params.delete('notification')
-        setParams(params, { replace: true })
+        const next = new URLSearchParams(params)
+        next.delete('notification')
+        clearClientsReturnParams(next)
+        setParams(next, { replace: true })
       })
       return
     }
@@ -272,12 +286,19 @@ export default function PaymentsPage() {
       setShowForm(true)
       scrollToForm()
       loadOpenInvoices(clientId)
-      params.delete('client')
-      setParams(params, { replace: true })
+      const next = new URLSearchParams(params)
+      clearClientsReturnParams(next)
+      setParams(next, { replace: true })
     }
-  }, [params, setParams, startEdit, startFromNotification, loadOpenInvoices])
+  }, [params, setParams, startEdit, startFromNotification, loadOpenInvoices, scrollToForm])
 
   function closeForm(savedId) {
+    const returnClientId = clientsReturnClientIdRef.current
+    if (returnClientId) {
+      clientsReturnClientIdRef.current = null
+      navigate(clientsAccountsUrl(returnClientId))
+      return
+    }
     setShowForm(false)
     setEditingId(null)
     setBaseline('')

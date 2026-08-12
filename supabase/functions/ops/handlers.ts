@@ -92,6 +92,59 @@ function statementOpeningBalance(
   return { amount, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '' }
 }
 
+function openingBalanceAppliedFromPayments(payments: Record<string, unknown>[] = []) {
+  let paidTowardOpening = 0
+  let creditAppliedToInvoices = 0
+  for (const pay of payments || []) {
+    const delta = Number(pay?.opening_balance_delta) || 0
+    if (delta < 0) paidTowardOpening += -delta
+    else if (delta > 0) creditAppliedToInvoices += delta
+  }
+  return {
+    paidTowardOpening: Math.round(paidTowardOpening * 100) / 100,
+    creditAppliedToInvoices: Math.round(creditAppliedToInvoices * 100) / 100,
+  }
+}
+
+function openingBalanceCarryIn(
+  client: Record<string, unknown> | null | undefined,
+  payments: Record<string, unknown>[] = [],
+) {
+  const remaining = clientOpeningBalanceAmount(client)
+  const { paidTowardOpening, creditAppliedToInvoices } =
+    openingBalanceAppliedFromPayments(payments)
+  const originalAmount =
+    Math.round((remaining + paidTowardOpening - creditAppliedToInvoices) * 100) / 100
+
+  let asOfDate = clientOpeningBalanceDate(client)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) {
+    let earliest = ''
+    for (const pay of payments || []) {
+      const delta = Number(pay?.opening_balance_delta) || 0
+      if (delta === 0 && !(pay?.is_adjustment && Number(pay?.amount))) continue
+      const src = String(pay.source_date || pay.payment_date || '').slice(0, 10)
+      if (src && (!earliest || src < earliest)) earliest = src
+    }
+    asOfDate = earliest
+  }
+
+  const hasHistory =
+    Math.abs(originalAmount) > 0.001 ||
+    paidTowardOpening > 0.001 ||
+    creditAppliedToInvoices > 0.001
+  const isSettled = hasHistory && Math.abs(remaining) <= 0.001
+
+  return {
+    originalAmount,
+    asOfDate: /^\d{4}-\d{2}-\d{2}$/.test(asOfDate) ? asOfDate : '',
+    remaining,
+    hasHistory,
+    isSettled,
+    paidTowardOpening,
+    creditAppliedToInvoices,
+  }
+}
+
 function addMonthsIso(isoDate: string, months = 1) {
   const [y, m, d] = String(isoDate || '')
     .slice(0, 10)
@@ -2885,6 +2938,10 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     client as Record<string, unknown>,
     (allPay || []) as Record<string, unknown>[],
   )
+  const carryIn = openingBalanceCarryIn(
+    client as Record<string, unknown>,
+    (allPay || []) as Record<string, unknown>[],
+  )
 
   let opening = 0
   for (const inv of allInv || []) {
@@ -2904,7 +2961,25 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
   opening = Math.round(opening * 100) / 100
 
   const lines: Record<string, unknown>[] = []
-  if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
+  if (
+    carryIn.hasHistory &&
+    carryIn.isSettled &&
+    carryIn.asOfDate &&
+    inRange(carryIn.asOfDate)
+  ) {
+    lines.push({
+      id: null,
+      sortDate: carryIn.asOfDate,
+      type: 'opening_balance',
+      label: 'Opening balance (settled)',
+      status: 'settled',
+      inactive: true,
+      alwaysShow: true,
+      affectsBalance: false,
+      debit: carryIn.originalAmount > 0 ? carryIn.originalAmount : 0,
+      credit: carryIn.originalAmount < 0 ? Math.abs(carryIn.originalAmount) : 0,
+    })
+  } else if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
     lines.push({
       id: null,
       sortDate: openingDate,
@@ -2991,6 +3066,7 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     closingBalance: Math.round(balance * 100) / 100,
     periodCharges: Math.round(periodCharges * 100) / 100,
     periodCredits: Math.round(periodCredits * 100) / 100,
+    carryIn,
     lines: withBalance,
   }
 }

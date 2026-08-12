@@ -14,6 +14,7 @@ import {
   paymentStatementCredit,
   PAYMENT_METHODS,
   statementOpeningBalance,
+  openingBalanceCarryIn,
   summarizeReceivables,
 } from './payments'
 import { disputeUnreadCount } from './invoiceDisputes'
@@ -2813,6 +2814,7 @@ const directOpsApi = {
       clientRes.data,
       allPay || [],
     )
+    const carryIn = openingBalanceCarryIn(clientRes.data, allPay || [])
 
     let opening = 0
     for (const inv of allInv || []) {
@@ -2837,7 +2839,25 @@ const directOpsApi = {
     opening = Math.round(opening * 100) / 100
 
     const lines = []
-    if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
+    if (
+      carryIn.hasHistory &&
+      carryIn.isSettled &&
+      carryIn.asOfDate &&
+      inRange(carryIn.asOfDate)
+    ) {
+      lines.push({
+        id: null,
+        sortDate: carryIn.asOfDate,
+        type: 'opening_balance',
+        label: 'Opening balance (settled)',
+        status: 'settled',
+        inactive: true,
+        alwaysShow: true,
+        affectsBalance: false,
+        debit: carryIn.originalAmount > 0 ? carryIn.originalAmount : 0,
+        credit: carryIn.originalAmount < 0 ? Math.abs(carryIn.originalAmount) : 0,
+      })
+    } else if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
       lines.push({
         id: null,
         sortDate: openingDate,
@@ -2930,6 +2950,7 @@ const directOpsApi = {
         closingBalance: Math.round(balance * 100) / 100,
         periodCharges: Math.round(periodCharges * 100) / 100,
         periodCredits: Math.round(periodCredits * 100) / 100,
+        carryIn,
         lines: withBalance,
       },
       error: null,
