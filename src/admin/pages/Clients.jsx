@@ -135,14 +135,26 @@ export default function ClientsPage() {
     }
     if (!el) return
 
-    const container = el.closest('[data-accounts-client-list]')
+    const listRoot = el.closest('[data-accounts-client-list]')
+    let container = null
+    let node = listRoot
+    while (node && node !== document.body) {
+      const { overflowY } = window.getComputedStyle(node)
+      const scrolls = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay'
+      if (scrolls && node.clientHeight > 0 && node.scrollHeight > node.clientHeight + 1) {
+        container = node
+        break
+      }
+      node = node.parentElement
+    }
+
     const rowH = el.getBoundingClientRect().height || 40
     const gapAbove = 2 * rowH // two rows above → selected is 3rd
-    const canScrollContainer =
-      container && container.scrollHeight > container.clientHeight + 1
 
-    if (canScrollContainer) {
-      const header = container.querySelector('[data-accounts-client-list-header]')
+    if (container) {
+      const header =
+        listRoot?.querySelector('[data-accounts-client-list-header]') ||
+        container.querySelector('[data-accounts-client-list-header]')
       const headerH = header?.offsetHeight || 0
       const cRect = container.getBoundingClientRect()
       const eRect = el.getBoundingClientRect()
@@ -267,10 +279,19 @@ export default function ClientsPage() {
       highlightRow(selectedId)
     }
 
-    const timer = window.setTimeout(() => {
+    let cancelled = false
+    const run = () => {
+      if (cancelled) return
       scrollAccountsClientToThird(selectedId)
-    }, 50)
-    return () => window.clearTimeout(timer)
+    }
+    // Wait for grid/list layout (max-height) before measuring scroll positions.
+    const timer = window.setTimeout(() => {
+      requestAnimationFrame(() => requestAnimationFrame(run))
+    }, 80)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [view, loading, selectedId, filteredClients, highlightRow])
 
   useEffect(() => {
@@ -1364,7 +1385,7 @@ export default function ClientsPage() {
           {txRangeBackwards ? (
             <p className="text-sm text-amber-200">The “From” date is after the “To” date.</p>
           ) : null}
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:max-h-[70vh] lg:grid-cols-[minmax(0,17rem)_1fr] lg:items-stretch">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:h-[70vh] lg:grid-cols-[minmax(0,17rem)_1fr] lg:items-stretch">
           {/* Mobile: detail panel inline below the selected client */}
           <div className="lg:hidden" data-accounts-client-list>
             <div
@@ -1390,7 +1411,7 @@ export default function ClientsPage() {
           {/* Desktop: client list + detail pane */}
           <aside
             data-accounts-client-list
-            className="admin-scroll hidden min-h-0 overflow-y-auto border-b border-white/10 lg:block lg:border-b-0"
+            className="admin-scroll hidden min-h-0 overflow-y-auto border-b border-white/10 lg:block lg:h-full lg:border-b-0"
           >
             <div
               data-accounts-client-list-header
@@ -1407,7 +1428,7 @@ export default function ClientsPage() {
             )}
           </aside>
 
-          <section className="admin-scroll hidden min-h-0 min-w-0 overflow-y-auto lg:flex lg:flex-col">
+          <section className="admin-scroll hidden min-h-0 min-w-0 overflow-y-auto lg:flex lg:h-full lg:flex-col">
             {renderAccountsDetailPanel({ className: 'flex-1' })}
           </section>
         </div>
