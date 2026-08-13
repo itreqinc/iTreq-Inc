@@ -4,8 +4,10 @@ export const CLIENTS_RETURN_FROM = 'clients'
 const RETURN_CLIENT_KEY = 'itreq_return_to_client'
 
 export function clientsAccountsUrl(clientId) {
-  if (!clientId) return '/admin/clients'
-  return `/admin/clients?account=${encodeURIComponent(clientId)}`
+  const params = new URLSearchParams()
+  params.set('view', 'accounts')
+  if (clientId) params.set('account', String(clientId))
+  return `/admin/clients?${params}`
 }
 
 export function stashClientsReturn(clientId) {

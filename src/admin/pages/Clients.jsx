@@ -106,7 +106,12 @@ export default function ClientsPage() {
   const admin = isAdmin(user?.role)
   const staffLike = isStaffLike(user?.role)
   const { showError, showSuccess, showWarning, confirm } = useOpsAlert()
-  const [view, setView] = useState('directory')
+
+  const initialAccountId = String(params.get('account') || '').trim() || null
+  const initialAccounts =
+    params.get('view') === 'accounts' || Boolean(initialAccountId)
+
+  const [view, setView] = useState(initialAccounts ? 'accounts' : 'directory')
   // Directory filter: default to active clients only.
   const [showAllClients, setShowAllClients] = useState(false)
   const [clients, setClients] = useState([])
@@ -120,7 +125,7 @@ export default function ClientsPage() {
   const [editEmailBaseline, setEditEmailBaseline] = useState({ profile: '', login: null })
   const [saving, setSaving] = useState(false)
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
-  const pendingAccountFocusRef = useRef(null)
+  const pendingAccountFocusRef = useRef(initialAccountId)
 
   /** Keep the selected client as the 3rd visible row in the accounts list. */
   function scrollAccountsClientToThird(clientId) {
@@ -176,7 +181,7 @@ export default function ClientsPage() {
   const [stmtTo, setStmtTo] = useState(todayIso)
   const [deletingId, setDeletingId] = useState(null)
 
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedId, setSelectedId] = useState(initialAccountId)
   const [selectedAccountCredit, setSelectedAccountCredit] = useState(0)
   const [statement, setStatement] = useState(null)
   const [stmtLoading, setStmtLoading] = useState(false)
@@ -254,19 +259,39 @@ export default function ClientsPage() {
     load()
   }, [load])
 
+  // Keep Accounts (and selected client) in the URL so refresh stays here.
+  useEffect(() => {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (view === 'accounts') {
+          next.set('view', 'accounts')
+          if (selectedId) next.set('account', selectedId)
+          else next.delete('account')
+        } else {
+          next.delete('view')
+          next.delete('account')
+        }
+        if (next.toString() === prev.toString()) return prev
+        return next
+      },
+      { replace: true },
+    )
+  }, [view, selectedId, setParams])
+
+  // Inbound deep links (e.g. return from Payments) — URL wins when account changes.
   useEffect(() => {
     const accountId = String(params.get('account') || '').trim()
-    if (!accountId) return
+    const wantsAccounts = params.get('view') === 'accounts' || Boolean(accountId)
+    if (!wantsAccounts) return
     setView('accounts')
+    if (!accountId || accountId === selectedId) return
     setSelectedId(accountId)
     setShowForm(false)
     setViewId(null)
     setSearchQuery('')
     pendingAccountFocusRef.current = accountId
-    const next = new URLSearchParams(params)
-    next.delete('account')
-    setParams(next, { replace: true })
-  }, [params, setParams])
+  }, [params, selectedId])
 
   // Keep the selected accounts client visible as the 3rd row in the list.
   useEffect(() => {
@@ -496,6 +521,7 @@ export default function ClientsPage() {
     setShowForm(false)
     setViewId(null)
     setView('accounts')
+    pendingAccountFocusRef.current = client.id
   }
 
   function clientIconActions(client) {
@@ -1085,6 +1111,8 @@ export default function ClientsPage() {
               onClick={() => {
                 setView('directory')
                 setShowForm(false)
+                setSelectedId(null)
+                setStatement(null)
               }}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 view === 'directory'
