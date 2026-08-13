@@ -3,9 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import {
-  clearClientsReturnParams,
+  clearClientsReturn,
   clientsAccountsUrl,
-  readClientsReturnFromParams,
+  peekClientsReturn,
+  takeClientsReturn,
 } from '../../lib/clientsReturnNav'
 import {
   autoAllocatePayment,
@@ -77,6 +78,8 @@ export default function PaymentsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const clientsReturnClientIdRef = useRef(null)
+  const deepLinkHandledRef = useRef(false)
+  const saveInFlightRef = useRef(false)
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [rows, setRows] = useState([])
@@ -256,50 +259,70 @@ export default function PaymentsPage() {
   )
 
   useEffect(() => {
-    const returnClientId = readClientsReturnFromParams(params)
-    if (returnClientId) clientsReturnClientIdRef.current = returnClientId
+    const stashed = peekClientsReturn()
+    if (stashed) clientsReturnClientIdRef.current = stashed
+
+    if (deepLinkHandledRef.current) return
 
     const openId = params.get('open')
     if (openId) {
+      deepLinkHandledRef.current = true
       startEdit(openId).then(() => {
         const next = new URLSearchParams(params)
         next.delete('open')
-        clearClientsReturnParams(next)
+        next.delete('from')
+        next.delete('client')
         setParams(next, { replace: true })
       })
       return
     }
     const notificationId = params.get('notification')
     if (notificationId) {
+      deepLinkHandledRef.current = true
       startFromNotification(notificationId).then(() => {
         const next = new URLSearchParams(params)
         next.delete('notification')
-        clearClientsReturnParams(next)
+        next.delete('from')
+        next.delete('client')
         setParams(next, { replace: true })
       })
       return
     }
     const clientId = params.get('client')
     if (clientId) {
+      deepLinkHandledRef.current = true
+      if (!clientsReturnClientIdRef.current) {
+        clientsReturnClientIdRef.current = clientId
+      }
       setEditingId(null)
+      setBaseline('')
+      setFromNotification(null)
+      setApplyAccountCredit(false)
       setForm({ ...emptyPaymentForm(), client_id: clientId })
       setShowForm(true)
       scrollToForm()
       loadOpenInvoices(clientId)
       const next = new URLSearchParams(params)
-      clearClientsReturnParams(next)
+      next.delete('client')
+      next.delete('from')
       setParams(next, { replace: true })
     }
   }, [params, setParams, startEdit, startFromNotification, loadOpenInvoices, scrollToForm])
 
   function closeForm(savedId) {
+    // Never navigate away while a save is in flight — that aborts the request
+    // and surfaces as "Could not reach the server" / Failed to fetch.
+    if (saveInFlightRef.current) return
+
     const id = typeof savedId === 'string' ? savedId : null
-    const returnClientId = clientsReturnClientIdRef.current
+    const returnClientId = clientsReturnClientIdRef.current || peekClientsReturn()
     if (returnClientId) {
       clientsReturnClientIdRef.current = null
+      takeClientsReturn()
       navigate(clientsAccountsUrl(returnClientId))
       return
     }
+    clearClientsReturn()
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
@@ -492,6 +515,8 @@ export default function PaymentsPage() {
     })
     if (!ok) return
 
+    // Lock before any await so Close / click-through cannot navigate away and abort fetch.
+    saveInFlightRef.current = true
     setSaving(true)
     const payload = {
       client_id: form.client_id,
@@ -507,6 +532,7 @@ export default function PaymentsPage() {
       ? await opsApi.updatePayment({ id: editingId, ...payload })
       : await opsApi.recordPayment(payload)
     if (result.error) {
+      saveInFlightRef.current = false
       setSaving(false)
       showError(result.error.message)
       return
@@ -520,13 +546,14 @@ export default function PaymentsPage() {
         const take = Math.min(remainingCredit, target.remainingDue)
         const applyRes = await opsApi.applyClientCreditToInvoice(target.id, take)
         if (applyRes.error) {
+          saveInFlightRef.current = false
           setSaving(false)
           showError(
             `Payment saved, but credit could not be applied: ${applyRes.error.message}`,
           )
           const paymentId = result.data?.id || editingId
           closeForm(paymentId)
-          if (paymentId) {
+          if (paymentId && !clientsReturnClientIdRef.current && !peekClientsReturn()) {
             const refreshed = await opsApi.getPayment(paymentId)
             if (!refreshed.error && refreshed.data) {
               setRows((prev) => upsertById(prev, refreshed.data))
@@ -560,7 +587,10 @@ export default function PaymentsPage() {
           : `Payment recorded.${creditNote}`,
     )
     const paymentId = result.data?.id || editingId
-    const returningToClients = Boolean(clientsReturnClientIdRef.current)
+    const returningToClients = Boolean(
+      clientsReturnClientIdRef.current || peekClientsReturn(),
+    )
+    saveInFlightRef.current = false
     closeForm(paymentId)
     if (paymentId && !returningToClients) {
       const refreshed = await opsApi.getPayment(paymentId)
@@ -619,7 +649,12 @@ export default function PaymentsPage() {
             <h2 className="text-sm font-semibold text-white">
               {editingId ? 'Edit payment' : 'New payment'}
             </h2>
-            <button type="button" onClick={() => closeForm()} className={adminBtnSecondary}>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => closeForm()}
+              className={adminBtnSecondary}
+            >
               Close
             </button>
           </div>

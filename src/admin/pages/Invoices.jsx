@@ -25,9 +25,10 @@ import {
 import { withUnreadRows } from '../../lib/invoiceDisputes'
 import { opsApi } from '../../lib/opsApi'
 import {
-  clearClientsReturnParams,
+  clearClientsReturn,
   clientsAccountsUrl,
-  readClientsReturnFromParams,
+  peekClientsReturn,
+  takeClientsReturn,
 } from '../../lib/clientsReturnNav'
 import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
@@ -139,6 +140,8 @@ export default function InvoicesPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const clientsReturnClientIdRef = useRef(null)
+  const deepLinkHandledRef = useRef(false)
+  const saveInFlightRef = useRef(false)
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm, runWithProgress } = useOpsAlert()
   const [rows, setRows] = useState([])
@@ -250,21 +253,29 @@ export default function InvoicesPage() {
   )
 
   useEffect(() => {
-    const returnClientId = readClientsReturnFromParams(params)
-    if (returnClientId) clientsReturnClientIdRef.current = returnClientId
+    const stashed = peekClientsReturn()
+    if (stashed) clientsReturnClientIdRef.current = stashed
+
+    if (deepLinkHandledRef.current) return
 
     const openId = params.get('open')
     if (openId) {
+      deepLinkHandledRef.current = true
       openRow(openId).then(() => {
         const next = new URLSearchParams(params)
         next.delete('open')
-        clearClientsReturnParams(next)
+        next.delete('from')
+        next.delete('client')
         setParams(next, { replace: true })
       })
       return
     }
     const clientId = params.get('client')
     if (clientId) {
+      deepLinkHandledRef.current = true
+      if (!clientsReturnClientIdRef.current) {
+        clientsReturnClientIdRef.current = clientId
+      }
       const nextForm = newInvoiceForm(clientId)
       setEditingId(null)
       setAccountCredit(0)
@@ -272,7 +283,8 @@ export default function InvoicesPage() {
       setBaseline(snapshotInvoiceForm(nextForm))
       setShowForm(true)
       const next = new URLSearchParams(params)
-      clearClientsReturnParams(next)
+      next.delete('client')
+      next.delete('from')
       setParams(next, { replace: true })
     }
   }, [params, setParams, openRow])
@@ -288,13 +300,17 @@ export default function InvoicesPage() {
   }
 
   function closeForm(savedId) {
+    if (saveInFlightRef.current) return
+
     const id = typeof savedId === 'string' ? savedId : null
-    const returnClientId = clientsReturnClientIdRef.current
+    const returnClientId = clientsReturnClientIdRef.current || peekClientsReturn()
     if (returnClientId) {
       clientsReturnClientIdRef.current = null
+      takeClientsReturn()
       navigate(clientsAccountsUrl(returnClientId))
       return
     }
+    clearClientsReturn()
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
@@ -385,11 +401,13 @@ export default function InvoicesPage() {
     })
     if (!ok) return
 
+    saveInFlightRef.current = true
     setSaving(true)
     const { data: saved, error: err } = await opsApi.saveInvoice({
       id: editingId,
       ...form,
     })
+    saveInFlightRef.current = false
     setSaving(false)
     if (err) {
       showError(err.message)
@@ -941,6 +959,7 @@ export default function InvoicesPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                disabled={saving}
                 onClick={() => closeForm()}
                 className={adminBtnSecondary}
               >
