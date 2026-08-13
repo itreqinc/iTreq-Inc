@@ -120,6 +120,7 @@ export default function ClientsPage() {
   const [editEmailBaseline, setEditEmailBaseline] = useState({ profile: '', login: null })
   const [saving, setSaving] = useState(false)
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
+  const pendingAccountFocusRef = useRef(null)
   const [printingStmt, setPrintingStmt] = useState(false)
   const [stmtModalClient, setStmtModalClient] = useState(null)
   const [stmtFrom, setStmtFrom] = useState(monthStartIso)
@@ -211,11 +212,36 @@ export default function ClientsPage() {
     setSelectedId(accountId)
     setShowForm(false)
     setViewId(null)
-    highlightRow(accountId)
+    setSearchQuery('')
+    pendingAccountFocusRef.current = accountId
     const next = new URLSearchParams(params)
     next.delete('account')
     setParams(next, { replace: true })
-  }, [params, setParams, highlightRow])
+  }, [params, setParams])
+
+  // After the accounts list has rows, scroll/focus the returned client.
+  // (Must wait — highlight on ?account= alone runs before the list exists, and
+  // querySelector can hit the hidden mobile list duplicate on desktop.)
+  useEffect(() => {
+    if (view !== 'accounts' || loading) return
+    const focusId = pendingAccountFocusRef.current || null
+    if (!focusId) return
+    if (!filteredClients.some((c) => c.id === focusId)) return
+
+    pendingAccountFocusRef.current = null
+    setSelectedId(focusId)
+    const timer = window.setTimeout(() => {
+      highlightRow(focusId)
+      const nodes = document.querySelectorAll(`[data-accounts-client="${focusId}"]`)
+      for (const el of nodes) {
+        if (el.getClientRects().length > 0) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          break
+        }
+      }
+    }, 50)
+    return () => window.clearTimeout(timer)
+  }, [view, loading, filteredClients, highlightRow])
 
   useEffect(() => {
     if (view !== 'accounts' || !selectedId) {
@@ -292,6 +318,13 @@ export default function ClientsPage() {
   useEffect(() => {
     if (view !== 'accounts') return
     if (loading) return
+    const pendingId = pendingAccountFocusRef.current
+    if (pendingId) {
+      if (filteredClients.some((c) => c.id === pendingId)) {
+        setSelectedId(pendingId)
+      }
+      return
+    }
     if (!filteredClients.length) {
       if (selectedId) setSelectedId(null)
       return
@@ -689,14 +722,16 @@ export default function ClientsPage() {
 
   function renderAccountsClientButton(c) {
     const active = c.id === selectedId
+    const focused = highlightId === c.id
     return (
       <button
         type="button"
         data-row-id={c.id}
+        data-accounts-client={c.id}
         onClick={() => setSelectedId(c.id)}
         className={`flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm ${
           active ? 'accounts-tab-active text-white' : 'text-ink-200 hover:bg-white/5'
-        }`}
+        }${focused ? ' ring-2 ring-amber-400/60' : ''}`}
       >
         <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] font-medium leading-snug">
           {c.name}
