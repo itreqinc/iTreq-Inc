@@ -124,6 +124,16 @@
     background-color: rgb(109 192 63 / 0.5);
   }
 
+  /* Accounts client list: transparent track so selected tab joins the detail pane */
+  .accounts-client-scroll {
+    scrollbar-color: rgb(61 77 99 / 0.7) transparent;
+  }
+
+  .accounts-client-scroll::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 0.25rem 0;
+  }
+
   /* Accounts view: selected client row merges into detail pane */
   .accounts-surface {
     background-color: color-mix(in srgb, var(--color-brand-500) 18%, var(--color-ink-900));

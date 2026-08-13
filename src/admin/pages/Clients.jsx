@@ -1411,7 +1411,7 @@ export default function ClientsPage() {
           {/* Desktop: client list + detail pane */}
           <aside
             data-accounts-client-list
-            className="admin-scroll hidden min-h-0 overflow-y-auto border-b border-white/10 lg:block lg:h-full lg:border-b-0"
+            className="admin-scroll accounts-client-scroll hidden min-h-0 overflow-y-auto border-b border-white/10 lg:block lg:h-full lg:border-b-0"
           >
             <div
               data-accounts-client-list-header
