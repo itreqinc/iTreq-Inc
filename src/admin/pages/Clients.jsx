@@ -121,6 +121,43 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false)
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const pendingAccountFocusRef = useRef(null)
+
+  /** Keep the selected client as the 3rd visible row in the accounts list. */
+  function scrollAccountsClientToThird(clientId) {
+    if (!clientId) return
+    const nodes = document.querySelectorAll(`[data-accounts-client="${clientId}"]`)
+    let el = null
+    for (const node of nodes) {
+      if (node.getClientRects().length > 0) {
+        el = node
+        break
+      }
+    }
+    if (!el) return
+
+    const container = el.closest('[data-accounts-client-list]')
+    const rowH = el.getBoundingClientRect().height || 40
+    const gapAbove = 2 * rowH // two rows above → selected is 3rd
+    const canScrollContainer =
+      container && container.scrollHeight > container.clientHeight + 1
+
+    if (canScrollContainer) {
+      const header = container.querySelector('[data-accounts-client-list-header]')
+      const headerH = header?.offsetHeight || 0
+      const cRect = container.getBoundingClientRect()
+      const eRect = el.getBoundingClientRect()
+      const elTopInContent = eRect.top - cRect.top + container.scrollTop
+      const target = Math.max(0, elTopInContent - headerH - gapAbove)
+      container.scrollTo({ top: target, behavior: 'smooth' })
+      return
+    }
+
+    // Mobile / short lists: park selection ~3rd from the viewport top.
+    const eRect = el.getBoundingClientRect()
+    const target = Math.max(0, window.scrollY + eRect.top - gapAbove - 8)
+    window.scrollTo({ top: target, behavior: 'smooth' })
+  }
+
   const [printingStmt, setPrintingStmt] = useState(false)
   const [stmtModalClient, setStmtModalClient] = useState(null)
   const [stmtFrom, setStmtFrom] = useState(monthStartIso)
@@ -219,29 +256,22 @@ export default function ClientsPage() {
     setParams(next, { replace: true })
   }, [params, setParams])
 
-  // After the accounts list has rows, scroll/focus the returned client.
-  // (Must wait — highlight on ?account= alone runs before the list exists, and
-  // querySelector can hit the hidden mobile list duplicate on desktop.)
+  // Keep the selected accounts client visible as the 3rd row in the list.
   useEffect(() => {
-    if (view !== 'accounts' || loading) return
-    const focusId = pendingAccountFocusRef.current || null
-    if (!focusId) return
-    if (!filteredClients.some((c) => c.id === focusId)) return
+    if (view !== 'accounts' || loading || !selectedId) return
+    if (!filteredClients.some((c) => c.id === selectedId)) return
 
-    pendingAccountFocusRef.current = null
-    setSelectedId(focusId)
+    const isPendingReturn = pendingAccountFocusRef.current === selectedId
+    if (isPendingReturn) {
+      pendingAccountFocusRef.current = null
+      highlightRow(selectedId)
+    }
+
     const timer = window.setTimeout(() => {
-      highlightRow(focusId)
-      const nodes = document.querySelectorAll(`[data-accounts-client="${focusId}"]`)
-      for (const el of nodes) {
-        if (el.getClientRects().length > 0) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          break
-        }
-      }
+      scrollAccountsClientToThird(selectedId)
     }, 50)
     return () => window.clearTimeout(timer)
-  }, [view, loading, filteredClients, highlightRow])
+  }, [view, loading, selectedId, filteredClients, highlightRow])
 
   useEffect(() => {
     if (view !== 'accounts' || !selectedId) {
@@ -1336,8 +1366,11 @@ export default function ClientsPage() {
           ) : null}
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:grid-cols-[minmax(0,17rem)_1fr]">
           {/* Mobile: detail panel inline below the selected client */}
-          <div className="lg:hidden">
-            <div className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
+          <div className="lg:hidden" data-accounts-client-list>
+            <div
+              data-accounts-client-list-header
+              className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400"
+            >
               Clients
             </div>
             {renderAccountsClientListEmpty() ?? (
@@ -1355,8 +1388,14 @@ export default function ClientsPage() {
           </div>
 
           {/* Desktop: client list + detail pane */}
-          <aside className="admin-scroll hidden max-h-[70vh] overflow-y-auto border-b border-white/10 lg:block lg:border-b-0">
-            <div className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
+          <aside
+            data-accounts-client-list
+            className="admin-scroll hidden max-h-[70vh] overflow-y-auto border-b border-white/10 lg:block lg:border-b-0"
+          >
+            <div
+              data-accounts-client-list-header
+              className="sticky top-0 z-10 border-b border-white/10 bg-ink-900 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400"
+            >
               Clients
             </div>
             {renderAccountsClientListEmpty() ?? (
