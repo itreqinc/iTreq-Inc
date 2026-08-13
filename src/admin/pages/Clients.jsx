@@ -16,8 +16,13 @@ import { clientToForm,
 } from '../../lib/clientRegistration'
 import { validateClientForm, normEmail } from '../../lib/clientValidation'
 import {
+  clearAccountsSelected,
   invoiceUrlFromClients,
   paymentUrlFromClients,
+  peekClientsReturn,
+  readAccountsSelected,
+  rememberAccountsSelected,
+  takeClientsReturn,
 } from '../../lib/clientsReturnNav'
 import { statementLineLabel, statementLineMethodSuffix } from '../../lib/payments'
 import { quotationDisplayStatus } from '../../lib/portalQuote'
@@ -107,9 +112,10 @@ export default function ClientsPage() {
   const staffLike = isStaffLike(user?.role)
   const { showError, showSuccess, showWarning, confirm } = useOpsAlert()
 
-  const initialAccountId = String(params.get('account') || '').trim() || null
-  const initialAccounts =
-    params.get('view') === 'accounts' || Boolean(initialAccountId)
+  const initialAccounts = params.get('view') === 'accounts'
+  const initialAccountId = initialAccounts
+    ? peekClientsReturn() || readAccountsSelected() || null
+    : null
 
   const [view, setView] = useState(initialAccounts ? 'accounts' : 'directory')
   // Directory filter: default to active clients only.
@@ -259,39 +265,44 @@ export default function ClientsPage() {
     load()
   }, [load])
 
-  // Keep Accounts (and selected client) in the URL so refresh stays here.
+  // Keep Accounts in the URL (no client id — selection lives in session).
   useEffect(() => {
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev)
-        if (view === 'accounts') {
-          next.set('view', 'accounts')
-          if (selectedId) next.set('account', selectedId)
-          else next.delete('account')
-        } else {
-          next.delete('view')
-          next.delete('account')
-        }
+        next.delete('account') // legacy tidy-up
+        if (view === 'accounts') next.set('view', 'accounts')
+        else next.delete('view')
         if (next.toString() === prev.toString()) return prev
         return next
       },
       { replace: true },
     )
-  }, [view, selectedId, setParams])
+  }, [view, setParams])
 
-  // Inbound deep links (e.g. return from Payments) — URL wins when account changes.
+  // Restore focus when returning from Payments / Invoices.
   useEffect(() => {
-    const accountId = String(params.get('account') || '').trim()
-    const wantsAccounts = params.get('view') === 'accounts' || Boolean(accountId)
-    if (!wantsAccounts) return
+    if (params.get('view') !== 'accounts') return
     setView('accounts')
-    if (!accountId || accountId === selectedId) return
-    setSelectedId(accountId)
+    const returnedId = takeClientsReturn()
+    if (!returnedId) return
+    rememberAccountsSelected(returnedId)
+    if (returnedId === selectedId) {
+      pendingAccountFocusRef.current = returnedId
+      return
+    }
+    setSelectedId(returnedId)
     setShowForm(false)
     setViewId(null)
     setSearchQuery('')
-    pendingAccountFocusRef.current = accountId
+    pendingAccountFocusRef.current = returnedId
   }, [params, selectedId])
+
+  // Remember selected client for refresh (not in the URL).
+  useEffect(() => {
+    if (view !== 'accounts') return
+    if (selectedId) rememberAccountsSelected(selectedId)
+  }, [view, selectedId])
 
   // Keep the selected accounts client visible as the 3rd row in the list.
   useEffect(() => {
@@ -1113,6 +1124,7 @@ export default function ClientsPage() {
                 setShowForm(false)
                 setSelectedId(null)
                 setStatement(null)
+                clearAccountsSelected()
               }}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 view === 'directory'

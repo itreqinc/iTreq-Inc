@@ -2,12 +2,43 @@
 export const CLIENTS_RETURN_FROM = 'clients'
 
 const RETURN_CLIENT_KEY = 'itreq_return_to_client'
+const ACCOUNTS_SELECTED_KEY = 'itreq_accounts_selected_client'
 
+/** Clean Accounts URL — no client id in the address bar. */
 export function clientsAccountsUrl(clientId) {
-  const params = new URLSearchParams()
-  params.set('view', 'accounts')
-  if (clientId) params.set('account', String(clientId))
-  return `/admin/clients?${params}`
+  if (clientId) {
+    stashClientsReturn(clientId)
+    rememberAccountsSelected(clientId)
+  }
+  return '/admin/clients?view=accounts'
+}
+
+export function rememberAccountsSelected(clientId) {
+  const id = String(clientId || '').trim()
+  if (!id || typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(ACCOUNTS_SELECTED_KEY, id)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readAccountsSelected() {
+  if (typeof sessionStorage === 'undefined') return null
+  try {
+    return String(sessionStorage.getItem(ACCOUNTS_SELECTED_KEY) || '').trim() || null
+  } catch {
+    return null
+  }
+}
+
+export function clearAccountsSelected() {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.removeItem(ACCOUNTS_SELECTED_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function stashClientsReturn(clientId) {
