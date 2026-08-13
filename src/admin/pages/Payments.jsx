@@ -293,6 +293,7 @@ export default function PaymentsPage() {
   }, [params, setParams, startEdit, startFromNotification, loadOpenInvoices, scrollToForm])
 
   function closeForm(savedId) {
+    const id = typeof savedId === 'string' ? savedId : null
     const returnClientId = clientsReturnClientIdRef.current
     if (returnClientId) {
       clientsReturnClientIdRef.current = null
@@ -307,7 +308,7 @@ export default function PaymentsPage() {
     setAccountCredit(0)
     setApplyAccountCredit(false)
     setForm(emptyPaymentForm())
-    if (savedId) highlightRow(savedId)
+    if (id) highlightRow(id)
     setFromNotification(null)
   }
 
@@ -559,8 +560,9 @@ export default function PaymentsPage() {
           : `Payment recorded.${creditNote}`,
     )
     const paymentId = result.data?.id || editingId
+    const returningToClients = Boolean(clientsReturnClientIdRef.current)
     closeForm(paymentId)
-    if (paymentId) {
+    if (paymentId && !returningToClients) {
       const refreshed = await opsApi.getPayment(paymentId)
       if (!refreshed.error && refreshed.data) {
         setRows((prev) => upsertById(prev, refreshed.data))
@@ -617,7 +619,7 @@ export default function PaymentsPage() {
             <h2 className="text-sm font-semibold text-white">
               {editingId ? 'Edit payment' : 'New payment'}
             </h2>
-            <button type="button" onClick={closeForm} className={adminBtnSecondary}>
+            <button type="button" onClick={() => closeForm()} className={adminBtnSecondary}>
               Close
             </button>
           </div>

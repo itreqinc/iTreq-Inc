@@ -288,6 +288,7 @@ export default function InvoicesPage() {
   }
 
   function closeForm(savedId) {
+    const id = typeof savedId === 'string' ? savedId : null
     const returnClientId = clientsReturnClientIdRef.current
     if (returnClientId) {
       clientsReturnClientIdRef.current = null
@@ -298,7 +299,7 @@ export default function InvoicesPage() {
     setEditingId(null)
     setBaseline('')
     setAccountCredit(0)
-    if (savedId) highlightRow(savedId)
+    if (id) highlightRow(id)
   }
 
   const balanceDue = useMemo(() => invoiceBalanceDue(form), [form])
@@ -940,7 +941,7 @@ export default function InvoicesPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={closeForm}
+                onClick={() => closeForm()}
                 className={adminBtnSecondary}
               >
                 Close
