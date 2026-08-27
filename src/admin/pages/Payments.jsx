@@ -169,9 +169,13 @@ export default function PaymentsPage() {
         clientOpeningBalanceAmount(clientRes.data),
         appliedRes.error ? [] : appliedRes.data,
       )
-      const currentOpening = Math.max(0, remaining)
-      const openingDue =
-        Math.round((currentOpening + editingOpeningApplied) * 100) / 100
+      // Remaining already includes this payment's B/F share. Add it back so the
+      // cap is remaining excluding this row. Keep at least the existing share so
+      // editing still works if original was later reduced below that share.
+      const remainingExcludingThis = appliedRes.error
+        ? Math.max(0, clientOpeningBalanceAmount(clientRes.data))
+        : Math.round((remaining + editingOpeningApplied) * 100) / 100
+      const openingDue = Math.max(0, remainingExcludingThis, editingOpeningApplied)
       setOpeningBalanceDue(openingDue)
 
       const selectedIds = (seedSelectedIds || []).filter(
