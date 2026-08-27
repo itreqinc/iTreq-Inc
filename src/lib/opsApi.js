@@ -12,8 +12,8 @@ import {
   invoiceEffectiveDueDate,
   localTodayIso,
   paymentStatementCredit,
+  paymentTimelineCredit,
   PAYMENT_METHODS,
-  statementOpeningBalance,
   openingBalanceCarryIn,
   summarizeReceivables,
 } from './payments'
@@ -2810,11 +2810,9 @@ const directOpsApi = {
       return q.issue_date || String(q.created_at || '').slice(0, 10) || ''
     }
 
-    const { amount: openingAmt, date: openingDate } = statementOpeningBalance(
-      clientRes.data,
-      allPay || [],
-    )
     const carryIn = openingBalanceCarryIn(clientRes.data, allPay || [])
+    const openingAmt = carryIn.originalAmount
+    const openingDate = carryIn.asOfDate
 
     let opening = 0
     for (const inv of allInv || []) {
@@ -2829,7 +2827,7 @@ const directOpsApi = {
       if (pay.is_adjustment) continue
       const d = pay.payment_date || ''
       if (d && d < fromDate) {
-        opening -= paymentStatementCredit(pay)
+        opening -= paymentTimelineCredit(pay)
       }
     }
 
@@ -2839,25 +2837,7 @@ const directOpsApi = {
     opening = Math.round(opening * 100) / 100
 
     const lines = []
-    if (
-      carryIn.hasHistory &&
-      carryIn.isSettled &&
-      carryIn.asOfDate &&
-      inRange(carryIn.asOfDate)
-    ) {
-      lines.push({
-        id: null,
-        sortDate: carryIn.asOfDate,
-        type: 'opening_balance',
-        label: 'Opening balance (settled)',
-        status: 'settled',
-        inactive: true,
-        alwaysShow: true,
-        affectsBalance: false,
-        debit: carryIn.originalAmount > 0 ? carryIn.originalAmount : 0,
-        credit: carryIn.originalAmount < 0 ? Math.abs(carryIn.originalAmount) : 0,
-      })
-    } else if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
+    if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
       lines.push({
         id: null,
         sortDate: openingDate,
@@ -2889,18 +2869,14 @@ const directOpsApi = {
     for (const pay of allPay || []) {
       if (pay.is_adjustment) continue
       if (!inRange(pay.payment_date)) continue
-      const credit = paymentStatementCredit(pay)
-      const openingApplied = Math.max(0, -(Number(pay.opening_balance_delta) || 0))
+      const credit = paymentTimelineCredit(pay)
       lines.push({
         id: pay.id,
         sortDate: pay.payment_date,
         type: 'payment',
-        label:
-          openingApplied > 0 && credit <= 0.001
-            ? 'Payment (brought forward)'
-            : pay.reference || 'Payment',
+        label: pay.reference || 'Payment',
         method: pay.method,
-        inactive: credit <= 0.001 && openingApplied > 0,
+        inactive: false,
         affectsBalance: credit > 0.001,
         debit: 0,
         credit,

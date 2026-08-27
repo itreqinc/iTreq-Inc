@@ -62,7 +62,7 @@ function invoiceBalanceDue(invoice: Record<string, unknown>) {
   return Math.round((total - paid) * 100) / 100
 }
 
-/** AR statement credit — exclude money applied to positive opening B/F. */
+/** Client AR credit — exclude money applied to positive opening B/F. */
 function paymentStatementCredit(payment: Record<string, unknown>) {
   const amount = Number(payment?.amount) || 0
   const delta = Number(payment?.opening_balance_delta) || 0
@@ -70,26 +70,10 @@ function paymentStatementCredit(payment: Record<string, unknown>) {
   return Math.round((amount - openingApplied) * 100) / 100
 }
 
-/**
- * Economic B/F for Accounts: remaining opening minus opening-credit adjustments
- * (apply-to-invoice stays off the timeline).
- */
-function statementOpeningBalance(
-  client: Record<string, unknown> | null | undefined,
-  payments: Record<string, unknown>[] = [],
-) {
-  const remaining = clientOpeningBalanceAmount(client)
-  let applied = 0
-  let fallbackDate = ''
-  for (const pay of payments || []) {
-    if (!pay?.is_adjustment) continue
-    applied += Number(pay.amount) || 0
-    const src = String(pay.source_date || pay.payment_date || '').slice(0, 10)
-    if (src && (!fallbackDate || src < fallbackDate)) fallbackDate = src
-  }
-  const amount = Math.round((remaining - applied) * 100) / 100
-  const date = clientOpeningBalanceDate(client) || fallbackDate
-  return { amount, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '' }
+/** Statement-line credit — full payment, including money applied to B/F. */
+function paymentTimelineCredit(payment: Record<string, unknown>) {
+  if (payment?.is_adjustment) return 0
+  return Math.round((Number(payment?.amount) || 0) * 100) / 100
 }
 
 function openingBalanceAppliedFromPayments(payments: Record<string, unknown>[] = []) {
@@ -2934,14 +2918,12 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
   const quoteSortDate = (q: Record<string, unknown>) =>
     String(q.issue_date || String(q.created_at || '').slice(0, 10) || '')
 
-  const { amount: openingAmt, date: openingDate } = statementOpeningBalance(
-    client as Record<string, unknown>,
-    (allPay || []) as Record<string, unknown>[],
-  )
   const carryIn = openingBalanceCarryIn(
     client as Record<string, unknown>,
     (allPay || []) as Record<string, unknown>[],
   )
+  const openingAmt = carryIn.originalAmount
+  const openingDate = carryIn.asOfDate
 
   let opening = 0
   for (const inv of allInv || []) {
@@ -2952,7 +2934,7 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
   for (const pay of allPay || []) {
     if (pay.is_adjustment) continue
     const d = pay.payment_date ? String(pay.payment_date) : ''
-    if (d && d < fromDate) opening -= paymentStatementCredit(pay as Record<string, unknown>)
+    if (d && d < fromDate) opening -= paymentTimelineCredit(pay as Record<string, unknown>)
   }
 
   if (openingAmt !== 0 && openingDate && openingDate < fromDate) {
@@ -2961,25 +2943,7 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
   opening = Math.round(opening * 100) / 100
 
   const lines: Record<string, unknown>[] = []
-  if (
-    carryIn.hasHistory &&
-    carryIn.isSettled &&
-    carryIn.asOfDate &&
-    inRange(carryIn.asOfDate)
-  ) {
-    lines.push({
-      id: null,
-      sortDate: carryIn.asOfDate,
-      type: 'opening_balance',
-      label: 'Opening balance (settled)',
-      status: 'settled',
-      inactive: true,
-      alwaysShow: true,
-      affectsBalance: false,
-      debit: carryIn.originalAmount > 0 ? carryIn.originalAmount : 0,
-      credit: carryIn.originalAmount < 0 ? Math.abs(carryIn.originalAmount) : 0,
-    })
-  } else if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
+  if (openingAmt !== 0 && openingDate && inRange(openingDate)) {
     lines.push({
       id: null,
       sortDate: openingDate,
@@ -3010,18 +2974,14 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
   for (const pay of allPay || []) {
     if (pay.is_adjustment) continue
     if (!inRange(String(pay.payment_date))) continue
-    const credit = paymentStatementCredit(pay as Record<string, unknown>)
-    const openingApplied = Math.max(0, -(Number(pay.opening_balance_delta) || 0))
+    const credit = paymentTimelineCredit(pay as Record<string, unknown>)
     lines.push({
       id: pay.id,
       sortDate: pay.payment_date,
       type: 'payment',
-      label:
-        openingApplied > 0 && credit <= 0.001
-          ? 'Payment (brought forward)'
-          : pay.reference || 'Payment',
+      label: pay.reference || 'Payment',
       method: pay.method,
-      inactive: credit <= 0.001 && openingApplied > 0,
+      inactive: false,
       affectsBalance: credit > 0.001,
       debit: 0,
       credit,

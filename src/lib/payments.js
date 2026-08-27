@@ -36,10 +36,10 @@ export function statementLineMethodSuffix(line) {
 export const OPENING_BALANCE_ALLOC_ID = '__opening_balance__'
 
 /**
- * Statement / AR credit for a payment. Money applied to a positive opening
- * balance is excluded so reducing clients.opening_balance is not double-counted.
- * Opening-credit adjustments still count here for client AR totals; they are
- * omitted from statement *lines* (see statementOpeningBalance).
+ * Client AR credit. Money applied to a positive opening balance is excluded so
+ * reducing clients.opening_balance is not double-counted in list totals.
+ * Opening-credit adjustments still count here; they are omitted from statement
+ * lines (folded into the original B/F amount).
  */
 export function paymentStatementCredit(payment) {
   const amount = Number(payment?.amount) || 0
@@ -49,26 +49,23 @@ export function paymentStatementCredit(payment) {
 }
 
 /**
- * Brought-forward amount/date for Accounts. clients.opening_balance is remaining
- * credit/debt available to apply; statement shows the economic B/F (remaining
- * minus opening-credit adjustments) so apply-to-invoice stays off the timeline.
+ * Statement-line credit. Full payment amount, including money applied to
+ * brought-forward balance, so the original B/F line stays unchanged and
+ * payments post against it like invoice credits.
+ */
+export function paymentTimelineCredit(payment) {
+  if (payment?.is_adjustment) return 0
+  return Math.round((Number(payment?.amount) || 0) * 100) / 100
+}
+
+/**
+ * Original brought-forward amount/date for Accounts. clients.opening_balance is
+ * remaining; the statement always shows the setup amount while later payments
+ * post as separate credits/debits.
  */
 export function statementOpeningBalance(client, payments = []) {
-  const remaining = Math.round((Number(client?.opening_balance) || 0) * 100) / 100
-  let applied = 0
-  let fallbackDate = ''
-  for (const pay of payments || []) {
-    if (!pay?.is_adjustment) continue
-    applied += Number(pay.amount) || 0
-    const src = String(pay.source_date || pay.payment_date || '').slice(0, 10)
-    if (src && (!fallbackDate || src < fallbackDate)) fallbackDate = src
-  }
-  const amount = Math.round((remaining - applied) * 100) / 100
-  const date =
-    String(client?.opening_balance_date || '')
-      .trim()
-      .slice(0, 10) || fallbackDate
-  return { amount, date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '' }
+  const carry = openingBalanceCarryIn(client, payments)
+  return { amount: carry.originalAmount, date: carry.asOfDate }
 }
 
 /** Totals from payment rows that touched brought-forward balance. */

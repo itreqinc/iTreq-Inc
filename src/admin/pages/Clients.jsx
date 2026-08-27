@@ -899,14 +899,6 @@ export default function ClientsPage() {
                     >
                       {formatPula(statement.carryIn.originalAmount)}
                     </span>
-                    {statement.carryIn.isSettled ? (
-                      <span className="text-ink-500"> · settled</span>
-                    ) : Math.abs(statement.carryIn.remaining) > 0.001 ? (
-                      <span className="text-ink-500">
-                        {' '}
-                        · {formatPula(statement.carryIn.remaining)} remaining
-                      </span>
-                    ) : null}
                   </p>
                 ) : null}
                 <p className="mt-1 text-sm text-ink-300">
@@ -1016,12 +1008,13 @@ export default function ClientsPage() {
                               label
                             )}
                             {methodSuffix}
-                            {line.inactive ? (
+                            {line.inactive &&
+                            (line.type === 'quotation' || line.status) ? (
                               <span className="ml-1 text-xs text-red-300">
                                 (
                                 {line.type === 'quotation'
                                   ? quotationDisplayStatus(line)
-                                  : line.status || 'inactive'}
+                                  : line.status}
                                 )
                               </span>
                             ) : null}
