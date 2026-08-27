@@ -37,7 +37,7 @@ export const OPENING_BALANCE_ALLOC_ID = '__opening_balance__'
 
 /**
  * Client AR credit. Money applied to a positive opening balance is excluded so
- * reducing clients.opening_balance is not double-counted in list totals.
+ * remaining B/F (original minus deltas) is not double-counted in list totals.
  * Opening-credit adjustments still count here; they are omitted from statement
  * lines (folded into the original B/F amount).
  */
@@ -60,12 +60,64 @@ export function paymentTimelineCredit(payment) {
 
 /**
  * Original brought-forward amount/date for Accounts. clients.opening_balance is
- * remaining; the statement always shows the setup amount while later payments
- * post as separate credits/debits.
+ * the setup amount; remaining is original minus payment activity.
  */
 export function statementOpeningBalance(client, payments = []) {
   const carry = openingBalanceCarryIn(client, payments)
   return { amount: carry.originalAmount, date: carry.asOfDate }
+}
+
+/** Remaining B/F = original − paid toward opening + credit applied to invoices. */
+export function openingBalanceRemaining(original, paymentsOrApplied = []) {
+  const orig = Math.round((Number(original) || 0) * 100) / 100
+  let paidTowardOpening = 0
+  let creditAppliedToInvoices = 0
+  if (
+    paymentsOrApplied &&
+    !Array.isArray(paymentsOrApplied) &&
+    (paymentsOrApplied.paidTowardOpening != null ||
+      paymentsOrApplied.creditAppliedToInvoices != null)
+  ) {
+    paidTowardOpening = Number(paymentsOrApplied.paidTowardOpening) || 0
+    creditAppliedToInvoices = Number(paymentsOrApplied.creditAppliedToInvoices) || 0
+  } else {
+    const applied = openingBalanceAppliedFromPayments(paymentsOrApplied)
+    paidTowardOpening = applied.paidTowardOpening
+    creditAppliedToInvoices = applied.creditAppliedToInvoices
+  }
+  return Math.round((orig - paidTowardOpening + creditAppliedToInvoices) * 100) / 100
+}
+
+/**
+ * Remaining B/F on a client row. Prefers opening_balance_remaining when the
+ * list API attached it; otherwise treats opening_balance as original with no
+ * payment activity loaded.
+ */
+export function clientOpeningRemaining(client) {
+  if (
+    client &&
+    client.opening_balance_remaining != null &&
+    client.opening_balance_remaining !== ''
+  ) {
+    return Math.round((Number(client.opening_balance_remaining) || 0) * 100) / 100
+  }
+  return Math.round((Number(client?.opening_balance) || 0) * 100) / 100
+}
+
+/** Remaining per client id from original opening_balance plus payment deltas. */
+export function openingBalanceRemainingMap(clients, payments = []) {
+  const deltas = {}
+  for (const pay of payments || []) {
+    const id = pay?.client_id
+    if (!id) continue
+    deltas[id] = (deltas[id] || 0) + (Number(pay.opening_balance_delta) || 0)
+  }
+  const map = {}
+  for (const c of clients || []) {
+    const original = Math.round((Number(c?.opening_balance) || 0) * 100) / 100
+    map[c.id] = Math.round((original + (deltas[c.id] || 0)) * 100) / 100
+  }
+  return map
 }
 
 /** Totals from payment rows that touched brought-forward balance. */
@@ -84,15 +136,17 @@ export function openingBalanceAppliedFromPayments(payments = []) {
 }
 
 /**
- * Original carry-in and settlement status for Accounts. clients.opening_balance is
- * remaining only; rebuild the setup amount from payment activity when paid down.
+ * Original carry-in and settlement status for Accounts. clients.opening_balance
+ * is the original setup amount; remaining is derived from payment activity.
  */
 export function openingBalanceCarryIn(client, payments = []) {
-  const remaining = Math.round((Number(client?.opening_balance) || 0) * 100) / 100
+  const originalAmount = Math.round((Number(client?.opening_balance) || 0) * 100) / 100
   const { paidTowardOpening, creditAppliedToInvoices } =
     openingBalanceAppliedFromPayments(payments)
-  const originalAmount =
-    Math.round((remaining + paidTowardOpening - creditAppliedToInvoices) * 100) / 100
+  const remaining = openingBalanceRemaining(originalAmount, {
+    paidTowardOpening,
+    creditAppliedToInvoices,
+  })
 
   let asOfDate = String(client?.opening_balance_date || '')
     .trim()

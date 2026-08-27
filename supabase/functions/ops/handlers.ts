@@ -90,15 +90,63 @@ function openingBalanceAppliedFromPayments(payments: Record<string, unknown>[] =
   }
 }
 
+function openingBalanceRemaining(
+  original: number,
+  paymentsOrApplied:
+    | Record<string, unknown>[]
+    | { paidTowardOpening?: number; creditAppliedToInvoices?: number } = [],
+) {
+  const orig = Math.round((Number(original) || 0) * 100) / 100
+  let paidTowardOpening = 0
+  let creditAppliedToInvoices = 0
+  if (
+    paymentsOrApplied &&
+    !Array.isArray(paymentsOrApplied) &&
+    (paymentsOrApplied.paidTowardOpening != null ||
+      paymentsOrApplied.creditAppliedToInvoices != null)
+  ) {
+    paidTowardOpening = Number(paymentsOrApplied.paidTowardOpening) || 0
+    creditAppliedToInvoices = Number(paymentsOrApplied.creditAppliedToInvoices) || 0
+  } else {
+    const applied = openingBalanceAppliedFromPayments(
+      paymentsOrApplied as Record<string, unknown>[],
+    )
+    paidTowardOpening = applied.paidTowardOpening
+    creditAppliedToInvoices = applied.creditAppliedToInvoices
+  }
+  return Math.round((orig - paidTowardOpening + creditAppliedToInvoices) * 100) / 100
+}
+
+function openingBalanceRemainingMap(
+  clients: Record<string, unknown>[],
+  payments: Record<string, unknown>[] = [],
+) {
+  const deltas: Record<string, number> = {}
+  for (const pay of payments || []) {
+    const id = String(pay?.client_id || '')
+    if (!id) continue
+    deltas[id] = (deltas[id] || 0) + (Number(pay.opening_balance_delta) || 0)
+  }
+  const map: Record<string, number> = {}
+  for (const c of clients || []) {
+    const id = String(c.id)
+    const original = clientOpeningBalanceAmount(c)
+    map[id] = Math.round((original + (deltas[id] || 0)) * 100) / 100
+  }
+  return map
+}
+
 function openingBalanceCarryIn(
   client: Record<string, unknown> | null | undefined,
   payments: Record<string, unknown>[] = [],
 ) {
-  const remaining = clientOpeningBalanceAmount(client)
+  const originalAmount = clientOpeningBalanceAmount(client)
   const { paidTowardOpening, creditAppliedToInvoices } =
     openingBalanceAppliedFromPayments(payments)
-  const originalAmount =
-    Math.round((remaining + paidTowardOpening - creditAppliedToInvoices) * 100) / 100
+  const remaining = openingBalanceRemaining(originalAmount, {
+    paidTowardOpening,
+    creditAppliedToInvoices,
+  })
 
   let asOfDate = clientOpeningBalanceDate(client)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) {
@@ -1086,16 +1134,21 @@ handlers.list_clients_with_balances = async ({ sb }, args) => {
     const id = String(pay.client_id)
     credits[id] = (credits[id] || 0) + paymentStatementCredit(pay as Record<string, unknown>)
   }
+  const remainingById = openingBalanceRemainingMap(
+    clients as Record<string, unknown>[],
+    (payRes.data || []) as Record<string, unknown>[],
+  )
 
-  return clients.map((c) => ({
-    ...c,
-    balance: Math.round(
-      ((charges[String(c.id)] || 0) -
-        (credits[String(c.id)] || 0) +
-        clientOpeningBalanceAmount(c as Record<string, unknown>)) *
-        100,
-    ) / 100,
-  }))
+  return clients.map((c) => {
+    const remaining = remainingById[String(c.id)] || 0
+    return {
+      ...c,
+      opening_balance_remaining: remaining,
+      balance: Math.round(
+        ((charges[String(c.id)] || 0) - (credits[String(c.id)] || 0) + remaining) * 100,
+      ) / 100,
+    }
+  })
 }
 
 handlers.get_client = async ({ sb }, args) => {
@@ -2632,13 +2685,26 @@ handlers.list_opening_balance_clients = async ({ user, sb }, args) => {
   let q = sb
     .from('clients')
     .select('id, name, email, phone, cellphone, opening_balance, opening_balance_date, is_active')
-    .neq('opening_balance', 0)
     .order('name', { ascending: true })
   if (activeOnly) q = q.eq('is_active', true)
-  const { data, error } = await q
-  if (error) throw mapDbError(error)
+  const [clientRes, payRes] = await Promise.all([
+    q,
+    sb.from('payments').select('client_id, opening_balance_delta').neq('opening_balance_delta', 0),
+  ])
+  if (clientRes.error) throw mapDbError(clientRes.error)
+  if (payRes.error) throw mapDbError(payRes.error)
+  const remainingById = openingBalanceRemainingMap(
+    (clientRes.data || []) as Record<string, unknown>[],
+    (payRes.data || []) as Record<string, unknown>[],
+  )
   const ownId = portalClientId(user)
-  const clients = (data || []).filter((c) => String(c.id) !== String(ownId || ''))
+  const clients = (clientRes.data || [])
+    .filter((c) => String(c.id) !== String(ownId || ''))
+    .map((c) => ({
+      ...c,
+      opening_balance_remaining: remainingById[String(c.id)] || 0,
+    }))
+    .filter((c) => Math.abs(Number(c.opening_balance_remaining) || 0) > 0.001)
   const withCredit = []
   for (const c of clients) {
     const { data: credit, error: creditErr } = await sb.rpc('get_client_credit_balance', {
@@ -3579,7 +3645,8 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
   const today = localTodayIso()
   const monthStart = `${today.slice(0, 7)}-01`
 
-  const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes, clientsRes] = await Promise.all([
+  const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes, clientsRes, deltaRes] =
+    await Promise.all([
     sb
       .from('payment_notifications')
       .select('*, clients(id, name), invoices(id, number)')
@@ -3604,6 +3671,7 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
       .in('status', [...BALANCE_INVOICE_STATUSES]),
     sb.from('payments').select('amount, payment_date').eq('is_adjustment', false).gte('payment_date', monthStart),
     sb.from('clients').select('id, opening_balance'),
+    sb.from('payments').select('client_id, opening_balance_delta').neq('opening_balance_delta', 0),
   ])
 
   if (notifRes.error) throw mapDbError(notifRes.error)
@@ -3612,14 +3680,19 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
   if (invoiceRes.error) throw mapDbError(invoiceRes.error)
   if (paymentRes.error) throw mapDbError(paymentRes.error)
   if (clientsRes.error) throw mapDbError(clientsRes.error)
+  if (deltaRes.error) throw mapDbError(deltaRes.error)
 
   const invoices = (invoiceRes.data || []) as Record<string, unknown>[]
   const receivables = summarizeReceivables(invoices, today) as Record<string, number | string>
+  const remainingById = openingBalanceRemainingMap(
+    (clientsRes.data || []) as Record<string, unknown>[],
+    (deltaRes.data || []) as Record<string, unknown>[],
+  )
   const broughtForward =
     Math.round(
       (clientsRes.data || []).reduce((sum, c) => {
-        const opening = clientOpeningBalanceAmount(c as Record<string, unknown>)
-        return sum + (opening > 0 ? opening : 0)
+        const remaining = remainingById[String(c.id)] || 0
+        return sum + (remaining > 0 ? remaining : 0)
       }, 0) * 100,
     ) / 100
   receivables.broughtForward = broughtForward

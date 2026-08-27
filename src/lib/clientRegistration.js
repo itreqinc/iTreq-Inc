@@ -106,7 +106,7 @@ export function formToClientRow(form) {
   }
 }
 
-/** Absolute opening amount (client owes when positive). */
+/** Original opening amount (client owes when positive). Remaining is derived. */
 export function clientOpeningBalanceAmount(clientOrForm) {
   return Math.round((Number(clientOrForm?.opening_balance) || 0) * 100) / 100
 }

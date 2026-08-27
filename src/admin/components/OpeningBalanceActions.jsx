@@ -11,6 +11,8 @@ import { opsApi } from '../../lib/opsApi'
 import {
   autoAllocatePayment,
   invoiceBalanceDue,
+  clientOpeningRemaining,
+  openingBalanceRemaining,
 } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
 import {
@@ -47,7 +49,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
 
   const invoiceAllocations = useMemo(() => {
     if (!invoiceTarget) return { allocations: [], total: 0 }
-    const credit = Math.abs(clientOpeningBalanceAmount(invoiceTarget))
+    const credit = Math.abs(clientOpeningRemaining(invoiceTarget))
     const { allocations, remaining } = autoAllocatePayment(
       credit,
       openInvoices,
@@ -71,7 +73,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
   }
 
   async function openApplyPayment(client) {
-    const opening = clientOpeningBalanceAmount(client)
+    const opening = clientOpeningRemaining(client)
     let credit = Math.round((Number(client.account_credit) || 0) * 100) / 100
     if (credit <= 0.001) {
       const creditRes = await opsApi.getClientCreditBalance(client.id)
@@ -116,11 +118,12 @@ export function useOpeningBalanceActions({ onDone } = {}) {
 
   function menuItemsFor(client, { includeEditWhenZero = true, compactLabels = false } = {}) {
     if (!client?.id) return []
-    const opening = clientOpeningBalanceAmount(client)
+    const remaining = clientOpeningRemaining(client)
+    const original = clientOpeningBalanceAmount(client)
     const credit = Math.round((Number(client.account_credit) || 0) * 100) / 100
     const items = []
 
-    if (opening > 0) {
+    if (remaining > 0) {
       // On Brought-forward list, jump to Record payment (B/F appears with invoices).
       // On Clients Accounts the page already has Record payment — skip duplicate.
       if (compactLabels) {
@@ -144,7 +147,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
         disabled: saving,
         onClick: () => openApplyPayment(client),
       })
-    } else if (opening < 0) {
+    } else if (remaining < 0) {
       items.push({
         label: compactLabels ? 'Apply to invoice' : 'Apply B/F credit to invoice',
         icon: 'invoice',
@@ -153,12 +156,12 @@ export function useOpeningBalanceActions({ onDone } = {}) {
       })
     }
 
-    if (canEditOpening(client) && (opening !== 0 || includeEditWhenZero)) {
+    if (canEditOpening(client) && (original !== 0 || remaining !== 0 || includeEditWhenZero)) {
       items.push({
         label: compactLabels
           ? 'Edit balance'
-          : opening !== 0
-            ? 'Edit B/F balance'
+          : original !== 0
+            ? 'Edit opening balance'
             : 'Opening balance',
         icon: 'pencil',
         disabled: saving,
@@ -172,7 +175,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
   async function submitApplyPayment(e) {
     e.preventDefault()
     if (!applyCreditTarget) return
-    const opening = clientOpeningBalanceAmount(applyCreditTarget)
+    const opening = clientOpeningRemaining(applyCreditTarget)
     const credit = Math.round((Number(applyCreditTarget.account_credit) || 0) * 100) / 100
     let amount = Math.round((Number(applyAmount) || 0) * 100) / 100
     if (amount <= 0) amount = Math.min(opening, credit)
@@ -264,8 +267,8 @@ export function useOpeningBalanceActions({ onDone } = {}) {
 
   async function clearEditBalance() {
     if (!editTarget || !canEditOpening(editTarget)) return
-    const current = clientOpeningBalanceAmount(editTarget)
-    if (current === 0 && !clientOpeningBalanceDate(editTarget)) {
+    const original = clientOpeningBalanceAmount(editTarget)
+    if (original === 0 && !clientOpeningBalanceDate(editTarget)) {
       showWarning('This client already has no brought-forward balance.')
       return
     }
@@ -280,17 +283,10 @@ export function useOpeningBalanceActions({ onDone } = {}) {
 
     const paidToward = Number(appliedRes.data?.paidTowardOpening) || 0
     const creditApplied = Number(appliedRes.data?.creditAppliedToInvoices) || 0
-    let message = `Set ${editTarget.name}'s remaining brought-forward balance to zero (currently ${formatPula(current)})?`
+    const remaining = openingBalanceRemaining(original, appliedRes.data)
+    let message = `Set ${editTarget.name}'s original opening balance to zero (currently ${formatPula(original)})?`
 
-    if (current > 0 && paidToward > 0.001) {
-      message +=
-        `\n\n${formatPula(paidToward)} has already been applied toward this brought-forward balance and will stay on record. ` +
-        `Clearing only removes the remaining ${formatPula(current)} — it does not reverse those payments.`
-    } else if (current < 0 && creditApplied > 0.001) {
-      message +=
-        `\n\n${formatPula(creditApplied)} of brought-forward credit has already been applied to invoice(s) and will stay on record. ` +
-        `Clearing only removes the remaining ${formatPula(Math.abs(current))} credit — it does not reverse those applications.`
-    } else if (paidToward > 0.001 || creditApplied > 0.001) {
+    if (paidToward > 0.001 || creditApplied > 0.001) {
       const parts = []
       if (paidToward > 0.001) {
         parts.push(`${formatPula(paidToward)} already paid toward brought forward`)
@@ -299,8 +295,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
         parts.push(`${formatPula(creditApplied)} credit already applied to invoices`)
       }
       message +=
-        `\n\nNote: ${parts.join('; ')}. Those records stay as they are. ` +
-        `Clearing only zeros the remaining balance field.`
+        `\n\n${parts.join('; ')} will stay on the statement. Remaining is currently ${formatPula(remaining)} and will be recalculated from those records.`
     } else {
       message += ' This does not create a payment or change invoices.'
     }
@@ -340,7 +335,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
               Apply payment — {applyCreditTarget.name}
             </h2>
             <p className="text-sm text-ink-400">
-              Brought forward: {formatPula(clientOpeningBalanceAmount(applyCreditTarget))}
+              Brought forward remaining: {formatPula(clientOpeningRemaining(applyCreditTarget))}
               <br />
               Unapplied payment: {formatPula(applyCreditTarget.account_credit)}
             </p>
@@ -386,7 +381,7 @@ export function useOpeningBalanceActions({ onDone } = {}) {
             </h2>
             <p className="text-sm text-ink-400">
               Brought-forward credit:{' '}
-              {formatPula(Math.abs(clientOpeningBalanceAmount(invoiceTarget)))}
+              {formatPula(Math.abs(clientOpeningRemaining(invoiceTarget)))}
             </p>
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs uppercase tracking-wider text-ink-400">Open invoices</p>
@@ -460,11 +455,11 @@ export function useOpeningBalanceActions({ onDone } = {}) {
             className="w-full max-w-md space-y-4 rounded-2xl border border-white/10 bg-ink-900 p-5 shadow-2xl"
           >
             <h2 className="font-display text-lg font-semibold text-white">
-              Edit balance — {editTarget.name}
+              Edit opening balance — {editTarget.name}
             </h2>
             <label className="block">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Brought-forward amount
+                Original brought-forward amount
               </span>
               <input
                 type="number"
@@ -474,7 +469,14 @@ export function useOpeningBalanceActions({ onDone } = {}) {
                 className={adminFieldClass}
               />
               <span className="mt-1 block text-xs text-ink-500">
-                Positive = client owes. Negative = credit on account.
+                Positive = client owes. Negative = credit on account. Remaining after payments is
+                calculated automatically
+                {Math.abs(
+                  clientOpeningRemaining(editTarget) - clientOpeningBalanceAmount(editTarget),
+                ) > 0.001
+                  ? ` (currently ${formatPula(clientOpeningRemaining(editTarget))})`
+                  : ''}
+                .
               </span>
             </label>
             <YearMonthDaySelect label="As of date" value={editDate} onChange={setEditDate} />

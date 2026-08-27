@@ -3,6 +3,7 @@ import {
   clientOpeningBalanceAmount,
   clientOpeningBalanceDate,
 } from '../../lib/clientRegistration'
+import { clientOpeningRemaining } from '../../lib/payments'
 import { opsApi } from '../../lib/opsApi'
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
@@ -48,8 +49,9 @@ export function OpeningBalancesPanel({ ownClientId }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-400">
-        Clients with a remaining brought-forward balance. Positive amounts are still owed; negative
-        amounts are credit you can apply to invoices.
+        Clients with remaining brought-forward balance. The original amount stays on the client
+        record; remaining is calculated from payments. Positive remaining is still owed; negative is
+        credit you can apply to invoices.
       </p>
 
       <table className={adminTableClass}>
@@ -57,7 +59,8 @@ export function OpeningBalancesPanel({ ownClientId }) {
           <tr>
             <th className="px-4 py-3">Client</th>
             <th className={`px-4 py-3 ${adminColSecondary}`}>As of</th>
-            <th className="px-4 py-3 text-right">Brought forward</th>
+            <th className="px-4 py-3 text-right">Original</th>
+            <th className="px-4 py-3 text-right">Remaining</th>
             <th className={`px-4 py-3 text-right ${adminColSecondary}`}>Unapplied</th>
             <th className="px-4 py-3 w-12" />
           </tr>
@@ -65,19 +68,20 @@ export function OpeningBalancesPanel({ ownClientId }) {
         <tbody className="divide-y divide-white/5">
           {loading ? (
             <tr>
-              <td colSpan={5} className="px-4 py-6 text-ink-400">
+              <td colSpan={6} className="px-4 py-6 text-ink-400">
                 Loading…
               </td>
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={5} className="px-4 py-6 text-ink-400">
+              <td colSpan={6} className="px-4 py-6 text-ink-400">
                 No unpaid brought-forward balances.
               </td>
             </tr>
           ) : (
             rows.map((row) => {
-              const opening = clientOpeningBalanceAmount(row)
+              const original = clientOpeningBalanceAmount(row)
+              const remaining = clientOpeningRemaining(row)
               const asOf = clientOpeningBalanceDate(row)
               const credit = Math.round((Number(row.account_credit) || 0) * 100) / 100
               return (
@@ -87,9 +91,14 @@ export function OpeningBalancesPanel({ ownClientId }) {
                     {asOf || '—'}
                   </td>
                   <td
-                    className={`px-4 py-3 text-right text-sm font-semibold tabular-nums ${balanceTone(opening)}`}
+                    className={`px-4 py-3 text-right text-sm font-semibold tabular-nums ${balanceTone(original)}`}
                   >
-                    {formatPula(opening)}
+                    {formatPula(original)}
+                  </td>
+                  <td
+                    className={`px-4 py-3 text-right text-sm font-semibold tabular-nums ${balanceTone(remaining)}`}
+                  >
+                    {formatPula(remaining)}
                   </td>
                   <td
                     className={`px-4 py-3 text-right text-sm tabular-nums text-ink-400 ${adminColSecondary}`}

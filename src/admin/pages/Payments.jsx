@@ -15,6 +15,7 @@ import {
   PAYMENT_METHODS,
   paymentDisplayMethod,
   paymentMethodLabel,
+  openingBalanceRemaining,
 } from '../../lib/payments'
 import { clientOpeningBalanceAmount } from '../../lib/clientRegistration'
 import { useOpsAlert } from '../OpsAlertContext'
@@ -139,10 +140,11 @@ export default function PaymentsPage() {
         setApplyAccountCredit(false)
         return []
       }
-      const [invRes, creditRes, clientRes] = await Promise.all([
+      const [invRes, creditRes, clientRes, appliedRes] = await Promise.all([
         opsApi.listOpenInvoicesForClient(clientId, { editingPaymentId: paymentId }),
         opsApi.getClientCreditBalance(clientId),
         opsApi.getClient(clientId),
+        opsApi.getClientOpeningBalanceApplied(clientId),
       ])
       if (invRes.error) {
         showError(invRes.error.message)
@@ -155,12 +157,19 @@ export default function PaymentsPage() {
       if (clientRes.error) {
         showError(clientRes.error.message)
       }
+      if (appliedRes.error) {
+        showError(appliedRes.error.message)
+      }
       const invoices = invRes.data || []
       const editingOpeningApplied = Math.max(
         0,
         -(Number(opts.openingBalanceDelta) || 0),
       )
-      const currentOpening = Math.max(0, clientOpeningBalanceAmount(clientRes.data))
+      const remaining = openingBalanceRemaining(
+        clientOpeningBalanceAmount(clientRes.data),
+        appliedRes.error ? [] : appliedRes.data,
+      )
+      const currentOpening = Math.max(0, remaining)
       const openingDue =
         Math.round((currentOpening + editingOpeningApplied) * 100) / 100
       setOpeningBalanceDue(openingDue)

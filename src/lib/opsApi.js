@@ -15,6 +15,7 @@ import {
   paymentTimelineCredit,
   PAYMENT_METHODS,
   openingBalanceCarryIn,
+  openingBalanceRemainingMap,
   summarizeReceivables,
 } from './payments'
 import { disputeUnreadCount } from './invoiceDisputes'
@@ -334,13 +335,13 @@ const directOpsApi = {
       const id = pay.client_id
       credits[id] = (credits[id] || 0) + paymentStatementCredit(pay)
     }
+    const remainingById = openingBalanceRemainingMap(clientsRes.data || [], payRes.data || [])
 
     const data = (clientsRes.data || []).map((c) => {
+      const remaining = remainingById[c.id] || 0
       const balance =
-        Math.round(
-          ((charges[c.id] || 0) - (credits[c.id] || 0) + clientOpeningBalanceAmount(c)) * 100,
-        ) / 100
-      return { ...c, balance }
+        Math.round(((charges[c.id] || 0) - (credits[c.id] || 0) + remaining) * 100) / 100
+      return { ...c, opening_balance_remaining: remaining, balance }
     })
     return { data, error: null }
   },
@@ -2360,12 +2361,21 @@ const directOpsApi = {
     let q = supabase
       .from('clients')
       .select('id, name, email, phone, cellphone, opening_balance, opening_balance_date, is_active')
-      .neq('opening_balance', 0)
       .order('name', { ascending: true })
     if (activeOnly) q = q.eq('is_active', true)
-    const { data, error } = await q
-    if (error) return mapError(error)
-    const clients = data || []
+    const [clientRes, payRes] = await Promise.all([
+      q,
+      supabase.from('payments').select('client_id, opening_balance_delta').neq('opening_balance_delta', 0),
+    ])
+    if (clientRes.error) return mapError(clientRes.error)
+    if (payRes.error) return mapError(payRes.error)
+    const remainingById = openingBalanceRemainingMap(clientRes.data || [], payRes.data || [])
+    const clients = (clientRes.data || [])
+      .map((c) => ({
+        ...c,
+        opening_balance_remaining: remainingById[c.id] || 0,
+      }))
+      .filter((c) => Math.abs(c.opening_balance_remaining) > 0.001)
     const withCredit = await Promise.all(
       clients.map(async (c) => {
         const creditRes = await this.getClientCreditBalance(c.id)
@@ -3496,7 +3506,8 @@ const directOpsApi = {
     const today = localTodayIso()
     const monthStart = `${today.slice(0, 7)}-01`
 
-    const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes, clientsRes] = await Promise.all([
+    const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes, clientsRes, deltaRes] =
+      await Promise.all([
       supabase
         .from('payment_notifications')
         .select('*, clients(id, name), invoices(id, number)')
@@ -3519,6 +3530,7 @@ const directOpsApi = {
         .in('status', BALANCE_INVOICE_STATUSES),
       supabase.from('payments').select('amount, payment_date').eq('is_adjustment', false).gte('payment_date', monthStart),
       supabase.from('clients').select('id, opening_balance'),
+      supabase.from('payments').select('client_id, opening_balance_delta').neq('opening_balance_delta', 0),
     ])
 
     if (notifRes.error) return mapError(notifRes.error)
@@ -3527,14 +3539,16 @@ const directOpsApi = {
     if (invoiceRes.error) return mapError(invoiceRes.error)
     if (paymentRes.error) return mapError(paymentRes.error)
     if (clientsRes.error) return mapError(clientsRes.error)
+    if (deltaRes.error) return mapError(deltaRes.error)
 
     const invoices = invoiceRes.data || []
     const receivables = summarizeReceivables(invoices, today)
+    const remainingById = openingBalanceRemainingMap(clientsRes.data || [], deltaRes.data || [])
     const broughtForward =
       Math.round(
         (clientsRes.data || []).reduce((sum, c) => {
-          const opening = clientOpeningBalanceAmount(c)
-          return sum + (opening > 0 ? opening : 0)
+          const remaining = remainingById[c.id] || 0
+          return sum + (remaining > 0 ? remaining : 0)
         }, 0) * 100,
       ) / 100
     receivables.broughtForward = broughtForward

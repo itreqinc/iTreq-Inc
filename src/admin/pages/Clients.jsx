@@ -221,10 +221,7 @@ export default function ClientsPage() {
   const load = useCallback(async () => {
     setLoading(true)
     const activeOnly = !showAllClients
-    const { data, error: err } =
-      view === 'accounts'
-        ? await opsApi.listClientsWithBalances({ activeOnly })
-        : await opsApi.listClients({ activeOnly })
+    const { data, error: err } = await opsApi.listClientsWithBalances({ activeOnly })
     setLoading(false)
     if (err) {
       showError(err.message)
@@ -1221,8 +1218,9 @@ export default function ClientsPage() {
               <div>
                 <p className="text-sm font-semibold text-white">Opening balance</p>
                 <p className="mt-1 text-xs text-ink-400">
-                  Carry-in amount as of a date. Positive means the client owes iTreq (same as an
-                  invoice).
+                  Carry-in amount as of a date. This original amount does not change when payments
+                  are applied; remaining is calculated from those payments. Positive means the
+                  client owes iTreq (same as an invoice).
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
