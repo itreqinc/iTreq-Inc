@@ -172,13 +172,167 @@ export function LineItemsEditor({
     return ''
   }
 
+  function trackableSelect(line, index) {
+    return (
+      <select
+        disabled={readOnly || !catalog.length}
+        className={`${adminFieldClass} min-w-0 w-full sm:min-w-[10rem]`}
+        value={line.trackable_item_id || ''}
+        onChange={(e) => pickTrackableItem(index, e.target.value)}
+        title="Pick what the client wants tracked — fills product, description and price"
+      >
+        <option value="">—</option>
+        {catalog.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+    )
+  }
+
+  function productSelect(line, index) {
+    return (
+      <select
+        disabled={readOnly}
+        className={`${adminFieldClass} min-w-0 w-full sm:min-w-[9rem]`}
+        value={line.product_id || ''}
+        onChange={(e) => pickProduct(index, e.target.value)}
+      >
+        <option value="">Custom…</option>
+        {products.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    )
+  }
+
+  function descriptionInput(line, index) {
+    return (
+      <input
+        disabled={readOnly}
+        className={`${adminFieldClass} min-w-0 w-full sm:min-w-[10rem]`}
+        value={line.description || ''}
+        placeholder={readOnly ? '' : descriptionPlaceholder(line)}
+        title={
+          readOnly
+            ? undefined
+            : 'Edit the line text shown on the invoice — add registrations, dates, or other detail.'
+        }
+        onChange={(e) => updateLine(index, { description: e.target.value })}
+      />
+    )
+  }
+
+  function quantityInput(line, index) {
+    return (
+      <input
+        disabled={readOnly}
+        type="number"
+        min="1"
+        step="1"
+        inputMode="numeric"
+        title="Enter a whole number (1 or more)"
+        className={`${adminFieldClass} w-full sm:w-20`}
+        value={line.quantity}
+        onChange={(e) => updateLine(index, { quantity: e.target.value })}
+        onInvalid={(e) => {
+          e.target.setCustomValidity(
+            'Quantity must be a whole number of 1 or more (for example 1, 2, or 3).',
+          )
+        }}
+        onInput={(e) => e.target.setCustomValidity('')}
+      />
+    )
+  }
+
+  function unitPriceInput(line, index) {
+    return (
+      <input
+        disabled={readOnly}
+        type="number"
+        min="0"
+        step="0.01"
+        inputMode="decimal"
+        title="Enter the unit price in Pula"
+        className={`${adminFieldClass} w-full sm:w-28`}
+        value={line.unit_price}
+        onChange={(e) => updateLine(index, { unit_price: e.target.value })}
+        onInvalid={(e) => {
+          e.target.setCustomValidity(
+            'Unit price must be zero or more (for example 1250 or 1250.00).',
+          )
+        }}
+        onInput={(e) => e.target.setCustomValidity('')}
+      />
+    )
+  }
+
   return (
     <div className="space-y-3">
-      <div className={adminTableShellSmClass}>
+      <div className="space-y-3 sm:hidden">
+        {lines.map((line, index) => (
+          <div
+            key={line.id || index}
+            className="space-y-2 rounded-xl border border-white/10 bg-ink-950/40 p-3"
+          >
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Item to track
+              </span>
+              {trackableSelect(line, index)}
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Product
+              </span>
+              {productSelect(line, index)}
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Description
+              </span>
+              {descriptionInput(line, index)}
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Qty
+                </span>
+                {quantityInput(line, index)}
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Unit price
+                </span>
+                {unitPriceInput(line, index)}
+              </label>
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <p className="text-sm text-ink-200">
+                Line {formatPula(calcLineTotal(line.quantity, line.unit_price))}
+              </p>
+              {!readOnly ? (
+                <button
+                  type="button"
+                  onClick={() => removeLine(index)}
+                  className="text-xs font-medium text-red-300 hover:text-red-200"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className={`hidden sm:block ${adminTableShellSmClass}`}>
         <table className={adminTableClass}>
           <thead className="bg-ink-950/60 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className={`px-3 py-2 ${adminColSecondary}`}>Item to track</th>
+              <th className="px-3 py-2">Item to track</th>
               <th className={`px-3 py-2 ${adminColSecondary}`}>Product</th>
               <th className="px-3 py-2">Description</th>
               <th className="px-3 py-2">Qty</th>
@@ -190,89 +344,11 @@ export function LineItemsEditor({
           <tbody className="divide-y divide-white/5">
             {lines.map((line, index) => (
               <tr key={line.id || index} className="align-top">
-                <td className={`px-3 py-2 ${adminColSecondary}`}>
-                  <select
-                    disabled={readOnly || !catalog.length}
-                    className={`${adminFieldClass} min-w-0 w-full sm:min-w-[10rem]`}
-                    value={line.trackable_item_id || ''}
-                    onChange={(e) => pickTrackableItem(index, e.target.value)}
-                    title="Pick what the client wants tracked — fills product, description and price"
-                  >
-                    <option value="">—</option>
-                    {catalog.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className={`px-3 py-2 ${adminColSecondary}`}>
-                  <select
-                    disabled={readOnly}
-                    className={`${adminFieldClass} min-w-0 w-full sm:min-w-[9rem]`}
-                    value={line.product_id || ''}
-                    onChange={(e) => pickProduct(index, e.target.value)}
-                  >
-                    <option value="">Custom…</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-3 py-2">
-                  <input
-                    disabled={readOnly}
-                    className={`${adminFieldClass} min-w-[10rem]`}
-                    value={line.description || ''}
-                    placeholder={readOnly ? '' : descriptionPlaceholder(line)}
-                    title={
-                      readOnly
-                        ? undefined
-                        : 'Edit the line text shown on the invoice — add registrations, dates, or other detail.'
-                    }
-                    onChange={(e) => updateLine(index, { description: e.target.value })}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <input
-                    disabled={readOnly}
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputMode="numeric"
-                    title="Enter a whole number (1 or more)"
-                    className={`${adminFieldClass} w-20`}
-                    value={line.quantity}
-                    onChange={(e) => updateLine(index, { quantity: e.target.value })}
-                    onInvalid={(e) => {
-                      e.target.setCustomValidity(
-                        'Quantity must be a whole number of 1 or more (for example 1, 2, or 3).',
-                      )
-                    }}
-                    onInput={(e) => e.target.setCustomValidity('')}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <input
-                    disabled={readOnly}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    title="Enter the unit price in Pula"
-                    className={`${adminFieldClass} w-28`}
-                    value={line.unit_price}
-                    onChange={(e) => updateLine(index, { unit_price: e.target.value })}
-                    onInvalid={(e) => {
-                      e.target.setCustomValidity(
-                        'Unit price must be zero or more (for example 1250 or 1250.00).',
-                      )
-                    }}
-                    onInput={(e) => e.target.setCustomValidity('')}
-                  />
-                </td>
+                <td className="px-3 py-2">{trackableSelect(line, index)}</td>
+                <td className={`px-3 py-2 ${adminColSecondary}`}>{productSelect(line, index)}</td>
+                <td className="px-3 py-2">{descriptionInput(line, index)}</td>
+                <td className="px-3 py-2">{quantityInput(line, index)}</td>
+                <td className="px-3 py-2">{unitPriceInput(line, index)}</td>
                 <td className={`px-3 py-2 text-ink-200 ${adminColSecondary}`}>
                   {formatPula(calcLineTotal(line.quantity, line.unit_price))}
                 </td>
