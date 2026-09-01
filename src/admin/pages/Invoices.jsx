@@ -30,6 +30,7 @@ import {
   peekClientsReturn,
   takeClientsReturn,
 } from '../../lib/clientsReturnNav'
+import { scrollInvoiceRowSecondFromTop } from '../../lib/invoiceListFocus'
 import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
   mapDocLinesForEditor,
@@ -140,6 +141,7 @@ export default function InvoicesPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const clientsReturnClientIdRef = useRef(null)
+  const pendingInvoiceListFocusRef = useRef(null)
   const deepLinkHandledRef = useRef(false)
   const saveInFlightRef = useRef(false)
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
@@ -302,21 +304,48 @@ export default function InvoicesPage() {
   function closeForm(savedId) {
     if (saveInFlightRef.current) return
 
-    const id = typeof savedId === 'string' ? savedId : null
     const returnClientId = clientsReturnClientIdRef.current || peekClientsReturn()
     if (returnClientId) {
       clientsReturnClientIdRef.current = null
+      pendingInvoiceListFocusRef.current = null
       takeClientsReturn()
       navigate(clientsAccountsUrl(returnClientId))
       return
     }
     clearClientsReturn()
+    const focusId =
+      savedId === null ? null : typeof savedId === 'string' ? savedId : editingId
+    pendingInvoiceListFocusRef.current = focusId || null
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
     setAccountCredit(0)
-    if (id) highlightRow(id)
   }
+
+  // After the editor unmounts, park this invoice second from the top of the screen.
+  // Isolated from Clients Accounts (`pendingAccountFocusRef` / third-row list scroll).
+  useEffect(() => {
+    if (showForm || listView !== 'invoices' || loading) return
+    const id = pendingInvoiceListFocusRef.current
+    if (!id) return
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (cancelled) return
+          if (pendingInvoiceListFocusRef.current !== id) return
+          pendingInvoiceListFocusRef.current = null
+          highlightRow(id, { scroll: false })
+          scrollInvoiceRowSecondFromTop(id)
+        })
+      })
+    }, 80)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [showForm, listView, loading, highlightRow])
 
   const balanceDue = useMemo(() => invoiceBalanceDue(form), [form])
   const canApplyCredit =
@@ -1195,6 +1224,7 @@ export default function InvoicesPage() {
                   <tr
                     key={row.id}
                     data-row-id={row.id}
+                    data-invoice-row={row.id}
                     role="link"
                     tabIndex={0}
                     className={`group ${invoiceRowClass(displayStatus)} ${clickableRowClass}${highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''}`}
