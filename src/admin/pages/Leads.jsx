@@ -409,17 +409,17 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10">
+      <div className="overflow-x-clip rounded-2xl border border-white/10">
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Request</th>
-              <th className="px-4 py-3">Phone</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Email</th>
-              <th className="px-4 py-3">Status</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Received</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className={`${adminCellPad} min-w-0`}>Name</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Request</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Phone</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Email</th>
+              <th className={`${adminCellPad} w-[4.5rem] sm:w-auto`}>Status</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Received</th>
+              <th className={`${adminCellPad} text-right ${adminColAction}`}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -476,24 +476,33 @@ export default function LeadsPage() {
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
-                    <td className="px-4 py-3 font-medium text-white">{lead.name}</td>
+                    <td className={`${adminCellPad} min-w-0 break-words font-medium text-white`}>
+                      <div className="flex flex-col gap-0.5">
+                        <span>{lead.name}</span>
+                        <span className="break-words text-[11px] font-normal text-ink-400 sm:hidden">
+                          {lead.cellphone || lead.phone || '—'}
+                        </span>
+                      </div>
+                    </td>
                     <td
-                      className={`max-w-[14rem] truncate px-4 py-3 text-ink-300 ${adminColSecondary}`}
+                      className={`${adminCellPad} max-w-[14rem] truncate text-ink-300 ${adminColSecondary}`}
                       title={requestPreview || undefined}
                     >
                       {requestPreview || '—'}
                     </td>
-                    <td className="px-4 py-3 text-ink-300">{lead.cellphone || lead.phone || '—'}</td>
-                    <td className={`min-w-0 break-all px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                    <td className={`${adminCellPad} break-words text-ink-300 ${adminColSecondary}`}>
+                      {lead.cellphone || lead.phone || '—'}
+                    </td>
+                    <td className={`${adminCellPad} min-w-0 break-all text-ink-300 ${adminColSecondary}`}>
                       {lead.email || '—'}
                     </td>
-                    <td className={`px-4 py-3 capitalize ${statusClass(lead.status)}`}>
+                    <td className={`${adminCellPad} capitalize ${statusClass(lead.status)}`}>
                       {STATUS_LABELS[lead.status] || lead.status}
                     </td>
-                    <td className={`px-4 py-3 text-ink-400 ${adminColSecondary}`}>
+                    <td className={`${adminCellPad} text-ink-400 ${adminColSecondary}`}>
                       {lead.created_at ? String(lead.created_at).slice(0, 10) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className={`${adminCellPad} text-right ${adminColAction}`}>
                       <LeadRowActions items={menuItems} />
                     </td>
                   </tr>

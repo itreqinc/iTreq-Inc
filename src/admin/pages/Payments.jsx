@@ -955,7 +955,7 @@ export default function PaymentsPage() {
                 key={opt.id}
                 type="button"
                 onClick={() => setListView(opt.id)}
-                className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition ${
+                className={`rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition sm:px-3 sm:text-[13px] ${
                   listView === opt.id
                     ? 'bg-white/10 text-white'
                     : 'text-ink-400 hover:text-ink-200'

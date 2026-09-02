@@ -136,7 +136,7 @@ export default function PortalQuoteNew() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="max-w-full overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/90">
+        <div className="max-w-full overflow-x-clip rounded-2xl border border-white/10 bg-ink-900/90">
           {loading ? (
             <p className="px-4 py-6 text-sm text-ink-400">Loading…</p>
           ) : catalog.length === 0 ? (

@@ -13,6 +13,7 @@ import {
   formatPula,
   adminTableClass,
   adminColSecondary,
+  adminCellPad,
 } from '../admin/ui'
 
 export default function PortalPayments() {
@@ -67,11 +68,11 @@ export default function PortalPayments() {
         <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Receipt</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Method</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Reference</th>
-              <th className="px-4 py-3 text-right">Amount</th>
+              <th className={`${adminCellPad} w-[5.25rem] sm:w-auto`}>Date</th>
+              <th className={`${adminCellPad} min-w-0`}>Receipt</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Method</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Reference</th>
+              <th className={`${adminCellPad} w-[4.75rem] text-right sm:w-auto`}>Amount</th>
               <th className={`px-4 py-3 text-right ${adminColSecondary}`}>On account</th>
               <th className={`px-4 py-3 ${adminColSecondary}`} />
             </tr>
@@ -104,10 +105,10 @@ export default function PortalPayments() {
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
-                    <td className="whitespace-nowrap px-4 py-3 text-ink-300">
+                    <td className={`${adminCellPad} break-words text-ink-300`}>
                       {pay.payment_date || '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={adminCellPad}>
                       <span className={clickableDocClass}>Receipt</span>
                       <span className="mt-0.5 block text-xs text-ink-400 sm:hidden">
                         {paymentMethodLabel(pay.method)}
@@ -119,7 +120,7 @@ export default function PortalPayments() {
                     <td className={`min-w-0 break-words px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                       {pay.reference || '—'}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-200">
+                    <td className={`${adminCellPad} text-right tabular-nums text-[12px] text-ink-200 sm:text-sm`}>
                       {formatPula(pay.amount)}
                     </td>
                     <td className={`px-4 py-3 text-right tabular-nums ${adminColSecondary}`}>

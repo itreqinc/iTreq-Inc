@@ -24,6 +24,8 @@ import {
   formatPula,
   adminTableClass,
   adminColSecondary,
+  adminColAction,
+  adminCellPad,
 } from '../admin/ui'
 
 function statusClass(status) {
@@ -102,13 +104,13 @@ export default function PortalInvoices() {
         <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Billing</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Due</th>
-              <th className="px-4 py-3">Number</th>
-              <th className="px-4 py-3">Status</th>
-              <th className={`px-4 py-3 text-right ${adminColSecondary}`}>Total</th>
-              <th className="px-4 py-3 text-right">Balance due</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`} />
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Billing</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Due</th>
+              <th className={`${adminCellPad} min-w-0`}>Number</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Status</th>
+              <th className={`${adminCellPad} text-right ${adminColSecondary}`}>Total</th>
+              <th className={`${adminCellPad} w-[5.25rem] text-right sm:w-auto`}>Balance due</th>
+              <th className={`${adminCellPad} ${adminColAction}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -147,15 +149,22 @@ export default function PortalInvoices() {
                     <td className={`whitespace-nowrap px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                       {inv.due_date || '—'}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={clickableDocClass}>{inv.number || '—'}</span>
-                      {unread > 0 ? (
-                        <span className="ml-2 inline-flex rounded-md bg-amber-500/25 px-2 py-0.5 text-xs font-semibold text-amber-100">
-                          {unread === 1 ? '1 new' : `${unread} new`}
+                    <td className={`${adminCellPad}`}>
+                      <div className="flex min-w-0 flex-col items-start gap-0.5">
+                        <span className={`${clickableDocClass} break-words`}>{inv.number || '—'}</span>
+                        {unread > 0 ? (
+                          <span className="inline-flex rounded-md bg-amber-500/25 px-1.5 py-0.5 text-[11px] font-semibold text-amber-100">
+                            {unread === 1 ? '1 new' : `${unread} new`}
+                          </span>
+                        ) : null}
+                        <span
+                          className={`sm:hidden inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold capitalize ${statusClass(displayStatus)}`}
+                        >
+                          {displayStatus}
                         </span>
-                      ) : null}
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={`${adminCellPad} ${adminColSecondary}`}>
                       <span
                         className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${statusClass(displayStatus)}`}
                       >
@@ -165,10 +174,10 @@ export default function PortalInvoices() {
                     <td className={`px-4 py-3 text-right tabular-nums text-ink-200 ${adminColSecondary}`}>
                       {formatPula(inv.total)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-200">
+                    <td className={`${adminCellPad} text-right tabular-nums text-[12px] text-ink-200 sm:text-sm`}>
                       {formatPula(invoiceBalanceDue(inv))}
                     </td>
-                    <td className={`px-4 py-3 text-right ${adminColSecondary}`}>
+                    <td className={`${adminCellPad} text-right ${adminColAction}`}>
                       <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
                         View
                       </span>

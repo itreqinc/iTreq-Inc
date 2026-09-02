@@ -26,6 +26,8 @@ import {
   formatPula,
   adminTableClass,
   adminColSecondary,
+  adminColAction,
+  adminCellPad,
 } from '../admin/ui'
 
 function statusClass(status, awaiting) {
@@ -123,11 +125,11 @@ export default function PortalQuotes() {
         <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Date</th>
-              <th className="px-4 py-3">Number</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Total</th>
-              <th className="px-4 py-3" />
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Date</th>
+              <th className={`${adminCellPad} min-w-0`}>Number</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Status</th>
+              <th className={`${adminCellPad} w-[4.75rem] text-right sm:w-auto`}>Total</th>
+              <th className={`${adminCellPad} ${adminColAction}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -169,21 +171,28 @@ export default function PortalQuotes() {
                     <td className={`whitespace-nowrap px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                       {q.issue_date || '—'}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={clickableDocClass}>{q.number || '—'}</span>
+                    <td className={adminCellPad}>
+                      <div className="flex min-w-0 flex-col items-start gap-0.5">
+                        <span className={`${clickableDocClass} break-words`}>{q.number || '—'}</span>
+                        <span
+                          className={`sm:hidden inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold capitalize ${statusClass(q.status, awaiting)}`}
+                        >
+                          {quotationDisplayStatus(q)}
+                        </span>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={`${adminCellPad} ${adminColSecondary}`}>
                       <span
                         className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${statusClass(q.status, awaiting)}`}
                       >
                         {quotationDisplayStatus(q)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-200">
+                    <td className={`${adminCellPad} text-right tabular-nums text-[12px] text-ink-200 sm:text-sm`}>
                       {formatPula(q.total)}
                     </td>
                     <td
-                      className="px-4 py-3 text-right"
+                      className={`${adminCellPad} text-right ${adminColAction}`}
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >

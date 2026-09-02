@@ -5,7 +5,7 @@ import { canSendPortalInviteEmail, portalInviteConfirmMessage } from '../../lib/
 import { DetailsCollapse } from '../../components/DetailsCollapse'
 import { AdminIconAction } from '../AdminIconAction'
 import { useOpsAlert } from '../OpsAlertContext'
-import { adminBtnPrimary, adminBtnSecondary, adminTableShellClass } from '../ui'
+import { adminBtnPrimary, adminBtnSecondary, adminTableShellClass, adminTableClass, adminColSecondary, adminCellPad } from '../ui'
 
 function formatWhen(iso) {
   if (!iso) return '—'
@@ -281,10 +281,10 @@ export function PortalInvitesPanel() {
                   </div>
                 ) : null}
                 <div className={`${adminTableShellClass} max-h-[min(50vh,28rem)] overflow-y-auto`}>
-                  <table className="w-full min-w-[28rem] text-left text-sm">
+                  <table className={adminTableClass}>
                     <thead className="sticky top-0 z-10 border-b border-white/10 bg-ink-950 text-ink-400">
                       <tr>
-                        <th className="w-10 px-3 py-2">
+                        <th className="w-8 px-2 py-2 sm:w-10 sm:px-3">
                           <input
                             type="checkbox"
                             aria-label="Select all clients to invite"
@@ -296,9 +296,9 @@ export function PortalInvitesPanel() {
                             }}
                           />
                         </th>
-                        <th className="px-3 py-2">Client</th>
-                        <th className="px-3 py-2">Login email</th>
-                        <th className="w-12 px-3 py-2" />
+                        <th className={`${adminCellPad} min-w-0`}>Client</th>
+                        <th className={`${adminCellPad} ${adminColSecondary}`}>Login email</th>
+                        <th className="w-10 px-2 py-2 sm:w-12 sm:px-3" />
                       </tr>
                     </thead>
                     <tbody>
@@ -320,9 +320,16 @@ export function PortalInvitesPanel() {
                                 }
                               />
                             </td>
-                            <td className="px-3 py-2 text-white">{row.client_name}</td>
+                            <td className={`${adminCellPad} min-w-0 break-words text-white`}>
+                              <div className="flex flex-col gap-0.5">
+                                <span>{row.client_name}</span>
+                                <span className="break-all text-[11px] text-ink-400 sm:hidden">
+                                  {rowLoginEmail(row) ? truncateEmail(rowLoginEmail(row)) : '—'}
+                                </span>
+                              </div>
+                            </td>
                             <td
-                              className="px-3 py-2 text-ink-300"
+                              className={`${adminCellPad} text-ink-300 ${adminColSecondary}`}
                               title={rowLoginEmail(row) || undefined}
                             >
                               {rowLoginEmail(row) ? truncateEmail(rowLoginEmail(row)) : '—'}
@@ -385,10 +392,10 @@ export function PortalInvitesPanel() {
                   </div>
                 ) : null}
                 <div className={`${adminTableShellClass} max-h-[min(50vh,28rem)] overflow-y-auto`}>
-                  <table className="w-full min-w-[28rem] text-left text-sm">
+                  <table className={adminTableClass}>
                     <thead className="sticky top-0 z-10 border-b border-white/10 bg-ink-950 text-ink-400">
                       <tr>
-                        <th className="w-10 px-3 py-2">
+                        <th className="w-8 px-2 py-2 sm:w-10 sm:px-3">
                           <input
                             type="checkbox"
                             aria-label="Select all clients to resend"
@@ -400,10 +407,10 @@ export function PortalInvitesPanel() {
                             }}
                           />
                         </th>
-                        <th className="px-3 py-2">Client</th>
-                        <th className="px-3 py-2">Login email</th>
-                        <th className="px-3 py-2">Notified</th>
-                        <th className="w-12 px-3 py-2" />
+                        <th className={`${adminCellPad} min-w-0`}>Client</th>
+                        <th className={`${adminCellPad} ${adminColSecondary}`}>Login email</th>
+                        <th className={`${adminCellPad} ${adminColSecondary}`}>Notified</th>
+                        <th className="w-10 px-2 py-2 sm:w-12 sm:px-3" />
                       </tr>
                     </thead>
                     <tbody>
@@ -425,14 +432,23 @@ export function PortalInvitesPanel() {
                                 }
                               />
                             </td>
-                            <td className="px-3 py-2 text-white">{row.client_name}</td>
+                            <td className={`${adminCellPad} min-w-0 break-words text-white`}>
+                              <div className="flex flex-col gap-0.5">
+                                <span>{row.client_name}</span>
+                                <span className="break-all text-[11px] text-ink-400 sm:hidden">
+                                  {rowLoginEmail(row) ? truncateEmail(rowLoginEmail(row)) : '—'}
+                                </span>
+                              </div>
+                            </td>
                             <td
-                              className="px-3 py-2 text-ink-300"
+                              className={`${adminCellPad} text-ink-300 ${adminColSecondary}`}
                               title={rowLoginEmail(row) || undefined}
                             >
                               {rowLoginEmail(row) ? truncateEmail(rowLoginEmail(row)) : '—'}
                             </td>
-                            <td className="px-3 py-2 text-ink-300">{formatWhen(row.invited_at)}</td>
+                            <td className={`${adminCellPad} text-ink-300 ${adminColSecondary}`}>
+                              {formatWhen(row.invited_at)}
+                            </td>
                             <td className="px-3 py-2 text-right">
                               {inviteable ? (
                                 <AdminIconAction

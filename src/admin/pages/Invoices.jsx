@@ -63,7 +63,6 @@ import { adminBtnDanger,
   adminTableClass,
   adminColSecondary,
   adminColAction,
-  adminCellPad,
 } from '../ui'
 
 function invoiceRowClass(status) {

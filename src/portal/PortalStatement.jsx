@@ -261,7 +261,7 @@ export default function PortalStatement() {
                       onClick={openable ? open : undefined}
                       onKeyDown={openable ? (e) => activateRowKey(e, open) : undefined}
                     >
-                      <td className="whitespace-nowrap px-4 py-2 text-ink-300">{line.sortDate}</td>
+                      <td className="break-words px-4 py-2 text-ink-300">{line.sortDate}</td>
                       <td className="min-w-0 break-words px-4 py-2 text-ink-200">
                         {openable ? (
                           <span className={clickableDocClass}>{label}</span>
