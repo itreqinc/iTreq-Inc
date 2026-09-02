@@ -22,7 +22,7 @@ function Kpi({ label, value, hint, tone = 'default' }) {
         ? 'border-emerald-400/25 bg-emerald-500/5'
         : tone === 'attention'
           ? 'border-azure-400/25 bg-azure-500/5'
-          : 'border-white/10 bg-ink-900/50'
+          : 'border-white/10 bg-ink-900/90'
   return (
     <div className={`rounded-2xl border p-4 ${toneClass}`}>
       <p className="text-xs uppercase tracking-wider text-ink-400">{label}</p>
@@ -38,7 +38,7 @@ function ActionCard({ title, count, description, children, emptyText, defaultOpe
   useCollapseIntoView(open, rootRef)
 
   return (
-    <section ref={rootRef} className="rounded-2xl border border-white/10 bg-ink-900/40">
+    <section ref={rootRef} className="rounded-2xl border border-white/10 bg-ink-900/90">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

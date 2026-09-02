@@ -61,7 +61,7 @@ export default function About() {
             {pillars.map((pillar) => (
               <div
                 key={pillar.title}
-                className="rounded-2xl border border-white/10 bg-ink-900/50 p-5"
+                className="rounded-2xl border border-white/10 bg-ink-900/90 p-5"
               >
                 <h3 className="font-display text-lg font-semibold text-white">{pillar.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-ink-300">{pillar.text}</p>
@@ -71,7 +71,7 @@ export default function About() {
         </div>
       </section>
 
-      <section className="section-pad border-t border-white/5 bg-ink-900/40">
+      <section className="section-pad border-t border-white/5 bg-ink-900/90">
         <div className="container-site">
           <h2 className="font-display text-3xl font-bold text-white">Why trust iTreq Inc</h2>
           <ul className="mt-8 grid gap-3 sm:grid-cols-2">

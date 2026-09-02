@@ -126,7 +126,7 @@ export default function MonthlyFeesPage() {
         </p>
       </div>
 
-      <div className="max-w-xl space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+      <div className="max-w-xl space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
         <label className="block">
           <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
             Billing month

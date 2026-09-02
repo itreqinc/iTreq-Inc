@@ -2,7 +2,7 @@ import { RECOVERY_PROCESS } from '../data/recoveries'
 
 export function RecoveryProcess() {
   return (
-    <section className="section-pad border-t border-white/5 bg-ink-900/40">
+    <section className="section-pad border-t border-white/5 bg-ink-900/90">
       <div className="container-site">
         <div className="max-w-2xl">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-azure-400">

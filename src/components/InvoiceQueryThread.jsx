@@ -162,7 +162,7 @@ export function InvoiceQueryThread({ invoiceId, clientId, authorRole = 'client',
   if (isStaff && loading) return null
 
   return (
-    <section ref={rootRef} className="rounded-2xl border border-white/10 bg-ink-900/40">
+    <section ref={rootRef} className="rounded-2xl border border-white/10 bg-ink-900/90">
       <button
         type="button"
         onClick={handleToggle}

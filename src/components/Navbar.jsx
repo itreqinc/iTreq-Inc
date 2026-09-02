@@ -33,11 +33,14 @@ export function Navbar() {
   }, [open])
 
   return (
+    <>
     <header
       className={`fixed inset-x-0 top-0 z-50 transition duration-300 ${
-        scrolled || open
-          ? 'border-b border-white/10 bg-ink-900/75 backdrop-blur-xl'
-          : 'bg-transparent'
+        scrolled && !open
+          ? 'border-b border-white/10 bg-ink-900/92 backdrop-blur-xl'
+          : open
+            ? 'border-b border-white/10 bg-ink-900'
+            : 'bg-transparent'
       }`}
     >
       <div className="container-site flex items-center justify-between gap-3 px-2 py-3 max-md:max-w-none sm:px-8 sm:py-4 lg:px-12">
@@ -100,41 +103,67 @@ export function Navbar() {
           </div>
         </button>
       </div>
+    </header>
 
-      {open && (
-        <div className="border-t border-white/10 bg-ink-950/98 px-2 pb-6 pt-2 sm:px-5 md:hidden">
-          <nav className="flex flex-col gap-1">
-            {NAV_LINKS.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                end={link.to === '/'}
-                onClick={() => setOpen(false)}
-                className={({ isActive }) =>
-                  `rounded-xl px-4 py-3 text-base font-medium ${
-                    isActive ? 'bg-azure-500/15 text-azure-300' : 'text-ink-200'
-                  }`
-                }
-              >
-                {link.label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="mt-4 space-y-2">
-            <Button
-              to={account.to}
-              variant="ghost"
-              className="w-full"
+      {open ? (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-ink-900 md:hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-2 py-3 sm:px-5">
+            <Link
+              to="/"
+              onClick={() => setOpen(false)}
+              aria-label="iTreq Inc home"
+              className="min-w-0"
+            >
+              <Logo className="h-[3.4rem]" />
+            </Link>
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white"
+              aria-label="Close menu"
               onClick={() => setOpen(false)}
             >
-              {account.label}
-            </Button>
-            <Button to="/contact" className="w-full" onClick={() => setOpen(false)}>
-              Get a Quote
-            </Button>
+              <span className="sr-only">Close menu</span>
+              <div className="flex w-5 flex-col gap-1.5">
+                <span className="h-0.5 w-full translate-y-2 rotate-45 bg-current" />
+                <span className="h-0.5 w-full opacity-0 bg-current" />
+                <span className="h-0.5 w-full -translate-y-2 -rotate-45 bg-current" />
+              </div>
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6 pt-2 sm:px-5">
+            <nav className="flex flex-col gap-1">
+              {NAV_LINKS.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end={link.to === '/'}
+                  onClick={() => setOpen(false)}
+                  className={({ isActive }) =>
+                    `rounded-xl px-4 py-3 text-base font-medium ${
+                      isActive ? 'bg-azure-500/15 text-azure-300' : 'text-ink-200'
+                    }`
+                  }
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="mt-4 space-y-2">
+              <Button
+                to={account.to}
+                variant="ghost"
+                className="w-full"
+                onClick={() => setOpen(false)}
+              >
+                {account.label}
+              </Button>
+              <Button to="/contact" className="w-full" onClick={() => setOpen(false)}>
+                Get a Quote
+              </Button>
+            </div>
           </div>
         </div>
-      )}
-    </header>
+      ) : null}
+    </>
   )
 }

@@ -147,7 +147,7 @@ export default function PortalPayNotify() {
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-6"
+        className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-6"
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
@@ -262,7 +262,7 @@ export default function PortalPayNotify() {
         </div>
       </form>
 
-      <section className="rounded-2xl border border-white/10 bg-ink-900/40">
+      <section className="rounded-2xl border border-white/10 bg-ink-900/90">
         <div className="border-b border-white/10 px-4 py-3">
           <h2 className="text-sm font-semibold text-white">Payments you&rsquo;ve reported</h2>
         </div>

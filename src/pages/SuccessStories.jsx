@@ -60,7 +60,7 @@ export default function SuccessStories() {
               ))}
             </div>
           ) : (
-            <p className="mt-10 rounded-2xl border border-dashed border-white/20 bg-ink-900/40 px-6 py-12 text-center text-ink-300">
+            <p className="mt-10 rounded-2xl border border-dashed border-white/20 bg-ink-900/90 px-6 py-12 text-center text-ink-300">
               No stories in this category yet. Share your recovery narratives and we will add the
               highlights here.
             </p>

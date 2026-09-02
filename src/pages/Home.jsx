@@ -86,7 +86,7 @@ export default function Home() {
       </section>
 
       {/* Services preview */}
-      <section className="section-pad border-t border-white/5 bg-ink-900/40">
+      <section className="section-pad border-t border-white/5 bg-ink-900/90">
         <div className="container-site">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -162,7 +162,7 @@ export default function Home() {
       </section>
 
       {/* Why choose us */}
-      <section className="section-pad border-t border-white/5 bg-ink-900/40">
+      <section className="section-pad border-t border-white/5 bg-ink-900/90">
         <div className="container-site grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-azure-400">

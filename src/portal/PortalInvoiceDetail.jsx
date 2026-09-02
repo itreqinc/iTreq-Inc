@@ -162,7 +162,7 @@ export default function PortalInvoiceDetail() {
         </div>
       </div>
 
-      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+      <div className={`${adminTableShellClass} bg-ink-900/90`}>
         <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -223,7 +223,7 @@ export default function PortalInvoiceDetail() {
       </div>
 
       {invoice.notes ? (
-        <p className="rounded-xl border border-white/10 bg-ink-900/40 px-4 py-3 text-sm text-ink-300">
+        <p className="rounded-xl border border-white/10 bg-ink-900/90 px-4 py-3 text-sm text-ink-300">
           {invoice.notes}
         </p>
       ) : null}

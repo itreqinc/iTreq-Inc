@@ -7,7 +7,7 @@ export function RecoveryCard({ story }) {
 
   return (
     <article
-      className={`overflow-hidden rounded-3xl border bg-ink-900/50 ${
+      className={`overflow-hidden rounded-3xl border bg-ink-900/90 ${
         story.isPlaceholder
           ? 'border-dashed border-white/20'
           : 'border-white/10'

@@ -32,7 +32,7 @@ export function DateRangeFilter({
   }
 
   return (
-    <div className={`${adminTableShellClass} bg-ink-900/40 ${className}`.trim()}>
+    <div className={`${adminTableShellClass} ${className}`.trim()}>
       <div className="flex flex-wrap items-end gap-3 border-b border-white/10 p-4">
         {leading}
         <YearMonthDaySelect

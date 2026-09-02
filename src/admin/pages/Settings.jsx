@@ -26,7 +26,7 @@ const empty = {
 }
 
 const sectionClass =
-  'w-full max-w-xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5'
+  'w-full max-w-xl rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5'
 
 function ChevronIcon({ open }) {
   return (

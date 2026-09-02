@@ -355,7 +355,7 @@ export default function ProductsPage() {
       {canManage && showNew ? (
         <form
           onSubmit={handleCreate}
-          className="max-w-xl space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+          className="max-w-xl space-y-3 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-white">New SKU</h2>

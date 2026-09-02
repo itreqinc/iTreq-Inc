@@ -25,8 +25,10 @@ const navItems = [
   { to: '/admin/settings', label: 'Settings', adminOnly: true },
 ]
 
-function navLinkClass(isActive) {
-  return `flex items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
+function navLinkClass(isActive, compact = false) {
+  return `flex items-center justify-between rounded-lg transition ${
+    compact ? 'px-2 py-1.5 text-[13px] leading-snug' : 'px-3 py-2.5 text-sm'
+  } ${
     isActive
       ? 'bg-brand-500/15 text-brand-300'
       : 'text-ink-300 hover:bg-white/5 hover:text-white'
@@ -53,6 +55,60 @@ function MobileMenuButton({ open, onToggle }) {
         />
       </div>
     </button>
+  )
+}
+
+function UserTools({ user, authBypass, setBypassRole, dualRole, setViewMode, navigate, onDone }) {
+  return (
+    <>
+      {authBypass ? (
+        <>
+          <span className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-amber-200">
+            Auth bypass ON
+          </span>
+          <label className="flex items-center gap-2 text-ink-300">
+            Role
+            <select
+              value={user?.role || ROLES.staff}
+              onChange={(e) => setBypassRole(e.target.value)}
+              className="rounded-md border border-white/10 bg-ink-950 px-2 py-1 text-white"
+            >
+              <option value={ROLES.admin}>admin</option>
+              <option value={ROLES.staff}>staff</option>
+              <option value={ROLES.client}>client</option>
+            </select>
+          </label>
+        </>
+      ) : (
+        <>
+          {dualRole ? (
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode(VIEW_MODES.client)
+                navigate('/portal')
+                onDone?.()
+              }}
+              className="rounded-md border border-brand-500/40 bg-brand-500/10 px-2 py-1 font-semibold text-brand-200"
+            >
+              Client view
+            </button>
+          ) : null}
+          <Link
+            to="/profile"
+            className="font-semibold text-ink-400 hover:text-ink-200"
+            onClick={() => onDone?.()}
+          >
+            Profile
+          </Link>
+          <SignOutButton className="font-semibold text-ink-400 hover:text-ink-200" />
+        </>
+      )}
+      <span className="text-ink-400">
+        {user?.name || 'User'} ·{' '}
+        <span className="text-ink-200">{privilegeRoleLabel(user?.role)}</span>
+      </span>
+    </>
   )
 }
 
@@ -83,114 +139,97 @@ export function AdminLayout() {
     }
   }, [navOpen])
 
+  const closeNav = () => setNavOpen(false)
+
   return (
     <OpsAlertProvider>
     <div className="min-h-screen overflow-x-clip text-ink-100">
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-ink-900/75 backdrop-blur-md">
-        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
-            <div className="flex items-center justify-between gap-3 lg:justify-start">
-              <div className="flex min-w-0 items-center gap-3">
-                <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={() => setNavOpen(false)}>
-                  <Logo className="h-9 shrink-0" />
-                  <span className="font-display text-sm font-semibold text-white">Operations</span>
-                </Link>
-                <Link
-                  to="/"
-                  className="hidden text-xs text-ink-400 hover:text-ink-200 sm:inline"
-                  onClick={() => setNavOpen(false)}
-                >
-                  ← Public site
-                </Link>
-              </div>
-              <MobileMenuButton open={navOpen} onToggle={() => setNavOpen((v) => !v)} />
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-ink-900/92 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={closeNav}>
+                <Logo className="h-9 shrink-0" />
+                <span className="font-display text-sm font-semibold text-white">Operations</span>
+              </Link>
+              <Link
+                to="/"
+                className="hidden text-xs text-ink-400 hover:text-ink-200 sm:inline"
+                onClick={closeNav}
+              >
+                ← Public site
+              </Link>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-            {authBypass ? (
-              <>
-                <span className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-amber-200">
-                  Auth bypass ON
-                </span>
-                <label className="flex items-center gap-2 text-ink-300">
-                  Role
-                  <select
-                    value={user?.role || ROLES.staff}
-                    onChange={(e) => setBypassRole(e.target.value)}
-                    className="rounded-md border border-white/10 bg-ink-950 px-2 py-1 text-white"
-                  >
-                    <option value={ROLES.admin}>admin</option>
-                    <option value={ROLES.staff}>staff</option>
-                    <option value={ROLES.client}>client</option>
-                  </select>
-                </label>
-              </>
-            ) : (
-              <>
-                {dualRole ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode(VIEW_MODES.client)
-                      navigate('/portal')
-                    }}
-                    className="rounded-md border border-brand-500/40 bg-brand-500/10 px-2 py-1 font-semibold text-brand-200"
-                  >
-                    Client view
-                  </button>
-                ) : null}
-                <Link
-                  to="/profile"
-                  className="font-semibold text-ink-400 hover:text-ink-200"
-                >
-                  Profile
-                </Link>
-                <SignOutButton className="font-semibold text-ink-400 hover:text-ink-200" />
-              </>
-            )}
-            <span className="text-ink-400">
-              {user?.name || 'User'} ·{' '}
-              <span className="text-ink-200">{privilegeRoleLabel(user?.role)}</span>
-            </span>
+            <div className="hidden flex-wrap items-center justify-end gap-3 text-xs lg:flex">
+              <UserTools
+                user={user}
+                authBypass={authBypass}
+                setBypassRole={setBypassRole}
+                dualRole={dualRole}
+                setViewMode={setViewMode}
+                navigate={navigate}
+              />
             </div>
+
+            <MobileMenuButton open={navOpen} onToggle={() => setNavOpen((v) => !v)} />
           </div>
         </div>
-
-        {navOpen ? (
-          <>
-            <button
-              type="button"
-              className="fixed inset-0 z-40 bg-ink-950/60 backdrop-blur-sm lg:hidden"
-              aria-label="Close menu"
-              onClick={() => setNavOpen(false)}
-            />
-            <nav className="relative z-50 max-h-[min(70vh,28rem)] overflow-y-auto border-t border-white/10 bg-ink-900/98 px-4 py-3 lg:hidden">
-              <div className="space-y-1">
-                {nav.map((item) =>
-                  item.type === 'heading' ? (
-                    <p
-                      key={`heading-${item.label}`}
-                      className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500 first:pt-0"
-                    >
-                      {item.label}
-                    </p>
-                  ) : (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end={item.end}
-                      onClick={() => setNavOpen(false)}
-                      className={({ isActive }) => navLinkClass(isActive)}
-                    >
-                      <span>{item.label}</span>
-                    </NavLink>
-                  ),
-                )}
-              </div>
-            </nav>
-          </>
-        ) : null}
       </header>
+
+      {navOpen ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-ink-900 lg:hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
+            <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={closeNav}>
+              <Logo className="h-9 shrink-0" />
+              <span className="font-display text-sm font-semibold text-white">Operations</span>
+            </Link>
+            <MobileMenuButton open onToggle={closeNav} />
+          </div>
+          <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-white/10 pb-4 text-xs">
+              <UserTools
+                user={user}
+                authBypass={authBypass}
+                setBypassRole={setBypassRole}
+                dualRole={dualRole}
+                setViewMode={setViewMode}
+                navigate={navigate}
+                onDone={closeNav}
+              />
+              <Link
+                to="/"
+                className="font-semibold text-ink-400 hover:text-ink-200 sm:hidden"
+                onClick={closeNav}
+              >
+                Public site
+              </Link>
+            </div>
+            <div className="space-y-1">
+              {nav.map((item) =>
+                item.type === 'heading' ? (
+                  <p
+                    key={`heading-${item.label}`}
+                    className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500 first:pt-0"
+                  >
+                    {item.label}
+                  </p>
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    onClick={closeNav}
+                    className={({ isActive }) => navLinkClass(isActive)}
+                  >
+                    <span>{item.label}</span>
+                  </NavLink>
+                ),
+              )}
+            </div>
+          </nav>
+        </div>
+      ) : null}
 
       {dualRole ? (
         <div className="border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-center text-xs text-amber-100 sm:px-6">
@@ -199,13 +238,13 @@ export function AdminLayout() {
         </div>
       ) : null}
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:grid lg:grid-cols-[220px_1fr] lg:gap-0">
-        <nav className="hidden space-y-1 lg:sticky lg:top-24 lg:block lg:self-start lg:border-r lg:border-white/10 lg:pr-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:grid lg:grid-cols-[10.5rem_minmax(0,1fr)] lg:gap-0">
+        <nav className="hidden space-y-0.5 lg:sticky lg:top-20 lg:block lg:self-start lg:border-r lg:border-white/10 lg:pr-3">
           {nav.map((item) =>
             item.type === 'heading' ? (
               <p
                 key={`heading-${item.label}`}
-                className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500 first:pt-0"
+                className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500 first:pt-0"
               >
                 {item.label}
               </p>
@@ -214,7 +253,7 @@ export function AdminLayout() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className={({ isActive }) => navLinkClass(isActive)}
+                className={({ isActive }) => navLinkClass(isActive, true)}
               >
                 <span>{item.label}</span>
               </NavLink>
@@ -222,7 +261,7 @@ export function AdminLayout() {
           )}
         </nav>
 
-        <main className="min-w-0 lg:pl-6">
+        <main className="min-w-0 lg:pl-4">
           <Outlet />
         </main>
       </div>

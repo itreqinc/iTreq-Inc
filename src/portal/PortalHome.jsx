@@ -174,7 +174,7 @@ export default function PortalHome() {
       </div>
 
       {!loading && unreadInvoices.length > 0 ? (
-        <section className={`${adminTableShellClass} bg-ink-900/40`}>
+        <section className={`${adminTableShellClass} bg-ink-900/90`}>
           <div className="border-b border-white/10 px-4 py-3">
             <h2 className="text-sm font-semibold text-white">
               New replies{' '}
@@ -213,7 +213,7 @@ export default function PortalHome() {
         </section>
       ) : null}
 
-      <section className={`${adminTableShellClass} bg-ink-900/40`}>
+      <section className={`${adminTableShellClass} bg-ink-900/90`}>
         <div className="border-b border-white/10 px-4 py-3">
           <h2 className="text-sm font-semibold text-white">Recent activity</h2>
         </div>

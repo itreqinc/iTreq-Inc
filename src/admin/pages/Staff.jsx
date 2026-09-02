@@ -673,7 +673,7 @@ export default function StaffPage() {
       {showForm ? (
         <form
           onSubmit={saveStaff}
-          className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+          className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
         >
           <div>
             <h2 className="font-semibold text-white">{form.user_id ? 'Edit staff' : 'New staff'}</h2>
@@ -871,7 +871,7 @@ export default function StaffPage() {
       ) : null}
 
       {viewing && !showForm ? (
-        <section className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+        <section className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-semibold text-white">{viewing.name}</h2>
@@ -1016,7 +1016,7 @@ export default function StaffPage() {
                       <tr className="border-b border-white/10 bg-ink-950/70">
                         <td colSpan={6} className="px-3 py-4">
                           <div className="grid gap-4 lg:grid-cols-3">
-                            <section className="rounded-xl border border-white/10 bg-ink-900/50 p-3 sm:p-4">
+                            <section className="rounded-xl border border-white/10 bg-ink-900/90 p-3 sm:p-4">
                               <h3 className="text-sm font-semibold text-white">Benefits</h3>
                               <ul className="mt-3 space-y-2 text-sm text-ink-300">
                                 {activeAssignments.map((a) => (
@@ -1103,7 +1103,7 @@ export default function StaffPage() {
                               )}
                             </section>
 
-                            <section className="rounded-xl border border-white/10 bg-ink-900/50 p-3 sm:p-4">
+                            <section className="rounded-xl border border-white/10 bg-ink-900/90 p-3 sm:p-4">
                               <h3 className="text-sm font-semibold text-white">Open advances</h3>
                               <ul className="mt-3 space-y-2 text-sm text-ink-300">
                                 {advances.map((a) => (
@@ -1181,7 +1181,7 @@ export default function StaffPage() {
                               </div>
                             </section>
 
-                            <section className="rounded-xl border border-white/10 bg-ink-900/50 p-3 sm:p-4">
+                            <section className="rounded-xl border border-white/10 bg-ink-900/90 p-3 sm:p-4">
                               <h3 className="text-sm font-semibold text-white">After-hours access</h3>
                               <p className="mt-1 text-xs text-ink-500">
                                 Ops is Mon–Fri 07:00–18:00. Grant temporary access beyond that window.
@@ -1269,7 +1269,7 @@ function StaffPayslipsPanel({ userId }) {
   }, [userId, showError])
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-ink-900/40 p-4">
+    <section className="rounded-2xl border border-white/10 bg-ink-900/90 p-4">
       <h2 className="font-semibold text-white">
         {userId ? 'Payslips for selected staff' : 'All payslips'}
       </h2>

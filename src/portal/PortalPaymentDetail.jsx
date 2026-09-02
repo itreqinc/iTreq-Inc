@@ -131,7 +131,7 @@ export default function PortalPaymentDetail() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-ink-900/40 px-4 py-4">
+      <div className="rounded-2xl border border-white/10 bg-ink-900/90 px-4 py-4">
         <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">
           Amount received
         </p>
@@ -140,7 +140,7 @@ export default function PortalPaymentDetail() {
         </p>
       </div>
 
-      <div className={`${adminTableShellClass} bg-ink-900/40`}>
+      <div className={`${adminTableShellClass} bg-ink-900/90`}>
         <table className={adminTableClass}>
           <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
             <tr>
@@ -198,7 +198,7 @@ export default function PortalPaymentDetail() {
       </div>
 
       {payment.notes ? (
-        <p className="rounded-xl border border-white/10 bg-ink-900/40 px-4 py-3 text-sm text-ink-300">
+        <p className="rounded-xl border border-white/10 bg-ink-900/90 px-4 py-3 text-sm text-ink-300">
           {payment.notes}
         </p>
       ) : null}

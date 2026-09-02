@@ -454,7 +454,7 @@ export default function StockPage() {
             {levels.map((row) => (
               <div
                 key={row.product_id}
-                className="rounded-2xl border border-white/10 bg-ink-900/50 p-4"
+                className="rounded-2xl border border-white/10 bg-ink-900/90 p-4"
               >
                 <p className="font-mono text-xs text-ink-400">{row.sku}</p>
                 <p className="mt-1 text-sm text-ink-200">{row.name}</p>
@@ -464,7 +464,7 @@ export default function StockPage() {
             ))}
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+          <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
             <CollapsiblePanel
               open={poSectionOpen}
               onToggle={() => setPoSectionOpen((v) => !v)}
@@ -536,7 +536,7 @@ export default function StockPage() {
             </CollapsiblePanel>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+          <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
             <CollapsiblePanel
               open={adjSectionOpen}
               onToggle={() => setAdjSectionOpen((v) => !v)}
@@ -671,7 +671,7 @@ export default function StockPage() {
       {view === 'newPo' ? (
         <form
           onSubmit={handleCreatePo}
-          className="max-w-2xl space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+          className="max-w-2xl space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
         >
           <div>
             <h2 className="text-sm font-semibold text-white">New purchase order</h2>
@@ -836,7 +836,7 @@ export default function StockPage() {
 
       {view === 'detail' && detail ? (
         <div className="max-w-2xl space-y-5">
-          <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+          <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
             <h2 className="text-base font-semibold text-white">Purchase Order</h2>
             <p className="mt-0.5 font-mono text-xs font-normal text-ink-400">
               {detail.po_number}
@@ -901,7 +901,7 @@ export default function StockPage() {
           </div>
 
           {detail.status === 'open' ? (
-            <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+            <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
               <CollapsiblePanel
                 open={detailReceiveOpen}
                 onToggle={() => setDetailReceiveOpen((v) => !v)}
@@ -962,7 +962,7 @@ export default function StockPage() {
           ) : null}
 
           {(detail.purchase_receipts || []).length > 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+            <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
               <CollapsiblePanel
                 open={detailHistoryOpen}
                 onToggle={() => setDetailHistoryOpen((v) => !v)}

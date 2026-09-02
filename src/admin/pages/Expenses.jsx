@@ -220,7 +220,7 @@ export default function ExpensesPage() {
       {showForm ? (
         <form
           onSubmit={handleSubmit}
-          className="max-w-2xl space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+          className="max-w-2xl space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
         >
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>

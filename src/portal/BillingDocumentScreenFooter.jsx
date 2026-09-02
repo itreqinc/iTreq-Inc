@@ -18,7 +18,7 @@ export function BillingDocumentScreenFooter({ model }) {
       ) : null}
 
       {bankingLines.length ? (
-        <div className="rounded-xl border border-white/10 bg-ink-900/40 px-4 py-3">
+        <div className="rounded-xl border border-white/10 bg-ink-900/90 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">
             Banking details
           </p>
@@ -31,7 +31,7 @@ export function BillingDocumentScreenFooter({ model }) {
       ) : null}
 
       {terms.length ? (
-        <div className="rounded-xl border border-white/10 bg-ink-900/40 px-4 py-3">
+        <div className="rounded-xl border border-white/10 bg-ink-900/90 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">Terms</p>
           <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-ink-300">
             {terms.map((term) => (

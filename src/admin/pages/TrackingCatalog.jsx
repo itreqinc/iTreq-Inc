@@ -295,7 +295,7 @@ export default function TrackingCatalogPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-4">
+        <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4">
           <p className="text-xs uppercase tracking-wider text-ink-400">Catalog items</p>
           <p className="mt-2 text-2xl font-bold tabular-nums text-white">{health.total}</p>
         </div>
@@ -308,7 +308,7 @@ export default function TrackingCatalogPage() {
           <p className="mt-2 text-2xl font-bold tabular-nums text-white">{health.incomplete}</p>
           <p className="mt-1 text-xs text-ink-400">Active but missing bundle SKUs</p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-4">
+        <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4">
           <p className="text-xs uppercase tracking-wider text-ink-400">Draft</p>
           <p className="mt-2 text-2xl font-bold tabular-nums text-white">{health.draft}</p>
           <p className="mt-1 text-xs text-ink-400">Not active in portal</p>
@@ -334,7 +334,7 @@ export default function TrackingCatalogPage() {
             : 'grid gap-4 lg:grid-cols-[minmax(0,18rem)]'
         }
       >
-        <aside className="admin-scroll max-h-[70vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-900/40">
+        <aside className="admin-scroll max-h-[70vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-900/90">
           <div className="sticky top-0 border-b border-white/10 bg-ink-900/95 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-400">
             Client catalog
           </div>
@@ -394,7 +394,7 @@ export default function TrackingCatalogPage() {
             onSubmit={canManage ? saveAll : (e) => e.preventDefault()}
             className="space-y-4"
           >
-            <div className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="text-sm font-semibold text-white">
@@ -474,7 +474,7 @@ export default function TrackingCatalogPage() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
               <div>
                 <h2 className="text-sm font-semibold text-white">Bundle (SKUs included)</h2>
                 <p className="mt-1 text-xs text-ink-400">
@@ -558,7 +558,7 @@ export default function TrackingCatalogPage() {
             </div>
 
             {previewLines.length ? (
-              <div className="space-y-2 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+              <div className="space-y-2 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
                 <h2 className="text-sm font-semibold text-white">Quote line preview</h2>
                 <p className="text-xs text-ink-400">
                   One client quantity of this item becomes these lines on a quote or invoice.

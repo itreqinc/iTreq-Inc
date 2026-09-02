@@ -945,7 +945,7 @@ export default function InvoicesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-white/10 bg-ink-900/50 p-0.5">
+          <div className="inline-flex rounded-xl border border-white/10 bg-ink-900/90 p-0.5">
             <button
               type="button"
               onClick={() => setListView('invoices')}
@@ -988,7 +988,7 @@ export default function InvoicesPage() {
         <form
           ref={formRef}
           onSubmit={handleSave}
-          className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+          className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-white">

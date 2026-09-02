@@ -156,7 +156,7 @@ export function PaydaySettingsPanel({ embedded = false }) {
   if (embedded) return body
 
   return (
-    <section className="w-full max-w-xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+    <section className="w-full max-w-xl rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
       <h2 className="font-display text-lg font-semibold text-white">Payroll payday</h2>
       <p className="mt-1 text-sm text-ink-400">
         Default: later of the month’s last Tuesday and last Thursday. An admin override replaces

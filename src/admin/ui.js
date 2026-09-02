@@ -19,10 +19,10 @@ export const adminBtnDanger =
  * itself does not shift sideways when columns are wide.
  */
 export const adminTableShellClass =
-  'admin-scroll max-w-full overflow-x-auto rounded-2xl border border-white/10'
+  'admin-scroll max-w-full overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/90'
 
 export const adminTableShellSmClass =
-  'admin-scroll max-w-full overflow-x-auto rounded-xl border border-white/10'
+  'admin-scroll max-w-full overflow-x-auto rounded-xl border border-white/10 bg-ink-900/90'
 
 export const adminTableClass = 'w-full text-left text-sm'
 

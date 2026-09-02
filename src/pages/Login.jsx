@@ -133,7 +133,7 @@ export default function Login() {
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-md space-y-6">
         {DEV_AUTH_SWITCHER ? (
-          <div className="rounded-3xl border border-amber-500/30 bg-ink-900/60 p-8">
+          <div className="rounded-3xl border border-amber-500/30 bg-ink-900/92 p-8">
             <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-amber-200">
               Local testing
             </p>
@@ -144,7 +144,7 @@ export default function Login() {
           </div>
         ) : null}
 
-        <div className="rounded-3xl border border-white/10 bg-ink-900/60 p-8">
+        <div className="rounded-3xl border border-white/10 bg-ink-900/92 p-8">
           {DEV_AUTH_SWITCHER ? (
             <button
               type="button"

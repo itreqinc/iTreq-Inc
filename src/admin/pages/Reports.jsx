@@ -126,7 +126,7 @@ function CollapsibleSection({ open, onToggle, title, description, className, chi
 }
 
 const reportSectionClass =
-  'w-full min-w-0 max-w-3xl rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5'
+  'w-full min-w-0 max-w-3xl rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5'
 
 function DateRangeFields({ from, to, onFromChange, onToChange }) {
   return (
@@ -896,7 +896,7 @@ export default function ReportsPage() {
                       −{formatPula(pl.stockPurchases)}
                     </td>
                   </tr>
-                  <tr className="bg-ink-900/40">
+                  <tr className="bg-ink-900/90">
                     <td className={`${adminCellPad} font-semibold text-ink-100`}>Gross profit</td>
                     <td className={`${adminCellPad} text-right font-semibold text-ink-100`}>
                       {formatPula(pl.grossProfit)}
@@ -908,7 +908,7 @@ export default function ReportsPage() {
                       −{formatPula(pl.operatingExpenses)}
                     </td>
                   </tr>
-                  <tr className="border-t-2 border-white/20 bg-ink-900/60">
+                  <tr className="border-t-2 border-white/20 bg-ink-900/92">
                     <td className={`${adminCellPad} font-bold text-white`}>Net profit</td>
                     <td
                       className={`${adminCellPad} text-right font-bold ${

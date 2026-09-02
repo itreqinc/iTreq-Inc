@@ -170,7 +170,7 @@ export default function PortalStatement() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-white/10 bg-ink-900/90 p-4">
         <YearMonthDaySelect label="From" value={from} onChange={setFrom} />
         <YearMonthDaySelect label="To" value={to} onChange={setTo} />
         <button type="button" onClick={load} disabled={loading} className={adminBtnSecondary}>
@@ -202,19 +202,19 @@ export default function PortalStatement() {
       {statement ? (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
+            <div className="rounded-xl border border-white/10 bg-ink-900/90 p-4">
               <p className="text-xs uppercase tracking-wider text-ink-400">Opening</p>
               <p className={`mt-1 text-lg font-semibold ${balanceClass(statement.openingBalance)}`}>
                 {formatPula(statement.openingBalance)}
               </p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
+            <div className="rounded-xl border border-white/10 bg-ink-900/90 p-4">
               <p className="text-xs uppercase tracking-wider text-ink-400">Closing</p>
               <p className={`mt-1 text-lg font-semibold ${balanceClass(statement.closingBalance)}`}>
                 {formatPula(statement.closingBalance)}
               </p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
+            <div className="rounded-xl border border-white/10 bg-ink-900/90 p-4">
               <p className="text-xs uppercase tracking-wider text-ink-400">Period</p>
               <p className="mt-1 text-sm text-ink-200">
                 Charges {formatPula(statement.periodCharges)} · Credits{' '}
@@ -223,7 +223,7 @@ export default function PortalStatement() {
             </div>
           </div>
 
-          <div className={`${adminTableShellClass} bg-ink-900/40`}>
+          <div className={`${adminTableShellClass} bg-ink-900/90`}>
             <table className={adminTableClass}>
               <thead className="bg-ink-950/50 text-xs uppercase tracking-wider text-ink-400">
                 <tr>

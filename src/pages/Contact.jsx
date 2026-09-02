@@ -104,7 +104,7 @@ export default function Contact() {
             {contactCards.map((card) => (
               <div
                 key={card.label}
-                className="flex items-start gap-4 rounded-2xl border border-white/10 bg-ink-900/50 p-5"
+                className="flex items-start gap-4 rounded-2xl border border-white/10 bg-ink-900/90 p-5"
               >
                 <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400">
                   <Icon name={card.icon} className="h-5 w-5" />
@@ -139,7 +139,7 @@ export default function Contact() {
             </a>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-ink-900/50 p-6 sm:p-8">
+          <div className="rounded-3xl border border-white/10 bg-ink-900/90 p-6 sm:p-8">
             {submitted ? (
               <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
                 <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500/15 text-brand-400">

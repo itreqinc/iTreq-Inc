@@ -1149,7 +1149,7 @@ export default function ClientsPage() {
       </div>
 
       {viewing && !showForm && view === 'directory' ? (
-        <section className="rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5">
+        <section className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-semibold text-white">{viewing.name}</h2>
@@ -1202,7 +1202,7 @@ export default function ClientsPage() {
         <form
           ref={formRef}
           onSubmit={handleSubmit}
-          className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/40 p-4 sm:p-5"
+          className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-white">

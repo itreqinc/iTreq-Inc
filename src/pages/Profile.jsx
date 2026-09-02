@@ -138,7 +138,7 @@ export default function Profile() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
-      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-ink-900/60 p-8">
+      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-ink-900/92 p-8">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-bold text-white">My profile</h1>

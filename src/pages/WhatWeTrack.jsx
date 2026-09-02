@@ -56,7 +56,7 @@ export default function WhatWeTrack() {
                     className={`group relative z-20 w-full rounded-2xl border p-6 text-left transition duration-300 ${
                       isOpen
                         ? 'border-brand-500/50 bg-ink-800 shadow-lg shadow-black/40'
-                        : 'border-white/10 bg-ink-900/40 hover:border-brand-500/35 hover:bg-ink-800/50'
+                        : 'border-white/10 bg-ink-900/90 hover:border-brand-500/35 hover:bg-ink-800/50'
                     }`}
                   >
                     <div

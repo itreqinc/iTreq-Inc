@@ -19,7 +19,7 @@ export default function Services() {
             <article
               key={service.id}
               id={service.id}
-              className={`grid gap-8 rounded-3xl border border-white/10 bg-ink-900/50 p-6 sm:p-8 lg:grid-cols-[1fr_1.2fr] lg:items-start ${
+              className={`grid gap-8 rounded-3xl border border-white/10 bg-ink-900/90 p-6 sm:p-8 lg:grid-cols-[1fr_1.2fr] lg:items-start ${
                 index % 2 === 1 ? 'lg:[&>*:first-child]:order-2' : ''
               }`}
             >
