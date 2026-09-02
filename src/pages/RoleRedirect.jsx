@@ -22,7 +22,7 @@ export default function RoleRedirect() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-ink-950 text-ink-300">
+      <div className="flex min-h-screen items-center justify-center text-ink-300">
         Redirecting…
       </div>
     )

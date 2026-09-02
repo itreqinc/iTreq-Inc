@@ -73,7 +73,7 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-ink-950 text-ink-300">
+      <div className="flex min-h-screen items-center justify-center text-ink-300">
         Loading…
       </div>
     )
@@ -137,7 +137,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-ink-950 px-4 py-10">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-ink-900/60 p-8">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

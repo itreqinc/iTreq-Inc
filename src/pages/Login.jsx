@@ -130,7 +130,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-ink-950 px-4 py-10">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-md space-y-6">
         {DEV_AUTH_SWITCHER ? (
           <div className="rounded-3xl border border-amber-500/30 bg-ink-900/60 p-8">

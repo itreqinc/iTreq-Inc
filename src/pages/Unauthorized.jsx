@@ -11,7 +11,7 @@ function UnauthorizedInner() {
   const role = user?.role
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-ink-950 px-4 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
       <h1 className="font-display text-2xl font-bold text-white">Not authorized</h1>
       <p className="mt-3 max-w-md text-sm text-ink-300">
         Your account does not have access to this area

@@ -21,7 +21,7 @@ export function ProtectedRoute({ children, allowedRoles, requireOpsHours = false
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-ink-950 text-ink-300">
+      <div className="flex min-h-screen items-center justify-center text-ink-300">
         Checking your session…
       </div>
     )

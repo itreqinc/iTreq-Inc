@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { BrandedBackground } from './components/BrandedBackground'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AdminOnlyRoute } from './components/AdminOnlyRoute'
 import { AdminLayout } from './admin/AdminLayout'
@@ -45,7 +46,10 @@ import { ROLES, STAFF_LIKE_ROLES } from './lib/authConfig'
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <BrandedBackground />
+      <div className="relative z-10">
+        <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/services" element={<Services />} />
@@ -128,6 +132,8 @@ export default function App() {
         <Route path="payments/:id" element={<PortalPaymentDetail />} />
         <Route path="statement" element={<PortalStatement />} />
       </Route>
-    </Routes>
+        </Routes>
+      </div>
+    </>
   )
 }

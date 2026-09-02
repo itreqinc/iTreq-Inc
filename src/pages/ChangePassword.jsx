@@ -16,7 +16,7 @@ export default function ChangePassword() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-ink-950 text-ink-300">
+      <div className="flex min-h-screen items-center justify-center text-ink-300">
         Loading…
       </div>
     )
@@ -73,7 +73,7 @@ export default function ChangePassword() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-ink-950 px-4 py-10">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-md rounded-3xl border border-white/10 bg-ink-900/60 p-8">
         <h1 className="font-display text-2xl font-bold text-white">Change password</h1>
         <p className="mt-2 text-sm text-ink-300">

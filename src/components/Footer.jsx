@@ -4,7 +4,7 @@ import { Logo } from './Logo'
 
 export function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-ink-900">
+    <footer className="border-t border-white/10 bg-ink-900/75 backdrop-blur-md">
       <div className="container-site section-pad !py-14">
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr]">
           <div>

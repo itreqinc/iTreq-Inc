@@ -8,7 +8,7 @@ export default function OpsClosed() {
   const { dualRole, setViewMode } = useAuth()
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-ink-950 px-4 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
       <h1 className="font-display text-2xl font-bold text-white">
         Operations are currently closed
       </h1>
