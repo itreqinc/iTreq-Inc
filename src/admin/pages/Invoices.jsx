@@ -100,6 +100,17 @@ function invoiceStatusClass(status) {
   }
 }
 
+function InvoiceStatusPill({ displayStatus, creditHint }) {
+  return (
+    <span
+      className={`relative inline-block rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${invoiceStatusClass(displayStatus)}`}
+    >
+      {displayStatus}
+      {creditHint ? <CornerHintIcon icon="payment" title={creditHint} /> : null}
+    </span>
+  )
+}
+
 function newInvoiceForm(clientId = '') {
   const issue = getDefaultNewInvoiceIssueDate()
   return {
@@ -1169,10 +1180,10 @@ export default function InvoicesPage() {
             {saving ? 'Issuing…' : `Issue selected (${issueSelectedIds.length})`}
           </button>
         </div>
-        <table className={`${adminTableClass} table-fixed`}>
+        <table className={`${adminTableClass} sm:table-fixed`}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="w-10 px-3 py-3">
+              <th className="w-10 px-2 py-3 sm:px-3">
                 <input
                   ref={masterIssueCheckboxRef}
                   type="checkbox"
@@ -1187,17 +1198,19 @@ export default function InvoicesPage() {
                   }}
                 />
               </th>
-              <th className="w-[7.5rem] px-3 py-3 whitespace-nowrap">Number</th>
-              <th className="px-3 py-3">Client</th>
+              <th className="px-2 py-3 whitespace-nowrap sm:w-[7.5rem] sm:px-3">Number</th>
+              <th className="min-w-0 px-2 py-3 sm:px-3">Client</th>
               <th className={`w-[6.75rem] px-2 py-3 whitespace-nowrap ${adminColSecondary}`}>
                 Issued
               </th>
               <th className={`w-[6.75rem] px-2 py-3 whitespace-nowrap ${adminColSecondary}`}>
                 Due
               </th>
-              <th className="w-[5.5rem] px-2 py-3 whitespace-nowrap">Status</th>
-              <th className="w-[6.5rem] px-2 py-3 whitespace-nowrap text-right">Total</th>
-              <th className="w-12 px-2 py-3" />
+              <th className={`w-[5.5rem] px-2 py-3 whitespace-nowrap ${adminColSecondary}`}>
+                Status
+              </th>
+              <th className="px-2 py-3 whitespace-nowrap text-right sm:w-[6.5rem]">Total</th>
+              <th className="w-10 px-1 py-3 sm:w-12 sm:px-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -1220,6 +1233,16 @@ export default function InvoicesPage() {
                 const displayStatus = invoiceDisplayStatus(row)
                 const unread = unreadByInvoice[row.id] || 0
                 const open = () => openRow(row.id)
+                const clientCredit = creditByClient[row.client_id] || 0
+                const balanceDue = invoiceBalanceDue(row)
+                const creditHint =
+                  clientCredit > 0.001 &&
+                  (displayStatus === 'due' ||
+                    displayStatus === 'overdue' ||
+                    displayStatus === 'partial') &&
+                  balanceDue > 0.001
+                    ? `${row.clients?.name || 'Client'} has ${formatPula(clientCredit)} on account — apply credit`
+                    : null
                 return (
                   <tr
                     key={row.id}
@@ -1231,7 +1254,7 @@ export default function InvoicesPage() {
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
-                    <td className="px-3 py-3">
+                    <td className="px-2 py-3 sm:px-3">
                       {row.status === 'draft' ? (
                         <input
                           type="checkbox"
@@ -1251,18 +1274,26 @@ export default function InvoicesPage() {
                         />
                       ) : null}
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <span className={clickableDocClass}>{row.number || 'Draft'}</span>
-                      {unread > 0 ? (
-                        <span className="ml-1.5 inline-flex rounded-md bg-amber-500/25 px-1.5 py-0.5 text-xs font-semibold text-amber-100">
-                          {unread === 1 ? '1 new' : `${unread} new`}
+                    <td className="px-2 py-3 sm:px-3">
+                      <div className="flex flex-col items-start gap-1">
+                        <span className="whitespace-nowrap">
+                          <span className={clickableDocClass}>{row.number || 'Draft'}</span>
+                          {unread > 0 ? (
+                            <span className="ml-1.5 inline-flex rounded-md bg-amber-500/25 px-1.5 py-0.5 text-xs font-semibold text-amber-100">
+                              {unread === 1 ? '1 new' : `${unread} new`}
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
+                        <span className="sm:hidden">
+                          <InvoiceStatusPill
+                            displayStatus={displayStatus}
+                            creditHint={creditHint}
+                          />
+                        </span>
+                      </div>
                     </td>
-                    <td className="px-3 py-3 text-ink-200">
-                      <span className="break-words [overflow-wrap:anywhere]">
-                        {row.clients?.name || '—'}
-                      </span>
+                    <td className="min-w-0 px-2 py-3 text-ink-200 sm:px-3">
+                      <span className="break-words">{row.clients?.name || '—'}</span>
                     </td>
                     <td
                       className={`px-2 py-3 whitespace-nowrap text-ink-300 tabular-nums ${adminColSecondary}`}
@@ -1274,36 +1305,17 @@ export default function InvoicesPage() {
                     >
                       {row.due_date || '—'}
                     </td>
-                    <td className="px-2 py-3 whitespace-nowrap">
-                      {(() => {
-                        const clientCredit = creditByClient[row.client_id] || 0
-                        const balanceDue = invoiceBalanceDue(row)
-                        const showCreditHint =
-                          clientCredit > 0.001 &&
-                          (displayStatus === 'due' ||
-                            displayStatus === 'overdue' ||
-                            displayStatus === 'partial') &&
-                          balanceDue > 0.001
-                        return (
-                          <span
-                            className={`relative inline-block rounded-md px-2 py-0.5 text-xs font-semibold capitalize ${invoiceStatusClass(displayStatus)}`}
-                          >
-                            {displayStatus}
-                            {showCreditHint ? (
-                              <CornerHintIcon
-                                icon="payment"
-                                title={`${row.clients?.name || 'Client'} has ${formatPula(clientCredit)} on account — apply credit`}
-                              />
-                            ) : null}
-                          </span>
-                        )
-                      })()}
+                    <td className={`px-2 py-3 whitespace-nowrap ${adminColSecondary}`}>
+                      <InvoiceStatusPill
+                        displayStatus={displayStatus}
+                        creditHint={creditHint}
+                      />
                     </td>
                     <td className="px-2 py-3 whitespace-nowrap text-right text-ink-200 tabular-nums">
                       {formatPula(row.total)}
                     </td>
                     <td
-                      className="px-2 py-3 text-right"
+                      className="px-1 py-3 text-right sm:px-2"
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >
