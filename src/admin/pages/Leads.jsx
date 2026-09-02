@@ -21,6 +21,8 @@ import {
   clickableRowClass,
   adminTableClass,
   adminColSecondary,
+  adminColAction,
+  adminCellPad,
 } from '../ui'
 
 const STATUS_LABELS = {

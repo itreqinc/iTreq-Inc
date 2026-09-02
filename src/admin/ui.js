@@ -15,22 +15,25 @@ export const adminBtnDanger =
   'inline-flex items-center justify-center rounded-xl border border-red-400/40 bg-transparent px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/10 disabled:opacity-50'
 
 /**
- * Rounded table frame. Horizontal scroll stays inside the shell so the page
- * itself does not shift sideways when columns are wide.
+ * Rounded table frame. Tables must fit the viewport on mobile (no page or
+ * inner horizontal scroll) — hide extra columns and let cells wrap.
  */
 export const adminTableShellClass =
-  'admin-scroll max-w-full overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/90'
+  'max-w-full overflow-x-clip rounded-2xl border border-white/10 bg-ink-900/90'
 
 export const adminTableShellSmClass =
-  'admin-scroll max-w-full overflow-x-auto rounded-xl border border-white/10 bg-ink-900/90'
+  'max-w-full overflow-x-clip rounded-xl border border-white/10 bg-ink-900/90'
 
-export const adminTableClass = 'w-full text-left text-sm'
+export const adminTableClass = 'w-full table-fixed text-left text-[13px] sm:text-sm'
 
 /** Hide secondary table columns on narrow screens to avoid sideways scroll. */
 export const adminColSecondary = 'hidden sm:table-cell'
 
+/** Row is already clickable; hide the trailing action column on phones. */
+export const adminColAction = 'hidden sm:table-cell'
+
 /** Compact cell padding that still breathes on larger screens. */
-export const adminCellPad = 'px-3 py-2.5 sm:px-4 sm:py-3'
+export const adminCellPad = 'px-2 py-2 sm:px-4 sm:py-3'
 
 /** Table rows that open a document on click. */
 export const clickableRowClass =

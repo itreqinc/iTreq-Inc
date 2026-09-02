@@ -15,6 +15,7 @@ import {
   adminFieldClass,
   adminTableClass,
   adminColSecondary,
+  adminColAction,
   adminCellPad,
   activateRowKey,
   clickableDocClass,
@@ -372,7 +373,7 @@ export default function ExpensesPage() {
               <th className={`${adminCellPad} ${adminColSecondary}`}>Method</th>
               <th className={`${adminCellPad} ${adminColSecondary}`}>Reference</th>
               <th className={`${adminCellPad} text-right`}>Amount</th>
-              <th className={adminCellPad} />
+              <th className={`${adminCellPad} ${adminColAction}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -419,7 +420,7 @@ export default function ExpensesPage() {
                       {formatPula(row.amount)}
                     </td>
                     <td
-                      className={`${adminCellPad} text-right`}
+                      className={`${adminCellPad} text-right ${adminColAction}`}
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >

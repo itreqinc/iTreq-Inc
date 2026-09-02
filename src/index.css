@@ -52,6 +52,11 @@
     background-color: #08141f;
   }
 
+  #root {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   ::selection {
     @apply bg-azure-500/30 text-white;
   }

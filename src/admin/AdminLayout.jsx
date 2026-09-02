@@ -149,7 +149,7 @@ export function AdminLayout() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={closeNav}>
-                <Logo className="h-9 shrink-0" />
+                <Logo className="h-8 max-w-[9.5rem] sm:h-9 sm:max-w-[14rem]" />
                 <span className="font-display text-sm font-semibold text-white">Operations</span>
               </Link>
               <Link
@@ -181,7 +181,7 @@ export function AdminLayout() {
         <div className="fixed inset-0 z-50 flex flex-col bg-ink-900 lg:hidden">
           <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
             <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={closeNav}>
-              <Logo className="h-9 shrink-0" />
+              <Logo className="h-8 max-w-[9.5rem] sm:h-9 sm:max-w-[14rem]" />
               <span className="font-display text-sm font-semibold text-white">Operations</span>
             </Link>
             <MobileMenuButton open onToggle={closeNav} />

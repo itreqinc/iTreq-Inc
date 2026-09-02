@@ -62,6 +62,8 @@ import { adminBtnDanger,
   formatPula,
   adminTableClass,
   adminColSecondary,
+  adminColAction,
+  adminCellPad,
 } from '../ui'
 
 function invoiceRowClass(status) {
@@ -1174,16 +1176,16 @@ export default function InvoicesPage() {
             type="button"
             disabled={saving || issueSelectedIds.length === 0}
             onClick={handleIssueSelected}
-            className={adminBtnPrimary}
+            className={`${adminBtnPrimary} w-full sm:w-auto`}
             title={issueSelectedIds.length ? undefined : 'Select draft invoices to issue'}
           >
             {saving ? 'Issuing…' : `Issue selected (${issueSelectedIds.length})`}
           </button>
         </div>
-        <table className={`${adminTableClass} sm:table-fixed`}>
+        <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="w-10 px-2 py-3 sm:px-3">
+              <th className="w-8 px-1.5 py-2 sm:w-10 sm:px-3 sm:py-3">
                 <input
                   ref={masterIssueCheckboxRef}
                   type="checkbox"
@@ -1198,8 +1200,8 @@ export default function InvoicesPage() {
                   }}
                 />
               </th>
-              <th className="px-2 py-3 whitespace-nowrap sm:w-[7.5rem] sm:px-3">Number</th>
-              <th className="min-w-0 px-2 py-3 sm:px-3">Client</th>
+              <th className="w-[4.25rem] px-1.5 py-2 sm:w-[7.5rem] sm:px-3 sm:py-3">Number</th>
+              <th className="min-w-0 px-1.5 py-2 sm:px-3 sm:py-3">Client</th>
               <th className={`w-[6.75rem] px-2 py-3 whitespace-nowrap ${adminColSecondary}`}>
                 Issued
               </th>
@@ -1209,8 +1211,10 @@ export default function InvoicesPage() {
               <th className={`w-[5.5rem] px-2 py-3 whitespace-nowrap ${adminColSecondary}`}>
                 Status
               </th>
-              <th className="px-2 py-3 whitespace-nowrap text-right sm:w-[6.5rem]">Total</th>
-              <th className="w-10 px-1 py-3 sm:w-12 sm:px-2" />
+              <th className="w-[4.75rem] px-1.5 py-2 text-right sm:w-[6.5rem] sm:px-3 sm:py-3">
+                Total
+              </th>
+              <th className={`w-10 px-1 py-3 sm:w-12 sm:px-2 ${adminColAction}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -1254,7 +1258,7 @@ export default function InvoicesPage() {
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
-                    <td className="px-2 py-3 sm:px-3">
+                    <td className="px-1.5 py-2 sm:px-3 sm:py-3">
                       {row.status === 'draft' ? (
                         <input
                           type="checkbox"
@@ -1274,12 +1278,12 @@ export default function InvoicesPage() {
                         />
                       ) : null}
                     </td>
-                    <td className="px-2 py-3 sm:px-3">
-                      <div className="flex flex-col items-start gap-1">
-                        <span className="whitespace-nowrap">
+                    <td className="px-1.5 py-2 sm:px-3 sm:py-3">
+                      <div className="flex min-w-0 flex-col items-start gap-1">
+                        <span className="min-w-0 break-words">
                           <span className={clickableDocClass}>{row.number || 'Draft'}</span>
                           {unread > 0 ? (
-                            <span className="ml-1.5 inline-flex rounded-md bg-amber-500/25 px-1.5 py-0.5 text-xs font-semibold text-amber-100">
+                            <span className="ml-1.5 inline-flex rounded-md bg-amber-500/25 px-1.5 py-0.5 text-[11px] font-semibold text-amber-100">
                               {unread === 1 ? '1 new' : `${unread} new`}
                             </span>
                           ) : null}
@@ -1292,7 +1296,7 @@ export default function InvoicesPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="min-w-0 px-2 py-3 text-ink-200 sm:px-3">
+                    <td className="min-w-0 px-1.5 py-2 text-ink-200 sm:px-3 sm:py-3">
                       <span className="break-words">{row.clients?.name || '—'}</span>
                     </td>
                     <td
@@ -1311,11 +1315,11 @@ export default function InvoicesPage() {
                         creditHint={creditHint}
                       />
                     </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-right text-ink-200 tabular-nums">
+                    <td className="px-1.5 py-2 text-right text-[12px] tabular-nums text-ink-200 sm:px-3 sm:py-3 sm:text-sm">
                       {formatPula(row.total)}
                     </td>
                     <td
-                      className="px-1 py-3 text-right sm:px-2"
+                      className={`px-1 py-3 text-right sm:px-2 ${adminColAction}`}
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >

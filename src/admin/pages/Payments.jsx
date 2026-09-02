@@ -41,6 +41,8 @@ import {
   adminFieldClass,
   adminTableClass,
   adminColSecondary,
+  adminColAction,
+  adminCellPad,
   activateRowKey,
   clickableDocClass,
   clickableRowClass,
@@ -942,9 +944,8 @@ export default function PaymentsPage() {
         shown={visibleRows.length}
         total={listTotalForFilter}
         size="compact"
-        dateClassName="w-[15.5rem] shrink-0"
         leading={
-          <div className="inline-flex shrink-0 rounded-xl border border-white/10 bg-ink-950/50 p-0.5">
+          <div className="grid w-full grid-cols-3 gap-0.5 rounded-xl border border-white/10 bg-ink-950/50 p-0.5 sm:inline-flex sm:w-auto">
             {[
               { id: 'payments', label: 'Payments' },
               { id: 'adjustments', label: 'Adjustments' },
@@ -969,12 +970,12 @@ export default function PaymentsPage() {
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Client</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Method</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Reference</th>
-              <th className="px-4 py-3">Amount</th>
-              <th className="px-4 py-3" />
+              <th className={`${adminCellPad} w-[5.25rem] sm:w-auto`}>Date</th>
+              <th className={`${adminCellPad} min-w-0`}>Client</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Method</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Reference</th>
+              <th className={`${adminCellPad} w-[4.75rem] text-right sm:w-auto sm:text-left`}>Amount</th>
+              <th className={`${adminCellPad} ${adminColAction}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -1009,8 +1010,8 @@ export default function PaymentsPage() {
                   onClick={open}
                   onKeyDown={(e) => activateRowKey(e, open)}
                 >
-                  <td className="px-4 py-3 text-ink-300">{row.payment_date}</td>
-                  <td className="min-w-0 break-words px-4 py-3">
+                  <td className={`${adminCellPad} break-words text-ink-300`}>{row.payment_date}</td>
+                  <td className={`${adminCellPad} min-w-0 break-words`}>
                     <span className={clickableDocClass}>{row.clients?.name || '—'}</span>
                   </td>
                   <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
@@ -1019,8 +1020,8 @@ export default function PaymentsPage() {
                   <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
                     {row.reference || '—'}
                   </td>
-                  <td className="px-4 py-3 font-medium text-ink-100">
-                    <span className="relative inline-block tabular-nums">
+                  <td className={`${adminCellPad} text-right font-medium text-ink-100 sm:text-left`}>
+                    <span className="relative inline-block tabular-nums text-[12px] sm:text-sm">
                       {formatPula(row.amount)}
                       {(() => {
                         const unallocated = unallocatedByPayment[row.id] || 0
@@ -1038,7 +1039,7 @@ export default function PaymentsPage() {
                     </span>
                   </td>
                   <td
-                    className="px-4 py-3 text-right"
+                    className={`${adminCellPad} text-right ${adminColAction}`}
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => e.stopPropagation()}
                   >

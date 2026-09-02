@@ -57,6 +57,8 @@ import { adminBtnPrimary,
   adminTableShellSmClass,
   adminTableClass,
   adminColSecondary,
+  adminColAction,
+  adminCellPad,
 } from '../ui'
 
 const dash = (value) => {
@@ -1291,11 +1293,11 @@ export default function ClientsPage() {
           <table className={adminTableClass}>
             <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
               <tr>
-                <th className="min-w-[11rem] px-4 py-3 sm:min-w-[14rem]">Name</th>
-                <th className={`px-4 py-3 ${adminColSecondary}`}>ID</th>
-                <th className="whitespace-nowrap px-4 py-3">Phone</th>
-                <th className={`px-4 py-3 ${adminColSecondary}`}>Email</th>
-                <th className="px-4 py-3" />
+                <th className={`${adminCellPad} min-w-0`}>Name</th>
+                <th className={`${adminCellPad} ${adminColSecondary}`}>ID</th>
+                <th className={`${adminCellPad} w-[6.5rem] sm:w-auto`}>Phone</th>
+                <th className={`${adminCellPad} ${adminColSecondary}`}>Email</th>
+                <th className={`${adminCellPad} ${adminColAction}`} />
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -1332,9 +1334,9 @@ export default function ClientsPage() {
                       onClick={open}
                       onKeyDown={(e) => activateRowKey(e, open)}
                     >
-                      <td className="min-w-[11rem] px-4 py-3 sm:min-w-[14rem]">
+                      <td className={`${adminCellPad} min-w-0`}>
                         <span
-                          className={`${clickableDocClass} break-words [overflow-wrap:anywhere]`}
+                          className={`${clickableDocClass} break-words`}
                         >
                           {c.name}
                         </span>
@@ -1342,10 +1344,10 @@ export default function ClientsPage() {
                           <span className="ml-2 text-xs text-red-300">Inactive</span>
                         ) : null}
                       </td>
-                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                      <td className={`${adminCellPad} text-ink-300 ${adminColSecondary}`}>
                         {c.id_number || '—'}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-ink-300">
+                      <td className={`${adminCellPad} break-words text-ink-300`}>
                         {c.cellphone || c.phone || '—'}
                       </td>
                       <td className={`max-w-[10rem] px-4 py-3 text-ink-300 sm:max-w-[14rem] ${adminColSecondary}`}>
@@ -1357,7 +1359,7 @@ export default function ClientsPage() {
                           '—'
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className={`${adminCellPad} text-right ${adminColAction}`}>
                         <ClientRowActions
                           label={`Actions for ${c.name}`}
                           items={clientMenuItems(c)}
@@ -1373,8 +1375,8 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-end gap-2.5">
-            <label className="block min-w-[10rem] max-w-sm flex-1">
+          <div className="grid grid-cols-1 items-end gap-2.5 sm:flex sm:flex-wrap">
+            <label className="block min-w-0 w-full max-w-sm sm:flex-1">
               <span className="sr-only">Search clients</span>
               <input
                 type="search"
@@ -1489,20 +1491,20 @@ export default function ClientsPage() {
               Choose the period for{' '}
               <span className="text-ink-100">{stmtModalClient.name}</span>.
             </p>
-            <div className="mt-4 flex flex-wrap items-end gap-2.5">
+            <div className="mt-4 grid grid-cols-1 items-end gap-2.5 sm:flex sm:flex-wrap">
               <YearMonthDaySelect
                 size="compact"
                 label="From"
                 value={stmtFrom}
                 onChange={setStmtFrom}
-                className="w-[14rem] shrink-0"
+                className="w-full min-w-0 sm:w-[14rem]"
               />
               <YearMonthDaySelect
                 size="compact"
                 label="To"
                 value={stmtTo}
                 onChange={setStmtTo}
-                className="w-[14rem] shrink-0"
+                className="w-full min-w-0 sm:w-[14rem]"
               />
             </div>
             <div className="mt-5 flex flex-wrap justify-end gap-2">

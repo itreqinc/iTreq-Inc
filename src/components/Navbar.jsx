@@ -48,7 +48,7 @@ export function Navbar() {
           to="/"
           onClick={() => setOpen(false)}
           aria-label="iTreq Inc home"
-          className="max-md:-ml-1 max-md:scale-[1.08] max-md:origin-left max-md:drop-shadow-[0_12px_28px_rgba(32,128,208,0.35)] sm:scale-100 sm:drop-shadow-[0_10px_22px_rgba(32,128,208,0.22)] transition-transform duration-300"
+          className="min-w-0 max-md:origin-left sm:drop-shadow-[0_10px_22px_rgba(32,128,208,0.22)]"
         >
           <Logo className="h-14 max-md:h-[3.4rem] sm:h-14" />
         </Link>

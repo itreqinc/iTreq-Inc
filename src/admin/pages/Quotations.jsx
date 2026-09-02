@@ -46,6 +46,8 @@ import { adminBtnDanger,
   formatPula,
   adminTableClass,
   adminColSecondary,
+  adminColAction,
+  adminCellPad,
 } from '../ui'
 
 function snapshotQuotationForm(form) {
@@ -737,24 +739,24 @@ export default function QuotationsPage() {
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className="px-4 py-3">Number</th>
-              <th className="px-4 py-3">Client / lead</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`}>Date</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Total</th>
-              <th className={`px-4 py-3 ${adminColSecondary}`} />
+              <th className={`${adminCellPad} w-[4.5rem] sm:w-auto`}>Number</th>
+              <th className={`${adminCellPad} min-w-0`}>Client / lead</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Date</th>
+              <th className={`${adminCellPad} ${adminColSecondary}`}>Status</th>
+              <th className={`${adminCellPad} w-[4.75rem] text-right sm:w-auto`}>Total</th>
+              <th className={`${adminCellPad} ${adminColAction}`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-ink-400">
+                <td colSpan={6} className={`${adminCellPad} text-ink-400`}>
                   Loading…
                 </td>
               </tr>
             ) : visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-ink-400">
+                <td colSpan={6} className={`${adminCellPad} text-ink-400`}>
                   {rows.length === 0
                     ? 'No quotations yet.'
                     : 'No quotations in the selected date range.'}
@@ -774,14 +776,19 @@ export default function QuotationsPage() {
                   onClick={open}
                   onKeyDown={(e) => activateRowKey(e, open)}
                 >
-                  <td className="px-4 py-3">
-                    <span className={clickableDocClass}>{row.number || '—'}</span>
+                  <td className={adminCellPad}>
+                    <div className="flex min-w-0 flex-col items-start gap-0.5">
+                      <span className={`${clickableDocClass} break-words`}>{row.number || '—'}</span>
+                      <span className={`sm:hidden text-[11px] ${awaiting ? 'font-medium text-amber-200' : 'capitalize text-ink-400'}`}>
+                        {statusLabel(row)}
+                      </span>
+                    </div>
                   </td>
-                  <td className="min-w-0 break-words px-4 py-3 text-ink-300">
+                  <td className={`${adminCellPad} min-w-0 break-words text-ink-300`}>
                     {quotationRecipientName(row)}
                   </td>
-                  <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>{row.issue_date}</td>
-                  <td className="px-4 py-3 text-ink-300">
+                  <td className={`${adminCellPad} text-ink-300 ${adminColSecondary}`}>{row.issue_date}</td>
+                  <td className={`${adminCellPad} text-ink-300 ${adminColSecondary}`}>
                     <span
                       className={
                         awaiting
@@ -795,8 +802,10 @@ export default function QuotationsPage() {
                       <span className="ml-2 text-xs normal-case text-ink-500">portal</span>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 text-ink-200">{formatPula(row.total)}</td>
-                  <td className={`px-4 py-3 text-right ${adminColSecondary}`}>
+                  <td className={`${adminCellPad} text-right text-[12px] tabular-nums text-ink-200 sm:text-sm`}>
+                    {formatPula(row.total)}
+                  </td>
+                  <td className={`${adminCellPad} text-right ${adminColAction}`}>
                     <span className="text-xs font-semibold text-brand-400 group-hover:text-brand-300">
                       Open
                     </span>

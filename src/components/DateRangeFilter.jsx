@@ -33,15 +33,15 @@ export function DateRangeFilter({
 
   return (
     <div className={`${adminTableShellClass} ${className}`.trim()}>
-      <div className="flex flex-wrap items-end gap-3 border-b border-white/10 p-4">
-        {leading}
+      <div className="grid grid-cols-1 gap-3 border-b border-white/10 p-3 sm:flex sm:flex-wrap sm:items-end sm:gap-3 sm:p-4">
+        {leading ? <div className="min-w-0 w-full sm:w-auto">{leading}</div> : null}
         <YearMonthDaySelect
           size={size}
           label="From"
           value={from}
           onChange={onFromChange}
           maxYmd={todayIso()}
-          className={dateClassName || undefined}
+          className={`w-full min-w-0 sm:w-[14.5rem] ${dateClassName}`.trim()}
         />
         <YearMonthDaySelect
           size={size}
@@ -49,7 +49,7 @@ export function DateRangeFilter({
           value={to}
           onChange={onToChange}
           maxYmd={toMax}
-          className={dateClassName || undefined}
+          className={`w-full min-w-0 sm:w-[14.5rem] ${dateClassName}`.trim()}
         />
         <button
           type="button"
@@ -59,7 +59,7 @@ export function DateRangeFilter({
         >
           Clear
         </button>
-        <p className="ml-auto max-w-xs text-xs text-ink-400">
+        <p className="w-full text-xs text-ink-400 sm:ml-auto sm:max-w-xs">
           {backwards
             ? 'The “From” date is after the “To” date.'
             : active
