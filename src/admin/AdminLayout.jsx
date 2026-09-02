@@ -145,7 +145,7 @@ export function AdminLayout() {
     <OpsAlertProvider>
     <div className="min-h-screen overflow-x-clip text-ink-100">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-ink-900/92 backdrop-blur-md">
-        <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6">
+        <div className="px-4 py-2.5 sm:px-5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <Link to="/admin" className="flex min-w-0 items-center gap-2" onClick={closeNav}>
@@ -238,8 +238,8 @@ export function AdminLayout() {
         </div>
       ) : null}
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:grid lg:grid-cols-[10.5rem_minmax(0,1fr)] lg:gap-0">
-        <nav className="hidden space-y-0.5 lg:sticky lg:top-20 lg:block lg:self-start lg:border-r lg:border-white/10 lg:pr-3">
+      <div className="px-4 py-6 sm:px-5 lg:grid lg:grid-cols-[max-content_minmax(0,1fr)] lg:items-start lg:gap-x-3">
+        <nav className="hidden w-max space-y-0.5 lg:sticky lg:top-20 lg:block lg:self-start lg:border-r lg:border-white/10 lg:pr-2.5">
           {nav.map((item) =>
             item.type === 'heading' ? (
               <p
@@ -261,7 +261,7 @@ export function AdminLayout() {
           )}
         </nav>
 
-        <main className="min-w-0 lg:pl-4">
+        <main className="min-w-0 lg:pl-1">
           <Outlet />
         </main>
       </div>
