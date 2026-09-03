@@ -106,6 +106,7 @@ export default function PaymentsPage() {
   const [listView, setListView] = useState('payments') // payments | adjustments | all
   const [unallocatedByPayment, setUnallocatedByPayment] = useState({})
   const [clientsWithUnpaidInvoices, setClientsWithUnpaidInvoices] = useState(() => new Set())
+  const [clientsWithUnsettledOpening, setClientsWithUnsettledOpening] = useState(() => new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -125,11 +126,15 @@ export default function PaymentsPage() {
       showError(hints.error.message)
       setUnallocatedByPayment({})
       setClientsWithUnpaidInvoices(new Set())
+      setClientsWithUnsettledOpening(new Set())
       return
     }
     setUnallocatedByPayment(hints.data?.unallocatedByPaymentId || {})
     setClientsWithUnpaidInvoices(
       new Set(hints.data?.clientIdsWithUnpaidInvoices || []),
+    )
+    setClientsWithUnsettledOpening(
+      new Set(hints.data?.clientIdsWithUnsettledOpening || []),
     )
   }, [showError, ownClientId])
 
@@ -1025,16 +1030,27 @@ export default function PaymentsPage() {
                       {formatPula(row.amount)}
                       {(() => {
                         const unallocated = unallocatedByPayment[row.id] || 0
-                        const showInvoiceHint =
+                        const hasUnpaidInvoices = clientsWithUnpaidInvoices.has(
+                          String(row.client_id),
+                        )
+                        const hasUnsettledOpening = clientsWithUnsettledOpening.has(
+                          String(row.client_id),
+                        )
+                        const showCreditHint =
                           !row.is_adjustment &&
                           unallocated > 0.001 &&
-                          clientsWithUnpaidInvoices.has(String(row.client_id))
-                        return showInvoiceHint ? (
+                          (hasUnpaidInvoices || hasUnsettledOpening)
+                        if (!showCreditHint) return null
+                        const reasons = [
+                          hasUnpaidInvoices ? 'unpaid invoices' : null,
+                          hasUnsettledOpening ? 'unsettled brought-forward' : null,
+                        ].filter(Boolean)
+                        return (
                           <CornerHintIcon
                             icon="invoice"
-                            title={`${formatPula(unallocated)} from this payment is still on account — client has unpaid invoices`}
+                            title={`${formatPula(unallocated)} from this payment is still on account — client has ${reasons.join(' and ')}`}
                           />
-                        ) : null
+                        )
                       })()}
                     </span>
                   </td>

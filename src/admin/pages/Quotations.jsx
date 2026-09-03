@@ -297,7 +297,7 @@ export default function QuotationsPage() {
    * Save quotation without closing the form. Used by Add line so each line is
    * persisted before starting the next.
    */
-  async function persistQuoteKeepingOpen(formOverride = null, { appendBlank = false } = {}) {
+  async function persistQuoteKeepingOpen(formOverride = null, { appendBlank = false, removedLine = false } = {}) {
     if (readOnly) return false
     const payload = formOverride || form
     const recip = parseRecipientKey(payload.recipient_key)
@@ -307,7 +307,11 @@ export default function QuotationsPage() {
     }
     const usable = normalizeLines(payload.lines)
     if (!usable.length) {
-      showError('Fill in the current line (description or product) before adding another.')
+      showError(
+        removedLine
+          ? 'Keep at least one line item on the quotation.'
+          : 'Fill in the current line (description or product) before adding another.',
+      )
       return false
     }
 
@@ -362,7 +366,13 @@ export default function QuotationsPage() {
         lines: appendBlank ? nextLines.slice(0, -1) : nextLines,
       }),
     )
-    showSuccess(appendBlank ? 'Line saved. Add the next one below.' : 'Line saved.')
+    showSuccess(
+      appendBlank
+        ? 'Line saved. Add the next one below.'
+        : removedLine
+          ? 'Line removed.'
+          : 'Line saved.',
+    )
     return true
   }
 
@@ -370,8 +380,11 @@ export default function QuotationsPage() {
     await persistQuoteKeepingOpen(null, { appendBlank: true })
   }
 
-  async function handlePersistLines(nextLines) {
-    await persistQuoteKeepingOpen({ ...form, lines: nextLines }, { appendBlank: false })
+  async function handlePersistLines(nextLines, { removedLine = false } = {}) {
+    await persistQuoteKeepingOpen(
+      { ...form, lines: nextLines },
+      { appendBlank: false, removedLine },
+    )
   }
 
   async function handleApprove() {

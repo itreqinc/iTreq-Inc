@@ -152,13 +152,23 @@ export function LineItemsEditor({
       products.find((p) => p.id === line?.product_id)?.name ||
       `line ${index + 1}`
 
+    const persists = Boolean(onPersistLines)
     const ok = await confirm({
       title: 'Remove this line?',
-      message: `"${label}" will be removed from this document. You can still cancel saving if this was a mistake.`,
+      message: persists
+        ? `"${label}" will be removed from this document.`
+        : `"${label}" will be removed from this document. You can still cancel saving if this was a mistake.`,
       confirmLabel: 'Remove line',
     })
     if (!ok) return
-    onChange(lines.filter((_, i) => i !== index))
+    const next = lines
+      .filter((_, i) => i !== index)
+      .map((row, i) => ({ ...row, sort_order: i + 1 }))
+    if (persists) {
+      await onPersistLines(next, { removedLine: true })
+      return
+    }
+    onChange(next)
   }
 
   const totals = calcDocTotals(lines, taxRate, discountAmount)
@@ -317,8 +327,9 @@ export function LineItemsEditor({
               {!readOnly ? (
                 <button
                   type="button"
+                  disabled={persistBusy}
                   onClick={() => removeLine(index)}
-                  className="text-xs font-medium text-red-300 hover:text-red-200"
+                  className="text-xs font-medium text-red-300 hover:text-red-200 disabled:opacity-50"
                 >
                   Remove
                 </button>
@@ -338,7 +349,7 @@ export function LineItemsEditor({
               <th className="px-3 py-2">Qty</th>
               <th className="px-3 py-2">Unit price</th>
               <th className={`px-3 py-2 ${adminColSecondary}`}>Line</th>
-              {!readOnly ? <th className="px-3 py-2 text-right"> </th> : null}
+              {!readOnly ? <th className="w-[4.75rem] px-3 py-2 text-right"> </th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -353,11 +364,12 @@ export function LineItemsEditor({
                   {formatPula(calcLineTotal(line.quantity, line.unit_price))}
                 </td>
                 {!readOnly ? (
-                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                  <td className="w-[4.75rem] px-3 py-2 text-right whitespace-nowrap">
                     <button
                       type="button"
+                      disabled={persistBusy}
                       onClick={() => removeLine(index)}
-                      className="text-xs font-medium text-red-300 hover:text-red-200"
+                      className="text-xs font-medium text-red-300 hover:text-red-200 disabled:opacity-50"
                     >
                       Remove
                     </button>

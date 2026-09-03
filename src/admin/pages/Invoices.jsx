@@ -485,9 +485,9 @@ export default function InvoicesPage() {
    * Save without closing the form. Used by Add line so each line is
    * persisted before starting the next (drafts and voided invoices).
    * @param {object} [formOverride] form payload to save (defaults to current form)
-   * @param {{ appendBlank?: boolean }} [opts]
+   * @param {{ appendBlank?: boolean, removedLine?: boolean }} [opts]
    */
-  async function persistDraftKeepingOpen(formOverride = null, { appendBlank = false } = {}) {
+  async function persistDraftKeepingOpen(formOverride = null, { appendBlank = false, removedLine = false } = {}) {
     if (!invoiceCanEdit(form.status)) return false
     const payload = formOverride || form
     if (!payload.client_id) {
@@ -496,7 +496,11 @@ export default function InvoicesPage() {
     }
     const usable = normalizeLines(payload.lines)
     if (!usable.length) {
-      showError('Fill in the current line (description or product) before adding another.')
+      showError(
+        removedLine
+          ? 'Keep at least one line item on the invoice.'
+          : 'Fill in the current line (description or product) before adding another.',
+      )
       return false
     }
 
@@ -553,7 +557,13 @@ export default function InvoicesPage() {
         lines: appendBlank ? nextLines.slice(0, -1) : nextLines,
       }),
     )
-    showSuccess(appendBlank ? 'Line saved. Add the next one below.' : 'Line saved.')
+    showSuccess(
+      appendBlank
+        ? 'Line saved. Add the next one below.'
+        : removedLine
+          ? 'Line removed.'
+          : 'Line saved.',
+    )
     return true
   }
 
@@ -561,8 +571,11 @@ export default function InvoicesPage() {
     await persistDraftKeepingOpen(null, { appendBlank: true })
   }
 
-  async function handlePersistLines(nextLines) {
-    await persistDraftKeepingOpen({ ...form, lines: nextLines }, { appendBlank: false })
+  async function handlePersistLines(nextLines, { removedLine = false } = {}) {
+    await persistDraftKeepingOpen(
+      { ...form, lines: nextLines },
+      { appendBlank: false, removedLine },
+    )
   }
 
   async function handleIssue(invoiceId = editingId) {

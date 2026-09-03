@@ -2298,20 +2298,22 @@ const directOpsApi = {
     return { data: Object.fromEntries(pairs), error: null }
   },
 
-  /** Per-payment unallocated amounts and clients with unpaid invoices (list hints). */
+  /** Per-payment unallocated amounts and clients with unpaid invoices or unsettled B/F (list hints). */
   async getPaymentListCreditHints() {
     if (!supabase) return dbUnavailable()
-    const [paymentsRes, allocsRes, invoicesRes] = await Promise.all([
+    const [paymentsRes, allocsRes, invoicesRes, clientsRes] = await Promise.all([
       supabase.from('payments').select('id, client_id, amount, opening_balance_delta'),
       supabase.from('payment_allocations').select('payment_id, amount'),
       supabase
         .from('invoices')
         .select('client_id, total, amount_paid, status')
         .in('status', ['issued', 'partial']),
+      supabase.from('clients').select('id, opening_balance'),
     ])
     if (paymentsRes.error) return mapError(paymentsRes.error)
     if (allocsRes.error) return mapError(allocsRes.error)
     if (invoicesRes.error) return mapError(invoicesRes.error)
+    if (clientsRes.error) return mapError(clientsRes.error)
 
     const allocByPayment = {}
     for (const row of allocsRes.data || []) {
@@ -2330,19 +2332,31 @@ const directOpsApi = {
     }
 
     const clientIdsWithUnpaidInvoices = []
-    const seen = new Set()
+    const seenUnpaid = new Set()
     for (const inv of invoicesRes.data || []) {
       const due =
         Math.round((Number(inv.total) - Number(inv.amount_paid)) * 100) / 100
       const cid = String(inv.client_id)
-      if (due > 0.001 && !seen.has(cid)) {
-        seen.add(cid)
+      if (due > 0.001 && !seenUnpaid.has(cid)) {
+        seenUnpaid.add(cid)
         clientIdsWithUnpaidInvoices.push(cid)
       }
     }
 
+    const remainingById = openingBalanceRemainingMap(
+      clientsRes.data || [],
+      paymentsRes.data || [],
+    )
+    const clientIdsWithUnsettledOpening = Object.entries(remainingById)
+      .filter(([, remaining]) => Number(remaining) > 0.001)
+      .map(([id]) => String(id))
+
     return {
-      data: { unallocatedByPaymentId, clientIdsWithUnpaidInvoices },
+      data: {
+        unallocatedByPaymentId,
+        clientIdsWithUnpaidInvoices,
+        clientIdsWithUnsettledOpening,
+      },
       error: null,
     }
   },

@@ -12,6 +12,7 @@ import {
   adminColSecondary,
   formatPula,
 } from '../ui'
+import { CornerHintIcon } from './CornerHintIcon'
 import { useOpeningBalanceActions } from './OpeningBalanceActions'
 
 function balanceTone(amount) {
@@ -98,7 +99,15 @@ export function OpeningBalancesPanel({ ownClientId }) {
                   <td
                     className={`px-4 py-3 text-right text-sm font-semibold tabular-nums ${balanceTone(remaining)}`}
                   >
-                    {formatPula(remaining)}
+                    <span className="relative inline-block">
+                      {formatPula(remaining)}
+                      {remaining > 0.001 && credit > 0.001 ? (
+                        <CornerHintIcon
+                          icon="payment"
+                          title={`${formatPula(credit)} on account — apply to brought-forward`}
+                        />
+                      ) : null}
+                    </span>
                   </td>
                   <td
                     className={`px-4 py-3 text-right text-sm tabular-nums text-ink-400 ${adminColSecondary}`}

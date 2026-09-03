@@ -2612,19 +2612,21 @@ handlers.list_client_credit_balances = async ({ sb }, args) => {
   return Object.fromEntries(pairs)
 }
 
-/** Unallocated payment leftovers + clients with unpaid invoices (list UI hints). */
+/** Unallocated payment leftovers + clients with unpaid invoices or unsettled B/F (list UI hints). */
 handlers.get_payment_list_credit_hints = async ({ sb }) => {
-  const [paymentsRes, allocsRes, invoicesRes] = await Promise.all([
+  const [paymentsRes, allocsRes, invoicesRes, clientsRes] = await Promise.all([
     sb.from('payments').select('id, client_id, amount, opening_balance_delta'),
     sb.from('payment_allocations').select('payment_id, amount'),
     sb
       .from('invoices')
       .select('client_id, total, amount_paid, status')
       .in('status', ['issued', 'partial']),
+    sb.from('clients').select('id, opening_balance'),
   ])
   if (paymentsRes.error) throw mapDbError(paymentsRes.error)
   if (allocsRes.error) throw mapDbError(allocsRes.error)
   if (invoicesRes.error) throw mapDbError(invoicesRes.error)
+  if (clientsRes.error) throw mapDbError(clientsRes.error)
 
   const allocByPayment: Record<string, number> = {}
   for (const row of allocsRes.data || []) {
@@ -2649,7 +2651,7 @@ handlers.get_payment_list_credit_hints = async ({ sb }) => {
   }
 
   const clientIdsWithUnpaidInvoices: string[] = []
-  const seen = new Set<string>()
+  const seenUnpaid = new Set<string>()
   for (const inv of invoicesRes.data || []) {
     const row = inv as {
       client_id: string
@@ -2658,13 +2660,25 @@ handlers.get_payment_list_credit_hints = async ({ sb }) => {
     }
     const due = Math.round((Number(row.total) - Number(row.amount_paid)) * 100) / 100
     const cid = String(row.client_id)
-    if (due > 0.001 && !seen.has(cid)) {
-      seen.add(cid)
+    if (due > 0.001 && !seenUnpaid.has(cid)) {
+      seenUnpaid.add(cid)
       clientIdsWithUnpaidInvoices.push(cid)
     }
   }
 
-  return { unallocatedByPaymentId, clientIdsWithUnpaidInvoices }
+  const remainingById = openingBalanceRemainingMap(
+    (clientsRes.data || []) as Record<string, unknown>[],
+    (paymentsRes.data || []) as Record<string, unknown>[],
+  )
+  const clientIdsWithUnsettledOpening = Object.entries(remainingById)
+    .filter(([, remaining]) => Number(remaining) > 0.001)
+    .map(([id]) => String(id))
+
+  return {
+    unallocatedByPaymentId,
+    clientIdsWithUnpaidInvoices,
+    clientIdsWithUnsettledOpening,
+  }
 }
 
 handlers.apply_client_credit_to_invoice = async ({ user, sb }, args) => {
