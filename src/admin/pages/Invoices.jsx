@@ -83,6 +83,14 @@ function invoiceRowClass(status) {
   }
 }
 
+function invoiceCanEdit(status) {
+  return status === 'draft' || status === 'void'
+}
+
+function invoiceCanIssue(status) {
+  return status === 'draft' || status === 'void'
+}
+
 function invoiceStatusClass(status) {
   switch (status) {
     case 'draft':
@@ -383,10 +391,9 @@ export default function InvoicesPage() {
   }, [rows, dateFrom, dateTo, unreadByInvoice])
 
   const issueableDraftIds = useMemo(() => {
-    // If a draft invoice is currently being edited with unsaved changes,
-    // it is "blocked" and should not be issued in bulk.
+    // Draft and void invoices can be issued / re-issued. Skip the open dirty form.
     return visibleRows
-      .filter((r) => r.status === 'draft')
+      .filter((r) => invoiceCanIssue(r.status))
       .filter((r) => !(r.id === editingId && isDirty))
       .map((r) => r.id)
   }, [visibleRows, editingId, isDirty])
@@ -408,14 +415,14 @@ export default function InvoicesPage() {
     setIssueSelectedIds((prev) => prev.filter((id) => allowed.has(id)))
   }, [issueableDraftIds])
 
-  const readOnly = form.status !== 'draft'
-  /** New invoices always; existing drafts only after a change. */
+  const readOnly = !invoiceCanEdit(form.status)
+  /** New invoices always; existing drafts/voids only after a change. */
   const canSaveDraft = !readOnly && (!editingId || isDirty)
   const canIssue =
-    Boolean(editingId) && form.status === 'draft' && !isDirty && !saving
+    Boolean(editingId) && invoiceCanIssue(form.status) && !isDirty && !saving
   const canVoid =
     Boolean(editingId) && form.status !== 'void' && !isDirty && !saving
-  /** Draft delete requires a clean form; void invoices are read-only so isDirty is ignored. */
+  /** Draft and void delete require a clean form. */
   const canDeleteDraft =
     isAdmin(user?.role) &&
     Boolean(editingId) &&
@@ -426,6 +433,7 @@ export default function InvoicesPage() {
     isAdmin(user?.role) &&
     Boolean(editingId) &&
     form.status === 'void' &&
+    !isDirty &&
     !saving
   const canDelete = canDeleteDraft || canDeleteVoid
 
@@ -433,10 +441,17 @@ export default function InvoicesPage() {
     e.preventDefault()
     if (!canSaveDraft) return
 
+    const savingVoid = form.status === 'void'
     const ok = await confirm({
-      title: editingId ? 'Save changes to this draft?' : 'Save this draft invoice?',
+      title: editingId
+        ? savingVoid
+          ? 'Save changes to this voided invoice?'
+          : 'Save changes to this draft?'
+        : 'Save this draft invoice?',
       message: editingId
-        ? 'Your updates to this draft Invoice will be saved.'
+        ? savingVoid
+          ? 'Your updates will be saved. Re-issue the invoice when you want it active again.'
+          : 'Your updates to this draft Invoice will be saved.'
         : 'This invoice will be saved as a draft.',
       confirmLabel: 'Save',
     })
@@ -454,7 +469,11 @@ export default function InvoicesPage() {
       showError(err.message)
       return
     }
-    showSuccess('A draft Invoice has been saved.')
+    showSuccess(
+      savingVoid
+        ? 'Voided invoice saved. Re-issue it to make it active again.'
+        : 'A draft Invoice has been saved.',
+    )
     if (!editingId && saved?.issue_date) {
       setDefaultNewInvoiceIssueDate(saved.issue_date)
     }
@@ -463,13 +482,13 @@ export default function InvoicesPage() {
   }
 
   /**
-   * Save draft without closing the form. Used by Add line so each line is
-   * persisted before starting the next.
+   * Save without closing the form. Used by Add line so each line is
+   * persisted before starting the next (drafts and voided invoices).
    * @param {object} [formOverride] form payload to save (defaults to current form)
    * @param {{ appendBlank?: boolean }} [opts]
    */
   async function persistDraftKeepingOpen(formOverride = null, { appendBlank = false } = {}) {
-    if (form.status !== 'draft') return false
+    if (!invoiceCanEdit(form.status)) return false
     const payload = formOverride || form
     if (!payload.client_id) {
       showError('Please select a client.')
@@ -562,16 +581,18 @@ export default function InvoicesPage() {
     const creditRes = await opsApi.getClientCreditBalance(invoice.client_id)
     const clientCredit = creditRes.data?.balance ?? 0
 
-    let issueMessage =
-      'Issuing assigns an invoice number and manipulates stock levels for items listed in this invoice. This action cannot be undone. Continue?'
+    const reissuing = invoice.status === 'void'
+    let issueMessage = reissuing
+      ? 'Re-issuing makes this invoice active again and deducts stock for listed items. The invoice number stays the same.'
+      : 'Issuing assigns an invoice number and manipulates stock levels for items listed in this invoice. This action cannot be undone. Continue?'
     if (clientCredit > 0) {
       issueMessage += `\n\nThis client has ${formatPula(clientCredit)} on account. You can apply it to this invoice after issuing.`
     }
 
     const ok = await confirm({
-      title: 'Issue this invoice?',
+      title: reissuing ? 'Re-issue this invoice?' : 'Issue this invoice?',
       message: issueMessage,
-      confirmLabel: 'Issue invoice',
+      confirmLabel: reissuing ? 'Re-issue invoice' : 'Issue invoice',
     })
     if (!ok) return
     setSaving(true)
@@ -623,7 +644,7 @@ export default function InvoicesPage() {
     const ok = await confirm({
       title: `Issue ${idsToIssue.length} invoice(s)?`,
       message:
-        'Issuing assigns invoice numbers and deducts stock levels for each selected draft invoice. This action cannot be undone. Continue?',
+        'Issuing assigns invoice numbers (or keeps an existing number on a voided invoice) and deducts stock for each selected draft or voided invoice. Continue?',
       confirmLabel: 'Issue selected',
     })
     if (!ok) return
@@ -680,7 +701,8 @@ export default function InvoicesPage() {
     }
     const ok = await confirm({
       title: 'Void this invoice?',
-      message: 'Stock levels for items listed in this invoice will be restored. This cannot be undone.',
+      message:
+        'Stock will be restored where it was deducted. Payments and other allocations on this invoice will be released back to the client account. You can then edit and re-issue the invoice.',
       confirmLabel: 'Void invoice',
     })
     if (!ok) return
@@ -691,11 +713,34 @@ export default function InvoicesPage() {
       showError(err.message)
       return
     }
-    showSuccess('The Invoice has been voided. Stock levels have been restored where applicable.')
+    showSuccess(
+      'The invoice has been voided. Payments have been released and stock restored where applicable.',
+    )
     if (invoiceId === editingId) {
-      const nextForm = { ...form, status: data.status }
+      const nextForm = {
+        ...form,
+        status: data.status,
+        amount_paid: Number(data.amount_paid) || 0,
+      }
       setForm(nextForm)
       setBaseline(snapshotInvoiceForm(nextForm))
+      if (form.client_id) {
+        const creditRes = await opsApi.getClientCreditBalance(form.client_id)
+        const balance = creditRes.data?.balance ?? 0
+        setAccountCredit(balance)
+        setCreditByClient((prev) => ({ ...prev, [form.client_id]: balance }))
+      }
+    } else {
+      const clientId = rows.find((r) => r.id === invoiceId)?.client_id
+      if (clientId) {
+        const creditRes = await opsApi.getClientCreditBalance(clientId)
+        if (!creditRes.error) {
+          setCreditByClient((prev) => ({
+            ...prev,
+            [clientId]: creditRes.data?.balance ?? 0,
+          }))
+        }
+      }
     }
     if (data?.id) setRows((prev) => upsertById(prev, data))
   }
@@ -878,12 +923,12 @@ export default function InvoicesPage() {
     const id = row.id
     const status = row.status
     const blocked = rowBlocked(id)
-    const rowCanIssue = status === 'draft' && !blocked && !saving
+    const rowCanIssue = invoiceCanIssue(status) && !blocked && !saving
     const rowCanVoid = status !== 'void' && !blocked && !saving
     const rowCanDeleteDraft =
       isAdmin(user?.role) && status === 'draft' && !blocked && !saving
     const rowCanDeleteVoid =
-      isAdmin(user?.role) && status === 'void' && !saving
+      isAdmin(user?.role) && status === 'void' && !blocked && !saving
     const rowCanDelete = rowCanDeleteDraft || rowCanDeleteVoid
     const rowCanVoidOrDelete = rowCanDelete || rowCanVoid
     const rowCanShare = !blocked && !saving
@@ -897,7 +942,7 @@ export default function InvoicesPage() {
         onClick: () => openRow(id),
       },
       {
-        label: 'Issue invoice',
+        label: status === 'void' ? 'Re-issue invoice' : 'Issue invoice',
         icon: 'checkCircle',
         disabled: !rowCanIssue,
         onClick: () => handleIssue(id),
@@ -1080,14 +1125,14 @@ export default function InvoicesPage() {
               disabled={saving || !canSaveDraft}
               title={
                 readOnly
-                  ? 'Only draft invoices can be edited'
+                  ? 'Issued invoices must be voided before they can be edited'
                   : editingId && !isDirty
                     ? 'Change something before saving'
                     : undefined
               }
               className={adminBtnPrimary}
             >
-              {saving ? 'Saving…' : 'Save draft'}
+              {saving ? 'Saving…' : form.status === 'void' ? 'Save' : 'Save draft'}
             </button>
             <BillingDocumentButtons
               documentType="invoice"
@@ -1104,8 +1149,8 @@ export default function InvoicesPage() {
               title={
                 !editingId
                   ? 'Save this draft first'
-                  : form.status !== 'draft'
-                    ? 'Only draft invoices can be issued'
+                  : !invoiceCanIssue(form.status)
+                    ? 'Only draft or voided invoices can be issued'
                     : isDirty
                       ? 'Save your changes before issuing'
                       : undefined
@@ -1113,7 +1158,7 @@ export default function InvoicesPage() {
               onClick={() => handleIssue()}
               className={adminBtnPrimary}
             >
-              Issue invoice
+              {form.status === 'void' ? 'Re-issue invoice' : 'Issue invoice'}
             </button>
             <button
               type="button"
@@ -1176,7 +1221,11 @@ export default function InvoicesPage() {
             disabled={saving || issueSelectedIds.length === 0}
             onClick={handleIssueSelected}
             className={`${adminBtnPrimary} w-full sm:w-auto`}
-            title={issueSelectedIds.length ? undefined : 'Select draft invoices to issue'}
+            title={
+              issueSelectedIds.length
+                ? undefined
+                : 'Select draft or voided invoices to issue'
+            }
           >
             {saving ? 'Issuing…' : `Issue selected (${issueSelectedIds.length})`}
           </button>
@@ -1188,7 +1237,7 @@ export default function InvoicesPage() {
                 <input
                   ref={masterIssueCheckboxRef}
                   type="checkbox"
-                  aria-label="Select all draft invoices"
+                  aria-label="Select all draft and voided invoices"
                   checked={allIssueableSelected}
                   disabled={saving || issueableDraftIds.length === 0}
                   onClick={(e) => e.stopPropagation()}
@@ -1258,7 +1307,7 @@ export default function InvoicesPage() {
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
                     <td className="px-1.5 py-2 sm:px-3 sm:py-3">
-                      {row.status === 'draft' ? (
+                      {invoiceCanIssue(row.status) ? (
                         <input
                           type="checkbox"
                           checked={issueSelectedSet.has(row.id)}

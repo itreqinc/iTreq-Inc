@@ -1829,8 +1829,8 @@ const directOpsApi = {
     if (invoiceId) {
       const existing = await this.getInvoice(invoiceId)
       if (existing.error) return existing
-      if (existing.data.status !== 'draft') {
-        return { data: null, error: { message: 'Only draft invoices can be edited.' } }
+      if (!['draft', 'void'].includes(existing.data.status)) {
+        return { data: null, error: { message: 'Only draft or voided invoices can be edited.' } }
       }
       existingData = existing.data
     }
@@ -1854,8 +1854,9 @@ const directOpsApi = {
           issue_date: resolvedIssue || null,
           due_date: resolvedDue || null,
           notes: notes?.trim() || null,
-          status: 'draft',
+          status: existingData.status === 'void' ? 'void' : 'draft',
           ...totals,
+          ...(existingData.status === 'void' ? { amount_paid: 0 } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', invoiceId)

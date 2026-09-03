@@ -835,8 +835,8 @@ async function saveInvoiceInternal(
 
   if (invoiceId) {
     const existing = existingRow!
-    if (existing.status !== 'draft') {
-      throw new OpsError('Only draft invoices can be edited.')
+    if (existing.status !== 'draft' && existing.status !== 'void') {
+      throw new OpsError('Only draft or voided invoices can be edited.')
     }
     const { error } = await sb
       .from('invoices')
@@ -846,8 +846,9 @@ async function saveInvoiceInternal(
         issue_date: dates.issue_date,
         due_date: dates.due_date,
         notes: notes ? String(notes).trim() : null,
-        status: 'draft',
+        status: existing.status === 'void' ? 'void' : 'draft',
         ...totals,
+        ...(existing.status === 'void' ? { amount_paid: 0 } : {}),
         updated_at: nowIso(),
       })
       .eq('id', invoiceId)
