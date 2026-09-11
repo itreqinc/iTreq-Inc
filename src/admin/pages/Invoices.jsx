@@ -37,6 +37,7 @@ import { emptyLine,
   mapDocLinesForEditor,
   normalizeLines } from '../../lib/billing'
 import { formatBillingPeriodLabel } from '../../lib/invoiceDates'
+import { dueDateFromIssueDate } from '../../lib/payments'
 import { isMonthlyFeeProduct } from '../../lib/productKind'
 import { ClientSelect } from '../ClientSelect'
 import { LineItemsEditor } from '../LineItemsEditor'
