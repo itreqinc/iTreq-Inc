@@ -72,7 +72,7 @@ export default function MonthlyFeesPage() {
       title: `Generate fee drafts for ${formatPeriodLabel(billingPeriod)}?`,
       message:
         createRows.length > 0
-          ? `This will create ${createRows.length} draft invoice(s) by copying monthly fee lines from the previous month. Review and correct them on Invoices, then issue when ready.`
+          ? `This will create ${createRows.length} draft invoice(s) by copying monthly fee lines from the previous month (product unchanged; description copied with the new month in brackets). Review them on Invoices, then issue when ready.`
           : 'Run generate for this month? Clients already billed or without a previous fee invoice will be skipped.',
       confirmLabel: 'Create drafts',
     })
@@ -119,10 +119,10 @@ export default function MonthlyFeesPage() {
       <div>
         <h1 className="font-display text-2xl font-bold text-white">Monthly fees</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-300">
-          Create draft invoices for the selected month by copying recurring monthly fee lines (quantities
-          and prices as-is) from each client&apos;s previous-month invoice. Review and correct drafts on
-          Invoices before issuing. Usage charges (e.g. roaming) are excluded — add those manually when
-          they occur. Clients without a previous fee invoice are skipped.
+          Create draft invoices for the selected month by copying monthly fee lines only: the product
+          stays as it is on the products table, and the description is copied as-is except for the month
+          in brackets. Review drafts on Invoices before issuing. Usage and hardware are not copied —
+          add those manually when they occur. Clients without a previous fee invoice are skipped.
         </p>
       </div>
 

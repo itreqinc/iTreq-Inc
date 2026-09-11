@@ -573,11 +573,52 @@ async function getInvoiceInternal(sb: SupabaseClient, id: string) {
   if (error) throw mapDbError(error)
   const { data: lines, error: lineErr } = await sb
     .from('invoice_lines')
-    .select('*')
+    .select('*, products(product_kind, tracks_stock)')
     .eq('invoice_id', id)
     .order('sort_order', { ascending: true })
   if (lineErr) throw mapDbError(lineErr)
-  return { ...(invoice as Record<string, unknown>), lines: lines || [] }
+  const list = lines || []
+  const has_monthly_fee = list.some((line) =>
+    productIsMonthlyFee(
+      (line as { products?: { product_kind?: string; tracks_stock?: boolean } }).products,
+    ),
+  )
+  return { ...(invoice as Record<string, unknown>), lines: list, has_monthly_fee }
+}
+
+function productIsMonthlyFee(
+  product?: { product_kind?: string; tracks_stock?: boolean } | null,
+) {
+  if (!product) return false
+  if (product.product_kind) return product.product_kind === 'monthly_fee'
+  return !product.tracks_stock
+}
+
+async function attachMonthlyFeeFlags(
+  sb: SupabaseClient,
+  invoices: Record<string, unknown>[],
+) {
+  const rows = invoices || []
+  if (!rows.length) return rows
+  const ids = rows.map((r) => String(r.id || '')).filter(Boolean)
+  const feeIds = new Set<string>()
+  const chunkSize = 80
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    const { data: lines, error: lErr } = await sb
+      .from('invoice_lines')
+      .select('invoice_id, products(product_kind, tracks_stock)')
+      .in('invoice_id', chunk)
+    if (lErr) throw mapDbError(lErr)
+    for (const row of lines || []) {
+      const rec = row as {
+        invoice_id: string
+        products?: { product_kind?: string; tracks_stock?: boolean }
+      }
+      if (productIsMonthlyFee(rec.products)) feeIds.add(String(rec.invoice_id))
+    }
+  }
+  return rows.map((r) => ({ ...r, has_monthly_fee: feeIds.has(String(r.id)) }))
 }
 
 async function getPaymentInternal(sb: SupabaseClient, id: string) {
@@ -2272,7 +2313,7 @@ handlers.list_invoices = async ({ sb }, args) => {
   if (forPortal) query = query.in('status', [...BALANCE_INVOICE_STATUSES])
   const { data, error } = await query
   if (error) throw mapDbError(error)
-  return data || []
+  return attachMonthlyFeeFlags(sb, data || [])
 }
 
 handlers.get_invoice = async ({ sb }, args) => {
@@ -2312,6 +2353,23 @@ handlers.void_invoice = async ({ user, sb }, args) => {
   const { error } = await sb.rpc('void_invoice', { p_invoice_id: id })
   if (error) throw mapDbError(error)
   return getInvoiceInternal(sb, id)
+}
+
+handlers.copy_monthly_fee_invoice = async ({ user, sb }, args) => {
+  const id = String(args[0] || '')
+  const period = String(args[1] || '')
+  if (!id) throw new OpsError('Choose an invoice to copy.')
+  if (!period) throw new OpsError('Choose a billing month.')
+  const existing = await getInvoiceInternal(sb, id)
+  assertNotOwnClient(user, String(existing.client_id))
+  const { data, error } = await sb.rpc('copy_monthly_fee_invoice', {
+    p_source_invoice_id: id,
+    p_billing_period: period,
+  })
+  if (error) throw mapDbError(error)
+  const newId = String((data as { id?: string } | null)?.id || '')
+  if (!newId) throw new OpsError('Could not copy this invoice.')
+  return getInvoiceInternal(sb, newId)
 }
 
 handlers.delete_invoice = async ({ user, sb }, args) => {

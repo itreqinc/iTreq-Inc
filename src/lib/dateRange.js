@@ -16,6 +16,13 @@ export function currentMonthStartIso() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 }
 
+/** First day of the month for an ISO date; empty/invalid → current month start. */
+export function monthStartIso(isoDate) {
+  const day = String(isoDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return currentMonthStartIso()
+  return `${day.slice(0, 7)}-01`
+}
+
 /** Last calendar day of the month after today (YYYY-MM-DD). */
 export function endOfNextMonthIso(from = new Date()) {
   const d = from instanceof Date ? from : new Date()

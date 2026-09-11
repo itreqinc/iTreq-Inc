@@ -19,6 +19,7 @@ import {
   summarizeReceivables,
 } from './payments'
 import { disputeUnreadCount } from './invoiceDisputes'
+import { isMonthlyFeeProduct } from './productKind'
 
 /** Private bucket holding client-uploaded proof of payment and query attachments. */
 export const PROOF_BUCKET = 'client-proofs'
@@ -143,6 +144,29 @@ async function enrichClientsFinancialFlagsLocal(clients) {
     ...c,
     has_financial_records: withRecords.has(c.id),
   }))
+}
+
+async function attachMonthlyFeeFlags(invoices) {
+  const rows = invoices || []
+  if (!rows.length || !supabase) return { data: rows, error: null }
+  const ids = rows.map((r) => r.id).filter(Boolean)
+  const feeIds = new Set()
+  const chunkSize = 80
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    const { data: lines, error: lErr } = await supabase
+      .from('invoice_lines')
+      .select('invoice_id, products(product_kind, tracks_stock)')
+      .in('invoice_id', chunk)
+    if (lErr) return mapError(lErr)
+    for (const row of lines || []) {
+      if (isMonthlyFeeProduct(row.products)) feeIds.add(String(row.invoice_id))
+    }
+  }
+  return {
+    data: rows.map((r) => ({ ...r, has_monthly_fee: feeIds.has(String(r.id)) })),
+    error: null,
+  }
 }
 
 const directOpsApi = {
@@ -1768,7 +1792,7 @@ const directOpsApi = {
     if (forPortal) query = query.in('status', BALANCE_INVOICE_STATUSES)
     const { data, error } = await query
     if (error) return mapError(error)
-    return { data, error: null }
+    return attachMonthlyFeeFlags(data || [])
   },
 
   async getInvoice(id) {
@@ -1781,11 +1805,12 @@ const directOpsApi = {
     if (error) return mapError(error)
     const { data: lines, error: lineErr } = await supabase
       .from('invoice_lines')
-      .select('*')
+      .select('*, products(product_kind, tracks_stock)')
       .eq('invoice_id', id)
       .order('sort_order', { ascending: true })
     if (lineErr) return mapError(lineErr)
-    return { data: { ...invoice, lines: lines || [] }, error: null }
+    const has_monthly_fee = (lines || []).some((line) => isMonthlyFeeProduct(line.products))
+    return { data: { ...invoice, lines: lines || [], has_monthly_fee }, error: null }
   },
 
   /** Portal-safe invoice fetch: must belong to client and be a balance status. */
@@ -1908,6 +1933,26 @@ const directOpsApi = {
     const { data, error } = await supabase.rpc('void_invoice', { p_invoice_id: id })
     if (error) return mapError(error)
     return this.getInvoice(id)
+  },
+
+  async copyMonthlyFeeInvoice(id, billingPeriod) {
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Choose an invoice to copy.' } }
+    }
+    if (!billingPeriod) {
+      return { data: null, error: { message: 'Choose a billing month.' } }
+    }
+    const { data, error } = await supabase.rpc('copy_monthly_fee_invoice', {
+      p_source_invoice_id: id,
+      p_billing_period: billingPeriod,
+    })
+    if (error) return mapError(error)
+    const newId = data?.id
+    if (!newId) {
+      return { data: null, error: { message: 'Could not copy this invoice.' } }
+    }
+    return this.getInvoice(newId)
   },
 
   async deleteInvoice(id) {

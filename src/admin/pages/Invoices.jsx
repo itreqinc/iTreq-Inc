@@ -14,6 +14,7 @@ import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import {
   documentFilterDate,
   filterByDateRange,
+  monthStartIso,
   sortByDateDescThenNameAsc,
   todayIso,
 } from '../../lib/dateRange'
@@ -35,9 +36,8 @@ import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
   mapDocLinesForEditor,
   normalizeLines } from '../../lib/billing'
-import { invoiceBalanceDue,
-  dueDateFromIssueDate,
-  invoiceDisplayStatus } from '../../lib/payments'
+import { formatBillingPeriodLabel } from '../../lib/invoiceDates'
+import { isMonthlyFeeProduct } from '../../lib/productKind'
 import { ClientSelect } from '../ClientSelect'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
@@ -134,6 +134,7 @@ function newInvoiceForm(clientId = '') {
     amount_paid: 0,
     discount_amount: 0,
     quotation_id: '',
+    has_monthly_fee: false,
     lines: [emptyLine()],
   }
 }
@@ -256,6 +257,7 @@ export default function InvoicesPage() {
         amount_paid: Number(data.amount_paid) || 0,
         discount_amount: Number(data.discount_amount) || 0,
         quotation_id: data.quotation_id || '',
+        has_monthly_fee: Boolean(data.has_monthly_fee),
         lines: mapDocLinesForEditor(data.lines, catalog),
       }
       setEditingId(id)
@@ -375,6 +377,17 @@ export default function InvoicesPage() {
     accountCredit > 0.001
   const applyCreditAmount = Math.min(accountCredit, balanceDue)
 
+  const copyTargetPeriod = useMemo(() => monthStartIso(dateFrom), [dateFrom])
+  const formHasMonthlyFee = useMemo(
+    () =>
+      Boolean(form.has_monthly_fee) ||
+      (form.lines || []).some((line) => {
+        const product = products.find((p) => p.id === line.product_id)
+        return Boolean(product && isMonthlyFeeProduct(product))
+      }),
+    [form.has_monthly_fee, form.lines, products],
+  )
+
   const isDirty = useMemo(
     () => snapshotInvoiceForm(form) !== baseline,
     [form, baseline],
@@ -436,6 +449,8 @@ export default function InvoicesPage() {
     !isDirty &&
     !saving
   const canDelete = canDeleteDraft || canDeleteVoid
+  const canCopyMonthlyFee =
+    Boolean(editingId) && formHasMonthlyFee && !isDirty && !saving
 
   async function handleSave(e) {
     e.preventDefault()
@@ -546,6 +561,7 @@ export default function InvoicesPage() {
       amount_paid: Number(fresh.amount_paid) || 0,
       discount_amount: Number(fresh.discount_amount) || 0,
       quotation_id: fresh.quotation_id || '',
+      has_monthly_fee: Boolean(fresh.has_monthly_fee),
       lines: nextLines,
     }
     setEditingId(id)
@@ -646,6 +662,38 @@ export default function InvoicesPage() {
     showSuccess(successMessage)
     if (issued?.id) setRows((prev) => upsertById(prev, issued))
     if (invoiceId === editingId) closeForm(invoiceId)
+  }
+
+  async function handleCopy(invoiceId = editingId) {
+    if (!invoiceId) return
+    if (invoiceId === editingId && isDirty) {
+      showError('Save or discard changes before copying this invoice.')
+      return
+    }
+    const period = copyTargetPeriod
+    const periodLabel = formatBillingPeriodLabel(period)
+    const ok = await confirm({
+      title: 'Copy monthly fees?',
+      message: `Creates a draft dated ${period} for ${periodLabel}, with monthly fee lines from this invoice. Product stays as on the products table; only the month in the description changes. You can edit before issuing.`,
+      confirmLabel: 'Copy invoice',
+    })
+    if (!ok) return
+    setSaving(true)
+    const { data, error: err } = await opsApi.copyMonthlyFeeInvoice(invoiceId, period)
+    setSaving(false)
+    if (err) {
+      showError(err.message)
+      return
+    }
+    if (data?.id) {
+      setRows((prev) => upsertById(prev, { ...data, has_monthly_fee: true }))
+    }
+    showSuccess(
+      data?.billing_period
+        ? `Draft copied for ${periodLabel}.`
+        : `Draft copied. This client already has an invoice for ${periodLabel}, so the copy is untagged — set the billing period after you edit.`,
+    )
+    if (data?.id) await openRow(data.id)
   }
 
   async function handleIssueSelected() {
@@ -960,6 +1008,14 @@ export default function InvoicesPage() {
         disabled: !rowCanIssue,
         onClick: () => handleIssue(id),
       },
+      row.has_monthly_fee
+        ? {
+            label: 'Copy invoice',
+            icon: 'copy',
+            disabled: blocked || saving,
+            onClick: () => handleCopy(id),
+          }
+        : null,
       {
         label: 'Apply credit',
         icon: 'payment',
@@ -1173,6 +1229,21 @@ export default function InvoicesPage() {
             >
               {form.status === 'void' ? 'Re-issue invoice' : 'Issue invoice'}
             </button>
+            {formHasMonthlyFee ? (
+              <button
+                type="button"
+                disabled={!canCopyMonthlyFee}
+                title={
+                  isDirty
+                    ? 'Save or discard changes before copying'
+                    : `Copy monthly fees to a draft dated ${copyTargetPeriod}`
+                }
+                onClick={() => handleCopy()}
+                className={adminBtnPrimary}
+              >
+                Copy
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={!canApplyCredit || saving}
