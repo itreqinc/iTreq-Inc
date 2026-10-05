@@ -24,7 +24,13 @@ import {
   rememberAccountsSelected,
   takeClientsReturn,
 } from '../../lib/clientsReturnNav'
-import { statementLineLabel, statementLineMethodSuffix } from '../../lib/payments'
+import { statementLineLabel, statementLineMethodSuffix, invoiceBalanceDue } from '../../lib/payments'
+import { formatBillingPeriodLabel } from '../../lib/invoiceDates'
+import {
+  openBillingDocumentPrintWindow,
+  fillBillingDocumentPrintWindow,
+  closeBillingDocumentPrintWindow,
+} from '../../lib/billingDocument'
 import { quotationDisplayStatus } from '../../lib/portalQuote'
 import {
   openStatementDocumentPrintWindow,
@@ -188,6 +194,7 @@ export default function ClientsPage() {
   const [stmtFrom, setStmtFrom] = useState(monthStartIso)
   const [stmtTo, setStmtTo] = useState(todayIso)
   const [deletingId, setDeletingId] = useState(null)
+  const [invoiceActionBusy, setInvoiceActionBusy] = useState(false)
 
   const [selectedId, setSelectedId] = useState(initialAccountId)
   const [selectedAccountCredit, setSelectedAccountCredit] = useState(0)
@@ -666,12 +673,221 @@ export default function ClientsPage() {
     }
   }
 
+  async function printAccountInvoice(invoiceId) {
+    if (!invoiceId || invoiceActionBusy) return
+    const opened = openBillingDocumentPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+    setInvoiceActionBusy(true)
+    const { data, error } = await opsApi.getBillingDocumentBundle('invoice', invoiceId)
+    setInvoiceActionBusy(false)
+    if (error) {
+      closeBillingDocumentPrintWindow(win)
+      showError(error.message)
+      return
+    }
+    const result = fillBillingDocumentPrintWindow(win, data.model)
+    if (!result.ok) showError(result.message)
+  }
+
+  async function emailAccountInvoice(invoiceId) {
+    if (!invoiceId || invoiceActionBusy) return
+    setInvoiceActionBusy(true)
+    const preview = await opsApi.getBillingDocumentBundle('invoice', invoiceId)
+    setInvoiceActionBusy(false)
+    if (preview.error) {
+      showError(preview.error.message)
+      return
+    }
+    const to = preview.data.model.client.email?.trim()
+    if (!to) {
+      showError('This client has no email address on file. Update the client record first.')
+      return
+    }
+    const ok = await confirm({
+      title: 'Email invoice to client?',
+      message: `A copy will be sent to ${to}.`,
+      confirmLabel: 'Send email',
+    })
+    if (!ok) return
+    setInvoiceActionBusy(true)
+    const { error } = await opsApi.sendBillingDocumentEmail('invoice', invoiceId)
+    setInvoiceActionBusy(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess(`Email sent to ${to}.`)
+  }
+
+  async function issueAccountInvoice(line) {
+    if (!line?.id || invoiceActionBusy) return
+    const invoice = (await opsApi.getInvoice(line.id)).data
+    if (!invoice) return
+    const reissuing = invoice.status === 'void'
+    const ok = await confirm({
+      title: reissuing ? 'Re-issue this invoice?' : 'Issue this invoice?',
+      message: reissuing
+        ? 'Re-issuing makes this invoice active again and deducts stock for listed items. The invoice number stays the same.'
+        : 'Issuing assigns an invoice number and manipulates stock levels for items listed in this invoice. This action cannot be undone. Continue?',
+      confirmLabel: reissuing ? 'Re-issue invoice' : 'Issue invoice',
+    })
+    if (!ok) return
+    setInvoiceActionBusy(true)
+    const { data, error } = await opsApi.issueInvoice(line.id)
+    setInvoiceActionBusy(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess(`Invoice ${data?.number || ''} ${reissuing ? 're-issued' : 'issued'}.`)
+    await refreshSelectedStatement()
+  }
+
+  async function copyAccountInvoice(invoiceId) {
+    if (!invoiceId || invoiceActionBusy) return
+    const period = monthStartIso()
+    const periodLabel = formatBillingPeriodLabel(period)
+    const ok = await confirm({
+      title: 'Copy monthly fees?',
+      message: `Creates a draft dated ${period} for ${periodLabel}, with monthly fee lines from this invoice. Product stays as on the products table; only the month in the description changes. You can edit before issuing.`,
+      confirmLabel: 'Copy invoice',
+    })
+    if (!ok) return
+    setInvoiceActionBusy(true)
+    const { data, error } = await opsApi.copyMonthlyFeeInvoice(invoiceId, period)
+    setInvoiceActionBusy(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess(
+      data?.billing_period
+        ? `Draft copied for ${periodLabel}.`
+        : `Draft copied. This client already has an invoice for ${periodLabel}, so the copy is untagged — set the billing period after you edit.`,
+    )
+    if (data?.id) navigate(invoiceUrlFromClients(selectedId, { openInvoiceId: data.id }))
+  }
+
+  async function applyAccountInvoiceCredit(line) {
+    if (!line?.id || invoiceActionBusy) return
+    const invoice = (await opsApi.getInvoice(line.id)).data
+    if (!invoice) return
+    const due = invoiceBalanceDue(invoice)
+    if (due <= 0.001 || !['issued', 'partial'].includes(invoice.status)) {
+      showError('No applicable account credit for this invoice.')
+      return
+    }
+    const creditRes = await opsApi.getClientCreditBalance(invoice.client_id)
+    const credit = creditRes.data?.balance ?? 0
+    const amount = Math.min(credit, due)
+    if (amount <= 0.001) {
+      showError('No applicable account credit for this invoice.')
+      return
+    }
+    const ok = await confirm({
+      title: 'Apply account credit?',
+      message: `Apply ${formatPula(amount)} from this client's account to invoice ${invoice.number || ''}?`,
+      confirmLabel: 'Apply credit',
+    })
+    if (!ok) return
+    setInvoiceActionBusy(true)
+    const applyRes = await opsApi.applyClientCreditToInvoice(line.id)
+    setInvoiceActionBusy(false)
+    if (applyRes.error) {
+      showError(applyRes.error.message)
+      return
+    }
+    showSuccess(`${formatPula(applyRes.data.applied)} applied from account credit.`)
+    await onOpeningBalanceDone()
+  }
+
+  async function voidOrDeleteAccountInvoice(line) {
+    if (!line?.id || invoiceActionBusy) return
+    const status = line.status
+    const mayDelete = isAdmin(user?.role) && (status === 'draft' || status === 'void')
+    const ok = await confirm({
+      title: mayDelete ? 'Delete this invoice?' : 'Void this invoice?',
+      message: mayDelete
+        ? 'This invoice will be permanently removed.'
+        : 'Voiding restores stock where applicable and releases tied payments.',
+      confirmLabel: mayDelete ? 'Delete invoice' : 'Void invoice',
+    })
+    if (!ok) return
+    setInvoiceActionBusy(true)
+    const result = mayDelete
+      ? await opsApi.deleteInvoice(line.id)
+      : await opsApi.voidInvoice(line.id)
+    setInvoiceActionBusy(false)
+    if (result.error) {
+      showError(result.error.message)
+      return
+    }
+    showSuccess(mayDelete ? 'Invoice deleted.' : 'Invoice voided.')
+    await refreshSelectedStatement()
+  }
+
   function transactionMenuItems(line) {
     if (line.type === 'invoice' && line.id) {
+      const status = line.status
+      const busy = invoiceActionBusy
+      const canIssue = (status === 'draft' || status === 'void') && !busy
+      const canApply =
+        ['issued', 'partial'].includes(status) &&
+        selectedAccountCredit > 0.001 &&
+        !busy
+      const applyAmt = Math.min(selectedAccountCredit, Number(line.debit) || 0)
+      const canDelete =
+        isAdmin(user?.role) && (status === 'draft' || status === 'void') && !busy
+      const canVoid = status !== 'void' && !busy
+      const dangerIsDelete = status === 'draft' || status === 'void'
       return [
         {
           label: 'Open invoice',
+          icon: 'eye',
           onClick: () => openTransaction(line),
+        },
+        {
+          label: 'Print / Save PDF',
+          icon: 'print',
+          disabled: busy,
+          onClick: () => printAccountInvoice(line.id),
+        },
+        {
+          label: 'Email to client',
+          icon: 'mail',
+          disabled: busy,
+          onClick: () => emailAccountInvoice(line.id),
+        },
+        {
+          label: status === 'void' ? 'Re-issue invoice' : 'Issue invoice',
+          icon: 'checkCircle',
+          disabled: !canIssue,
+          onClick: () => issueAccountInvoice(line),
+        },
+        {
+          label: 'Copy',
+          icon: 'copy',
+          disabled: busy,
+          onClick: () => copyAccountInvoice(line.id),
+        },
+        {
+          label: canApply && applyAmt > 0.001
+            ? `Apply credit (${formatPula(applyAmt)})`
+            : 'Apply credit',
+          icon: 'payment',
+          disabled: !canApply,
+          onClick: () => applyAccountInvoiceCredit(line),
+        },
+        {
+          label: dangerIsDelete ? 'Delete invoice' : 'Void invoice',
+          icon: dangerIsDelete ? 'trash' : 'ban',
+          tone: 'danger',
+          disabled: dangerIsDelete ? !canDelete : !canVoid,
+          onClick: () => voidOrDeleteAccountInvoice(line),
         },
       ]
     }

@@ -1069,7 +1069,7 @@ export default function InvoicesPage() {
       canSave: canSaveDraft && !saving,
       saveLabel: form.status === 'void' ? 'Save' : 'Save draft',
       canIssue,
-      canCopy: canCopyMonthlyFee,
+      canCopy: Boolean(editingId) && !isDirty && !saving,
       canApply: Boolean(canApplyCredit) && !saving,
       applyLabel: canApplyCredit
         ? `Apply credit (${formatPula(applyCreditAmount)})`
@@ -1092,7 +1092,6 @@ export default function InvoicesPage() {
     const status = row.status
     const blocked = rowBlocked(id)
     const isThisForm = editingId === id && showForm
-    const hasFee = Boolean(row.has_monthly_fee) || (isThisForm && formHasMonthlyFee)
     const due = invoiceBalanceDue(row)
     const credit = Number(creditByClient[row.client_id] || 0)
     const canApply =
@@ -1114,7 +1113,7 @@ export default function InvoicesPage() {
       canSave: isThisForm && canSaveDraft && !saving,
       saveLabel: status === 'void' ? 'Save' : 'Save draft',
       canIssue: invoiceCanIssue(status) && !blocked && !saving,
-      canCopy: hasFee && !blocked && !saving,
+      canCopy: !blocked && !saving,
       canApply,
       applyLabel:
         canApply && applyAmt > 0.001
@@ -1198,11 +1197,6 @@ export default function InvoicesPage() {
                 : 'New invoice'}
             </h2>
             <div className="flex items-center gap-2">
-              <ActionsMenu
-                prominent
-                label="Invoice actions"
-                items={formInvoiceMenuItems()}
-              />
               <button
                 type="button"
                 disabled={saving}
@@ -1279,7 +1273,12 @@ export default function InvoicesPage() {
             persistBusy={saving}
           />
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionsMenu
+              prominent
+              label="Invoice actions"
+              items={formInvoiceMenuItems()}
+            />
             <button
               type="submit"
               disabled={saving || !canSaveDraft}
