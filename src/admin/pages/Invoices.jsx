@@ -458,7 +458,7 @@ export default function InvoicesPage() {
     Boolean(editingId) && formHasMonthlyFee && !isDirty && !saving
 
   async function handleSave(e) {
-    e.preventDefault()
+    e?.preventDefault?.()
     if (!canSaveDraft) return
 
     const savingVoid = form.status === 'void'
@@ -985,72 +985,153 @@ export default function InvoicesPage() {
     return invoiceId === editingId && isDirty
   }
 
-  function rowInvoiceMenuItems(row) {
-    const id = row.id
-    const status = row.status
-    const blocked = rowBlocked(id)
-    const rowCanIssue = invoiceCanIssue(status) && !blocked && !saving
-    const rowCanVoid = status !== 'void' && !blocked && !saving
-    const rowCanDeleteDraft =
-      isAdmin(user?.role) && status === 'draft' && !blocked && !saving
-    const rowCanDeleteVoid =
-      isAdmin(user?.role) && status === 'void' && !blocked && !saving
-    const rowCanDelete = rowCanDeleteDraft || rowCanDeleteVoid
-    const rowCanVoidOrDelete = rowCanDelete || rowCanVoid
-    const rowCanShare = !blocked && !saving
-    const rowCanApplyCredit =
-      ['issued', 'partial'].includes(status) && !blocked && !saving
-
-    const items = [
-      {
+  function buildInvoiceMenuItems({
+    status,
+    includeOpen = false,
+    canSave = false,
+    saveLabel = 'Save draft',
+    canIssue = false,
+    canCopy = false,
+    canApply = false,
+    applyLabel = 'Apply credit',
+    canShare = false,
+    canDelete = false,
+    canVoid = false,
+    onOpen,
+    onSave,
+    onIssue,
+    onCopy,
+    onApply,
+    onPrint,
+    onEmail,
+    onVoidOrDelete,
+  }) {
+    const dangerIsDelete = status === 'draft' || status === 'void'
+    const items = []
+    if (includeOpen) {
+      items.push({
         label: 'Open invoice',
         icon: 'eye',
-        onClick: () => openRow(id),
-      },
+        onClick: onOpen,
+      })
+    }
+    items.push(
       {
-        label: status === 'void' ? 'Re-issue invoice' : 'Issue invoice',
-        icon: 'checkCircle',
-        disabled: !rowCanIssue,
-        onClick: () => handleIssue(id),
-      },
-      row.has_monthly_fee
-        ? {
-            label: 'Copy invoice',
-            icon: 'copy',
-            disabled: blocked || saving,
-            onClick: () => handleCopy(id),
-          }
-        : null,
-      {
-        label: 'Apply credit',
-        icon: 'payment',
-        disabled: !rowCanApplyCredit,
-        onClick: () => handleApplyCreditFor(id, row),
+        label: saveLabel,
+        icon: 'save',
+        disabled: !canSave,
+        onClick: onSave,
       },
       {
         label: 'Print / Save PDF',
         icon: 'print',
-        disabled: !rowCanShare,
-        onClick: () => printInvoice(id),
+        disabled: !canShare,
+        onClick: onPrint,
       },
       {
         label: 'Email to client',
         icon: 'mail',
-        disabled: !rowCanShare,
-        onClick: () => emailInvoice(id),
+        disabled: !canShare,
+        onClick: onEmail,
       },
-    ]
-
-    if (rowCanVoidOrDelete) {
-      items.push({
-        label: rowCanDelete ? 'Delete invoice' : 'Void invoice',
-        icon: rowCanDelete ? 'trash' : 'ban',
+      {
+        label: status === 'void' ? 'Re-issue invoice' : 'Issue invoice',
+        icon: 'checkCircle',
+        disabled: !canIssue,
+        onClick: onIssue,
+      },
+      {
+        label: 'Copy',
+        icon: 'copy',
+        disabled: !canCopy,
+        onClick: onCopy,
+      },
+      {
+        label: applyLabel,
+        icon: 'payment',
+        disabled: !canApply,
+        onClick: onApply,
+      },
+      {
+        label: dangerIsDelete ? 'Delete invoice' : 'Void invoice',
+        icon: dangerIsDelete ? 'trash' : 'ban',
         tone: 'danger',
-        onClick: () => handleVoidOrDelete(id, row),
-      })
-    }
-
+        disabled: dangerIsDelete ? !canDelete : !canVoid,
+        onClick: onVoidOrDelete,
+      },
+    )
     return items
+  }
+
+  function formInvoiceMenuItems() {
+    return buildInvoiceMenuItems({
+      status: form.status,
+      canSave: canSaveDraft && !saving,
+      saveLabel: form.status === 'void' ? 'Save' : 'Save draft',
+      canIssue,
+      canCopy: canCopyMonthlyFee,
+      canApply: Boolean(canApplyCredit) && !saving,
+      applyLabel: canApplyCredit
+        ? `Apply credit (${formatPula(applyCreditAmount)})`
+        : 'Apply credit',
+      canShare: Boolean(editingId) && !isDirty && !saving,
+      canDelete,
+      canVoid,
+      onSave: () => handleSave(),
+      onIssue: () => handleIssue(),
+      onCopy: () => handleCopy(),
+      onApply: () => handleApplyCreditFor(editingId, form),
+      onPrint: () => printInvoice(editingId),
+      onEmail: () => emailInvoice(editingId),
+      onVoidOrDelete: () => handleVoidOrDelete(),
+    })
+  }
+
+  function rowInvoiceMenuItems(row) {
+    const id = row.id
+    const status = row.status
+    const blocked = rowBlocked(id)
+    const isThisForm = editingId === id && showForm
+    const hasFee = Boolean(row.has_monthly_fee) || (isThisForm && formHasMonthlyFee)
+    const due = invoiceBalanceDue(row)
+    const credit = Number(creditByClient[row.client_id] || 0)
+    const canApply =
+      ['issued', 'partial'].includes(status) &&
+      due > 0.001 &&
+      credit > 0.001 &&
+      !blocked &&
+      !saving
+    const applyAmt = Math.min(credit, due)
+    const rowCanDelete =
+      isAdmin(user?.role) &&
+      (status === 'draft' || status === 'void') &&
+      !blocked &&
+      !saving
+
+    return buildInvoiceMenuItems({
+      status,
+      includeOpen: true,
+      canSave: isThisForm && canSaveDraft && !saving,
+      saveLabel: status === 'void' ? 'Save' : 'Save draft',
+      canIssue: invoiceCanIssue(status) && !blocked && !saving,
+      canCopy: hasFee && !blocked && !saving,
+      canApply,
+      applyLabel:
+        canApply && applyAmt > 0.001
+          ? `Apply credit (${formatPula(applyAmt)})`
+          : 'Apply credit',
+      canShare: !blocked && !saving,
+      canDelete: rowCanDelete,
+      canVoid: status !== 'void' && !blocked && !saving,
+      onOpen: () => openRow(id),
+      onSave: () => handleSave(),
+      onIssue: () => handleIssue(id),
+      onCopy: () => handleCopy(id),
+      onApply: () => handleApplyCreditFor(id, row),
+      onPrint: () => printInvoice(id),
+      onEmail: () => emailInvoice(id),
+      onVoidOrDelete: () => handleVoidOrDelete(id, row),
+    })
   }
 
   return (
@@ -1117,6 +1198,11 @@ export default function InvoicesPage() {
                 : 'New invoice'}
             </h2>
             <div className="flex items-center gap-2">
+              <ActionsMenu
+                prominent
+                label="Invoice actions"
+                items={formInvoiceMenuItems()}
+              />
               <button
                 type="button"
                 disabled={saving}
