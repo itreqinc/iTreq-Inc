@@ -132,7 +132,7 @@ export function PortalInvitesPanel() {
 
     const ok = await confirm({
       title: 'Send portal invite?',
-      message: portalInviteConfirmMessage(1),
+      message: portalInviteConfirmMessage(1, { email: row.email }),
       confirmLabel: 'Send invite',
     })
     if (!ok) return

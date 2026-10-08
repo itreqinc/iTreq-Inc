@@ -1,4 +1,5 @@
 import { COMPANY } from '../data/site'
+import { truncateEmail } from './authConfig'
 
 const OFFICE_PLACEHOLDER_EMAILS = new Set(
   ['info@itreqinc.com', COMPANY.email]
@@ -32,22 +33,30 @@ export function canSendPortalInviteEmail(email) {
   return !isOfficePlaceholderEmail(e)
 }
 
-const WHATSAPP_DISPLAY = '+267 71 573 094'
+const PORTAL_LOGIN_URL = 'https://www.itreqinc.com/login'
 
 /**
  * Summary shown in the confirm dialog before invites are sent.
  * Keep in sync with the email body in supabase/functions/auth (invite_client).
  */
-export function portalInviteConfirmMessage(count = 1) {
+export function portalInviteConfirmMessage(count = 1, { email } = {}) {
+  const loginEmail =
+    count === 1 && email
+      ? truncateEmail(email)
+      : count === 1
+        ? "the client's login email (masked)"
+        : "each client's login email (masked)"
   const who =
     count === 1
-      ? 'This client will receive an email that includes:'
-      : `${count} clients will each receive an email that includes:`
+      ? 'This client will receive an email inviting them to log in to the iTreq Inc portal to access their transactions. The email includes:'
+      : `${count} clients will each receive an email inviting them to log in to the iTreq Inc portal to access their transactions. Each email includes:`
   return (
     `${who}\n\n` +
-    `• Portal sign-in link and temporary password (password123)\n` +
-    `• Note that billing on the portal starts with the August invoice, with any balance carried forward from the previous system\n` +
-    `• Reminder that iTreq Inc still holds earlier records on request\n` +
-    `• WhatsApp support: ${WHATSAPP_DISPLAY}`
+    `• Web address: ${PORTAL_LOGIN_URL}\n` +
+    `• Login email: ${loginEmail}\n` +
+    `• Temporary password: password123\n` +
+    `• iTreq Inc cellphone: ${COMPANY.phone}\n` +
+    `• iTreq Inc email: ${COMPANY.email}\n` +
+    `• WhatsApp: ${COMPANY.whatsappDisplay} (https://wa.me/26771573094)`
   )
 }
