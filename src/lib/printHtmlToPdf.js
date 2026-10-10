@@ -1,14 +1,14 @@
-/** A4 width at 96dpi — matches the print document max-width. */
+/** A4 width at 96dpi. The print page is captured as laid out, not redrawn. */
 const A4_WIDTH_PX = 794
 
-function withPdfCaptureCss(html) {
+function withPrintLayout(html) {
   const extra = `<style>
     .toolbar, .no-print { display: none !important; }
     html, body { height: auto !important; background: #fff !important; }
-    .doc { min-height: 0 !important; margin: 0 auto !important; }
   </style>`
-  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${extra}</head>`)
-  return extra + html
+  const printable = String(html).replaceAll('@media print', '@media all')
+  if (/<\/head>/i.test(printable)) return printable.replace(/<\/head>/i, `${extra}</head>`)
+  return extra + printable
 }
 
 function waitForImages(doc) {
@@ -29,13 +29,13 @@ function waitForImages(doc) {
 }
 
 /**
- * Render existing print/email HTML in a hidden iframe and paginate it onto A4 PDF pages.
+ * PDF of the existing Print / Save page, with its own layout and type.
  * @param {string} html
  * @returns {Promise<string>} base64 PDF (no data-URI prefix)
  */
 export async function htmlPrintToPdfBase64(html) {
   if (typeof document === 'undefined') {
-    throw new Error('PDF capture is only available in the browser.')
+    throw new Error('PDF creation is only available in the browser.')
   }
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
     import('html2canvas'),
@@ -52,7 +52,7 @@ export async function htmlPrintToPdfBase64(html) {
     const doc = iframe.contentDocument
     if (!doc) throw new Error('Could not prepare the printable document.')
     doc.open()
-    doc.write(withPdfCaptureCss(html))
+    doc.write(withPrintLayout(html))
     doc.close()
     if (doc.fonts?.ready) {
       try {
@@ -67,7 +67,7 @@ export async function htmlPrintToPdfBase64(html) {
     await new Promise((r) => window.setTimeout(r, 40))
 
     const canvas = await html2canvas(target, {
-      scale: 1.5,
+      scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
       windowWidth: A4_WIDTH_PX,
@@ -78,16 +78,16 @@ export async function htmlPrintToPdfBase64(html) {
     const pageHeight = pdf.internal.pageSize.getHeight()
     const imgWidth = pageWidth
     const imgHeight = (canvas.height * imgWidth) / canvas.width
-    const imgData = canvas.toDataURL('image/jpeg', 0.82)
+    const imgData = canvas.toDataURL('image/png')
 
     let heightLeft = imgHeight
     let position = 0
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
     heightLeft -= pageHeight
     while (heightLeft > 0.5) {
       position = heightLeft - imgHeight
       pdf.addPage()
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
       heightLeft -= pageHeight
     }
 

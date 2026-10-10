@@ -838,7 +838,7 @@ export default function InvoicesPage() {
           try {
             const bundleRes = await opsApi.getBillingDocumentBundle('invoice', row.id)
             if (bundleRes.error) throw new Error(bundleRes.error.message)
-            const { model, emailHtml } = bundleRes.data
+            const { model, printPageHtml } = bundleRes.data
             const to = model.client.email?.trim()
             if (!to) {
               skipped.push(`${row.clients?.name || 'Client'} · ${row.number || 'Invoice'}`)
@@ -857,7 +857,7 @@ export default function InvoicesPage() {
               ...stmtRes.data,
               lines: (stmtRes.data.lines || []).filter((l) => !l.inactive || l.alwaysShow),
             }
-            const { model: stmtModel, emailHtml: stmtHtml } = prepareStatementDocument({
+            const { model: stmtModel, printPageHtml: stmtHtml } = prepareStatementDocument({
               statement: printable,
               settings: settingsRes.data,
             })
@@ -873,7 +873,7 @@ export default function InvoicesPage() {
             })
 
             const [invoicePdf, statementPdf] = await Promise.all([
-              htmlPrintToPdfBase64(emailHtml),
+              htmlPrintToPdfBase64(printPageHtml),
               htmlPrintToPdfBase64(stmtHtml),
             ])
 
