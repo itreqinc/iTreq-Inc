@@ -6,6 +6,7 @@ import {
 import {
   buildStatementDocumentModel,
   buildStatementDocumentPrintPage,
+  buildStatementDocumentEmailHtml,
   getStatementDocumentPrintPath,
 } from './statementDocumentHtml'
 
@@ -27,5 +28,6 @@ export function prepareStatementDocument({ statement, settings }) {
   return {
     model,
     printPageHtml: buildStatementDocumentPrintPage(model),
+    emailHtml: buildStatementDocumentEmailHtml(model),
   }
 }

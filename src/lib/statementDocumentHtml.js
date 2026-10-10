@@ -446,3 +446,17 @@ export function buildStatementDocumentPrintPage(model) {
 </body>
 </html>`
 }
+
+/** Same statement body as print, without the preview toolbar. */
+export function buildStatementDocumentEmailHtml(model) {
+  const pageTitle = `Statement — ${model.client.name}`
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(pageTitle)}</title>
+  <style>${PRINT_STYLES} .toolbar { display: none; }</style>
+</head>
+<body>${renderStatementBody(model)}</body>
+</html>`
+}

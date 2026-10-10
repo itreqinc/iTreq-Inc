@@ -20,6 +20,7 @@ import {
 } from './payments'
 import { disputeUnreadCount } from './invoiceDisputes'
 import { isMonthlyFeeProduct } from './productKind'
+import { remindStatementFrom } from './dateRange'
 
 /** Private bucket holding client-uploaded proof of payment and query attachments. */
 export const PROOF_BUCKET = 'client-proofs'
@@ -2149,6 +2150,20 @@ const directOpsApi = {
     })
   },
 
+  async sendInvoiceRemindEmail({ to, subject, html, text, attachments }) {
+    const recipient = String(to || '').trim()
+    if (!recipient) {
+      return { data: null, error: { message: 'This client has no email address on file.' } }
+    }
+    return this.invoke('send-billing-document', {
+      to: recipient,
+      subject,
+      html,
+      text,
+      attachments: attachments || [],
+    })
+  },
+
   // --- Payments (Phase 3) ---
 
   async listPayments() {
@@ -2854,7 +2869,7 @@ const directOpsApi = {
     }
   },
 
-  async getClientStatement({ client_id, from, to }) {
+  async getClientStatement({ client_id, from, to, capYears } = {}) {
     if (!supabase) return dbUnavailable()
     if (!client_id) {
       return { data: null, error: { message: 'Please select a client.' } }
@@ -2887,8 +2902,34 @@ const directOpsApi = {
       .order('issue_date', { ascending: true })
     if (quoteErr) return mapError(quoteErr)
 
-    const fromDate = from || '0001-01-01'
-    const toDate = to || '9999-12-31'
+    let fromDate = from || '0001-01-01'
+    let toDate = to || '9999-12-31'
+    let rangeFrom = from || null
+    let rangeTo = to || null
+
+    const carryIn = openingBalanceCarryIn(clientRes.data, allPay || [])
+
+    if (Number(capYears) > 0) {
+      toDate = to || localTodayIso()
+      let earliest = ''
+      const consider = (d) => {
+        const day = String(d || '').slice(0, 10)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
+        if (!earliest || day < earliest) earliest = day
+      }
+      for (const inv of allInv || []) {
+        if (!invoiceAffectsClientBalance(inv.status)) continue
+        consider(inv.issue_date || String(inv.created_at || '').slice(0, 10))
+      }
+      for (const pay of allPay || []) {
+        if (pay.is_adjustment) continue
+        consider(pay.payment_date)
+      }
+      consider(carryIn.asOfDate)
+      fromDate = remindStatementFrom(earliest, toDate)
+      rangeFrom = fromDate
+      rangeTo = toDate
+    }
 
     function inRange(dateStr) {
       if (!dateStr) return false
@@ -2902,8 +2943,6 @@ const directOpsApi = {
     function quoteSortDate(q) {
       return q.issue_date || String(q.created_at || '').slice(0, 10) || ''
     }
-
-    const carryIn = openingBalanceCarryIn(clientRes.data, allPay || [])
     const openingAmt = carryIn.originalAmount
     const openingDate = carryIn.asOfDate
 
@@ -3013,8 +3052,8 @@ const directOpsApi = {
     return {
       data: {
         client: clientRes.data,
-        from: from || null,
-        to: to || null,
+        from: rangeFrom,
+        to: rangeTo,
         openingBalance: opening,
         closingBalance: Math.round(balance * 100) / 100,
         periodCharges: Math.round(periodCharges * 100) / 100,

@@ -23,6 +23,33 @@ export function monthStartIso(isoDate) {
   return `${day.slice(0, 7)}-01`
 }
 
+/** Shift a YYYY-MM-DD by whole calendar years (JS Date overflow, e.g. 29 Feb). */
+export function addCalendarYearsIso(isoDate, years) {
+  const day = String(isoDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return ''
+  const y = Number(day.slice(0, 4))
+  const m = Number(day.slice(5, 7))
+  const d = Number(day.slice(8, 10))
+  const dt = new Date(y + Number(years), m - 1, d)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(
+    dt.getDate(),
+  ).padStart(2, '0')}`
+}
+
+/**
+ * Statement start for a monthly-fee remind: 1st of the month of the client's
+ * first transaction, but never more than one year before `to`.
+ */
+export function remindStatementFrom(earliestIso, toIso) {
+  const to = String(toIso || '').slice(0, 10)
+  const capFrom = addCalendarYearsIso(to, -1) || to
+  const earliest = String(earliestIso || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(earliest)) return capFrom
+  const firstMonth = monthStartIso(earliest)
+  if (to && firstMonth > to) return monthStartIso(to)
+  return firstMonth > capFrom ? firstMonth : capFrom
+}
+
 /** Last calendar day of the month after today (YYYY-MM-DD). */
 export function endOfNextMonthIso(from = new Date()) {
   const d = from instanceof Date ? from : new Date()

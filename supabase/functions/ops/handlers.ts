@@ -80,6 +80,32 @@ function localTodayIso(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function monthStartIso(isoDate: string) {
+  const day = String(isoDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return day
+  return `${day.slice(0, 7)}-01`
+}
+
+function addCalendarYearsIso(isoDate: string, years: number) {
+  const day = String(isoDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return ''
+  const y = Number(day.slice(0, 4))
+  const m = Number(day.slice(5, 7))
+  const d = Number(day.slice(8, 10))
+  const dt = new Date(y + years, m - 1, d)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
+function remindStatementFrom(earliestIso: string, toIso: string) {
+  const to = String(toIso || '').slice(0, 10)
+  const capFrom = addCalendarYearsIso(to, -1) || to
+  const earliest = String(earliestIso || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(earliest)) return capFrom
+  const firstMonth = monthStartIso(earliest)
+  if (to && firstMonth > to) return monthStartIso(to)
+  return firstMonth > capFrom ? firstMonth : capFrom
+}
+
 function invoiceAffectsClientBalance(status: string) {
   return BALANCE_INVOICE_STATUSES.includes(status as typeof BALANCE_INVOICE_STATUSES[number])
 }
@@ -459,11 +485,14 @@ function relName(row: Record<string, unknown>, key: string) {
   return rel as Record<string, unknown> | undefined
 }
 
+type ResendAttachment = { filename: string; content: string; type?: string }
+
 async function sendViaResend(
   to: string,
   subject: string,
   html: string,
   text: string,
+  attachments?: ResendAttachment[],
 ) {
   const apiKey = Deno.env.get('RESEND_API_KEY')
   if (!apiKey) {
@@ -476,19 +505,27 @@ async function sendViaResend(
     Deno.env.get('OPS_EMAIL_FROM')?.trim() ||
     Deno.env.get('RESEND_FROM')?.trim() ||
     'iTreq Inc <no-reply@itreqinc.com>'
+  const payload: Record<string, unknown> = {
+    from,
+    to: [to],
+    subject,
+    html,
+    text: text || subject,
+  }
+  if (attachments?.length) {
+    payload.attachments = attachments.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      content_type: a.type || 'application/pdf',
+    }))
+  }
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      html,
-      text: text || subject,
-    }),
+    body: JSON.stringify(payload),
   })
   if (!res.ok) {
     const errText = await res.text()
@@ -2505,6 +2542,56 @@ handlers.send_billing_document_email = async ({ sb }, args) => {
   return { ok: true }
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function normalizePdfAttachments(raw: unknown): ResendAttachment[] {
+  if (!Array.isArray(raw)) return []
+  const out: ResendAttachment[] = []
+  let totalChars = 0
+  for (const item of raw) {
+    const rec = (item || {}) as Record<string, unknown>
+    const filename = String(rec.filename || '')
+      .replace(/[/\\]/g, '')
+      .replace(/[<>:"|?*\u0000-\u001f]/g, ' ')
+      .trim()
+      .slice(0, 180)
+    const content = String(rec.content || '').replace(/\s/g, '')
+    if (!filename.toLowerCase().endsWith('.pdf')) {
+      throw new OpsError('Attachments must be PDF files.')
+    }
+    if (!content || !/^[A-Za-z0-9+/=]+$/.test(content)) {
+      throw new OpsError('An attachment could not be read.')
+    }
+    totalChars += content.length
+    if (totalChars > 5_500_000) {
+      throw new OpsError('Attachments are too large to send. Try fewer invoices.')
+    }
+    out.push({
+      filename: filename || 'document.pdf',
+      content,
+      type: 'application/pdf',
+    })
+  }
+  return out
+}
+
+handlers.send_invoice_remind_email = async (_ctx, args) => {
+  const payload = (args[0] || {}) as Record<string, unknown>
+  const to = String(payload.to || '').trim()
+  const subject = String(payload.subject || '').trim()
+  const html = String(payload.html || '')
+  const text = String(payload.text || '')
+  if (!to || !subject || !html) {
+    throw new OpsError('Missing to, subject, or html.')
+  }
+  if (!EMAIL_RE.test(to)) {
+    throw new OpsError('Invalid recipient email.')
+  }
+  const attachments = normalizePdfAttachments(payload.attachments)
+  await sendViaResend(to, subject, html, text || subject, attachments)
+  return { ok: true }
+}
+
 handlers.list_payments = async ({ sb }) => {
   const { data, error } = await sb
     .from('payments')
@@ -3029,10 +3116,11 @@ function scopeClientId(user: UserRow, bodyClientId: string | null | undefined) {
 }
 
 handlers.get_client_statement = async ({ user, sb }, args) => {
-  const { client_id, from, to } = (args[0] || {}) as {
+  const { client_id, from, to, capYears } = (args[0] || {}) as {
     client_id?: string
     from?: string
     to?: string
+    capYears?: number
   }
   const scopedId = scopeClientId(user, client_id || null)
   if (!scopedId) throw new OpsError('Please select a client.')
@@ -3063,8 +3151,37 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     .order('issue_date', { ascending: true })
   if (quoteErr) throw mapDbError(quoteErr)
 
-  const fromDate = from || '0001-01-01'
-  const toDate = to || '9999-12-31'
+  let fromDate = from || '0001-01-01'
+  let toDate = to || '9999-12-31'
+  let rangeFrom: string | null = from || null
+  let rangeTo: string | null = to || null
+
+  const carryIn = openingBalanceCarryIn(
+    client as Record<string, unknown>,
+    (allPay || []) as Record<string, unknown>[],
+  )
+
+  if (Number(capYears) > 0) {
+    toDate = to || localTodayIso()
+    let earliest = ''
+    const consider = (d: string) => {
+      const day = String(d || '').slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
+      if (!earliest || day < earliest) earliest = day
+    }
+    for (const inv of allInv || []) {
+      if (!invoiceAffectsClientBalance(String(inv.status))) continue
+      consider(String(inv.issue_date || String(inv.created_at || '').slice(0, 10)))
+    }
+    for (const pay of allPay || []) {
+      if (pay.is_adjustment) continue
+      consider(String(pay.payment_date || ''))
+    }
+    consider(String(carryIn.asOfDate || ''))
+    fromDate = remindStatementFrom(earliest, toDate)
+    rangeFrom = fromDate
+    rangeTo = toDate
+  }
 
   const inRange = (dateStr: string) => {
     if (!dateStr) return false
@@ -3076,11 +3193,6 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
 
   const quoteSortDate = (q: Record<string, unknown>) =>
     String(q.issue_date || String(q.created_at || '').slice(0, 10) || '')
-
-  const carryIn = openingBalanceCarryIn(
-    client as Record<string, unknown>,
-    (allPay || []) as Record<string, unknown>[],
-  )
   const openingAmt = carryIn.originalAmount
   const openingDate = carryIn.asOfDate
 
@@ -3179,8 +3291,8 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
 
   return {
     client,
-    from: from || null,
-    to: to || null,
+    from: rangeFrom,
+    to: rangeTo,
     openingBalance: opening,
     closingBalance: Math.round(balance * 100) / 100,
     periodCharges: Math.round(periodCharges * 100) / 100,

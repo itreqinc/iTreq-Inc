@@ -12,6 +12,7 @@ import { isAdmin } from '../../lib/authConfig'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import {
+  addCalendarYearsIso,
   documentFilterDate,
   filterByDateRange,
   monthStartIso,
@@ -43,6 +44,14 @@ import {
   invoiceDisplayStatus,
 } from '../../lib/payments'
 import { isMonthlyFeeProduct } from '../../lib/productKind'
+import {
+  buildInvoiceRemindEmail,
+  invoiceCanRemind,
+  remindMonthLabel,
+  safePdfFilename,
+} from '../../lib/invoiceRemind'
+import { htmlPrintToPdfBase64 } from '../../lib/printHtmlToPdf'
+import { prepareStatementDocument } from '../../lib/statementDocument'
 import { ClientSelect } from '../ClientSelect'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
@@ -171,7 +180,7 @@ export default function InvoicesPage() {
   const deepLinkHandledRef = useRef(false)
   const saveInFlightRef = useRef(false)
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
-  const { showError, showSuccess, confirm, runWithProgress } = useOpsAlert()
+  const { showError, showSuccess, showWarning, confirm, runWithProgress } = useOpsAlert()
   const [rows, setRows] = useState([])
   const [clients, setClients] = useState([])
   const [products, setProducts] = useState([])
@@ -416,22 +425,41 @@ export default function InvoicesPage() {
       .map((r) => r.id)
   }, [visibleRows, editingId, isDirty])
 
+  const remindableIds = useMemo(() => {
+    return visibleRows
+      .filter((r) => invoiceCanRemind(r))
+      .filter((r) => !(r.id === editingId && isDirty))
+      .map((r) => r.id)
+  }, [visibleRows, editingId, isDirty])
+
+  const checkableIds = useMemo(
+    () => [...new Set([...issueableDraftIds, ...remindableIds])],
+    [issueableDraftIds, remindableIds],
+  )
+
   const issueSelectedSet = useMemo(() => new Set(issueSelectedIds), [issueSelectedIds])
-  const allIssueableSelected =
-    issueableDraftIds.length > 0 &&
-    issueableDraftIds.every((id) => issueSelectedSet.has(id))
-  const someIssueableSelected = issueableDraftIds.some((id) => issueSelectedSet.has(id))
+  const selectedIssueIds = useMemo(
+    () => issueSelectedIds.filter((id) => issueableDraftIds.includes(id)),
+    [issueSelectedIds, issueableDraftIds],
+  )
+  const selectedRemindIds = useMemo(
+    () => issueSelectedIds.filter((id) => remindableIds.includes(id)),
+    [issueSelectedIds, remindableIds],
+  )
+  const allCheckableSelected =
+    checkableIds.length > 0 && checkableIds.every((id) => issueSelectedSet.has(id))
+  const someCheckableSelected = checkableIds.some((id) => issueSelectedSet.has(id))
 
   useEffect(() => {
     if (!masterIssueCheckboxRef.current) return
     masterIssueCheckboxRef.current.indeterminate =
-      someIssueableSelected && !allIssueableSelected
-  }, [someIssueableSelected, allIssueableSelected])
+      someCheckableSelected && !allCheckableSelected
+  }, [someCheckableSelected, allCheckableSelected])
 
   useEffect(() => {
-    const allowed = new Set(issueableDraftIds)
+    const allowed = new Set(checkableIds)
     setIssueSelectedIds((prev) => prev.filter((id) => allowed.has(id)))
-  }, [issueableDraftIds])
+  }, [checkableIds])
 
   const readOnly = !invoiceCanEdit(form.status)
   /** New invoices always; existing drafts/voids only after a change. */
@@ -755,8 +783,148 @@ export default function InvoicesPage() {
       return next
     })
     if (issued[0]?.id) highlightRow(issued[0].id)
-    setIssueSelectedIds([])
+    setIssueSelectedIds((prev) => prev.filter((id) => !issued.some((inv) => inv.id === id)))
     showSuccess(`Issued ${issued.length} invoice(s).`)
+  }
+
+  async function handleRemindSelected() {
+    const idsToRemind = selectedRemindIds
+    if (!idsToRemind.length) {
+      showError('Select issued monthly fee invoices to remind.')
+      return
+    }
+
+    const remindRows = idsToRemind
+      .map((id) => visibleRows.find((r) => r.id === id))
+      .filter(Boolean)
+    const clientById = Object.fromEntries((clients || []).map((c) => [c.id, c]))
+    const missingEmail = remindRows.filter((row) => {
+      const email = String(clientById[row.client_id]?.email || '').trim()
+      return !email
+    })
+
+    const ok = await confirm({
+      title: `Remind ${remindRows.length} client(s)?`,
+      message:
+        `Each email attaches that monthly fee invoice and a statement (same PDFs as Print / Save PDF). Statements cover up to 1 year, or from the 1st of the first month of that client's transactions.` +
+        (missingEmail.length
+          ? ` ${missingEmail.length} selected invoice(s) have no client email and will be skipped.`
+          : ''),
+      confirmLabel: 'Send reminders',
+    })
+    if (!ok) return
+
+    setSaving(true)
+    const settingsRes = await opsApi.getSettings()
+    if (settingsRes.error) {
+      setSaving(false)
+      showError(settingsRes.error.message)
+      return
+    }
+
+    const sent = []
+    const skipped = []
+    const failed = []
+    try {
+      await runWithProgress({
+        title: 'Sending reminders…',
+        items: remindRows,
+        getLabel: (row) => {
+          const client = row?.clients?.name || 'Client'
+          const doc = row?.number || 'Invoice'
+          return `${client} · ${doc}`
+        },
+        fn: async (row) => {
+          try {
+            const bundleRes = await opsApi.getBillingDocumentBundle('invoice', row.id)
+            if (bundleRes.error) throw new Error(bundleRes.error.message)
+            const { model, emailHtml } = bundleRes.data
+            const to = model.client.email?.trim()
+            if (!to) {
+              skipped.push(`${row.clients?.name || 'Client'} · ${row.number || 'Invoice'}`)
+              return
+            }
+
+            const stmtTo = todayIso()
+            const stmtRes = await opsApi.getClientStatement({
+              client_id: row.client_id,
+              from: addCalendarYearsIso(stmtTo, -1),
+              to: stmtTo,
+              capYears: 1,
+            })
+            if (stmtRes.error) throw new Error(stmtRes.error.message)
+            const printable = {
+              ...stmtRes.data,
+              lines: (stmtRes.data.lines || []).filter((l) => !l.inactive || l.alwaysShow),
+            }
+            const { model: stmtModel, emailHtml: stmtHtml } = prepareStatementDocument({
+              statement: printable,
+              settings: settingsRes.data,
+            })
+
+            const monthLabel = remindMonthLabel(row)
+            const periodLabel = `${stmtModel.fromFormatted} to ${stmtModel.toFormatted}`
+            const { subject, html, text } = buildInvoiceRemindEmail({
+              clientName: model.client.name || row.clients?.name || 'Client',
+              monthLabel,
+              totalLabel: formatPula(stmtModel.closingBalance),
+              periodLabel,
+              docNumber: model.docNumber,
+            })
+
+            const [invoicePdf, statementPdf] = await Promise.all([
+              htmlPrintToPdfBase64(emailHtml),
+              htmlPrintToPdfBase64(stmtHtml),
+            ])
+
+            const sendRes = await opsApi.sendInvoiceRemindEmail({
+              to,
+              subject,
+              html,
+              text,
+              attachments: [
+                {
+                  filename: `${safePdfFilename(model.docNumber || 'Invoice')}.pdf`,
+                  content: invoicePdf,
+                },
+                {
+                  filename: `${safePdfFilename(
+                    `Statement ${stmtModel.from || ''} to ${stmtModel.to || ''}`.trim(),
+                  )}.pdf`,
+                  content: statementPdf,
+                },
+              ],
+            })
+            if (sendRes.error) throw new Error(sendRes.error.message)
+            sent.push(row.id)
+          } catch (err) {
+            failed.push(
+              `${row.clients?.name || 'Client'} · ${row.number || 'Invoice'}: ${
+                err?.message || 'Could not send'
+              }`,
+            )
+          }
+        },
+      })
+    } finally {
+      setSaving(false)
+    }
+
+    if (sent.length) {
+      setIssueSelectedIds((prev) => prev.filter((id) => !sent.includes(id)))
+    }
+
+    if (failed.length && !sent.length && !skipped.length) {
+      showError(failed[0])
+      return
+    }
+    const parts = []
+    if (sent.length) parts.push(`Sent ${sent.length} reminder(s).`)
+    if (skipped.length) parts.push(`Skipped ${skipped.length} with no email.`)
+    if (failed.length) parts.push(`${failed.length} failed.`)
+    const summary = parts.join(' ')
+    if (failed.length) showWarning(summary)
+    else showSuccess(summary || 'No reminders sent.')
   }
 
   async function handleVoid(invoiceId = editingId) {
@@ -1172,11 +1340,6 @@ export default function InvoicesPage() {
               Brought forward
             </button>
           </div>
-          {listView === 'invoices' && !showForm ? (
-            <button type="button" onClick={startNew} className={adminBtnPrimary}>
-              New invoice
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -1389,20 +1552,42 @@ export default function InvoicesPage() {
         shown={visibleRows.length}
         total={rows.length}
       >
-        <div className="flex flex-wrap items-center justify-end gap-3 pb-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 px-3 pb-2 sm:px-4">
           <button
             type="button"
-            disabled={saving || issueSelectedIds.length === 0}
+            disabled={saving || selectedIssueIds.length === 0}
             onClick={handleIssueSelected}
             className={`${adminBtnPrimary} w-full sm:w-auto`}
             title={
-              issueSelectedIds.length
+              selectedIssueIds.length
                 ? undefined
                 : 'Select draft or voided invoices to issue'
             }
           >
-            {saving ? 'Issuing…' : `Issue selected (${issueSelectedIds.length})`}
+            {saving ? 'Issuing…' : `Issue selected (${selectedIssueIds.length})`}
           </button>
+          <button
+            type="button"
+            disabled={saving || selectedRemindIds.length === 0}
+            onClick={handleRemindSelected}
+            className={`${adminBtnPrimary} w-full sm:w-auto`}
+            title={
+              selectedRemindIds.length
+                ? undefined
+                : 'Select issued monthly fee invoices to email with a statement'
+            }
+          >
+            {saving ? 'Sending…' : `Remind (${selectedRemindIds.length})`}
+          </button>
+          {!showForm ? (
+            <button
+              type="button"
+              onClick={startNew}
+              className={`${adminBtnPrimary} w-full sm:w-auto`}
+            >
+              New invoice
+            </button>
+          ) : null}
         </div>
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
@@ -1411,13 +1596,13 @@ export default function InvoicesPage() {
                 <input
                   ref={masterIssueCheckboxRef}
                   type="checkbox"
-                  aria-label="Select all draft and voided invoices"
-                  checked={allIssueableSelected}
-                  disabled={saving || issueableDraftIds.length === 0}
+                  aria-label="Select all drafts to issue and monthly fee invoices to remind"
+                  checked={allCheckableSelected}
+                  disabled={saving || checkableIds.length === 0}
                   onClick={(e) => e.stopPropagation()}
                   onChange={(e) => {
                     if (saving) return
-                    if (e.target.checked) setIssueSelectedIds(issueableDraftIds)
+                    if (e.target.checked) setIssueSelectedIds(checkableIds)
                     else setIssueSelectedIds([])
                   }}
                 />
@@ -1481,7 +1666,7 @@ export default function InvoicesPage() {
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
                     <td className="px-1.5 py-2 sm:px-3 sm:py-3">
-                      {invoiceCanIssue(row.status) ? (
+                      {invoiceCanIssue(row.status) || invoiceCanRemind(row) ? (
                         <input
                           type="checkbox"
                           checked={issueSelectedSet.has(row.id)}
