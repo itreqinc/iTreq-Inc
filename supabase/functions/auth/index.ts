@@ -812,12 +812,18 @@ async function handleInviteClient(
 
   const { data: client, error: clientErr } = await supabase
     .from('clients')
-    .select('id, name, email, phone, cellphone, first_name, middle_name, surname, gender')
+    .select('id, name, email, phone, cellphone, first_name, middle_name, surname, gender, is_active')
     .eq('id', clientId)
     .maybeSingle()
   if (clientErr) throw clientErr
   if (!client) {
     return json(404, { success: false, message: 'Client not found.' })
+  }
+  if (client.is_active === false) {
+    return json(400, {
+      success: false,
+      message: 'This client is inactive. Activate them before sending a portal invite.',
+    })
   }
 
   const email = String(client.email || '').trim().toLowerCase()
@@ -1176,10 +1182,11 @@ async function handleListPortalInvites(
   const { data: clients, error: cErr } = await supabase
     .from('clients')
     .select('id, name, email, phone, cellphone, is_active')
+    .eq('is_active', true)
     .order('name')
   if (cErr) throw cErr
 
-  const activeClients = (clients || []).filter((c) => c.is_active !== false)
+  const activeClients = clients || []
   const activeClientIds = new Set(activeClients.map((c) => String(c.id)))
 
   const { data: portalUsers, error: uErr } = await supabase
