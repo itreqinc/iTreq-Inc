@@ -525,6 +525,29 @@ const directOpsApi = {
       .select()
       .single()
     if (error) return mapError(error)
+    if (!isActive) {
+      const now = new Date().toISOString()
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, phone')
+        .eq('client_id', id)
+        .eq('role', 'client')
+      for (const u of users || []) {
+        await supabase
+          .from('auth_sessions')
+          .update({ revoked_at: now })
+          .eq('user_id', u.id)
+          .is('revoked_at', null)
+        await supabase
+          .from('users')
+          .update({
+            is_active: false,
+            email: u.phone ? null : `retired.${u.id}@inactive.invalid`,
+            updated_at: now,
+          })
+          .eq('id', u.id)
+      }
+    }
     return { data, error: null }
   },
 

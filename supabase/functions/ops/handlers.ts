@@ -48,6 +48,34 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+/** Deactivate a client's portal users and free their login emails for reuse. */
+async function retireClientPortalLogins(sb: SupabaseClient, clientId: string) {
+  const now = nowIso()
+  const { data: users, error } = await sb
+    .from('users')
+    .select('id, phone')
+    .eq('client_id', clientId)
+    .eq('role', 'client')
+  if (error) throw mapDbError(error)
+  for (const u of users || []) {
+    const rec = u as { id: string; phone?: string | null }
+    await sb
+      .from('auth_sessions')
+      .update({ revoked_at: now })
+      .eq('user_id', rec.id)
+      .is('revoked_at', null)
+    const { error: updErr } = await sb
+      .from('users')
+      .update({
+        is_active: false,
+        email: rec.phone ? null : `retired.${rec.id}@inactive.invalid`,
+        updated_at: now,
+      })
+      .eq('id', rec.id)
+    if (updErr) throw mapDbError(updErr)
+  }
+}
+
 function localTodayIso(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -1292,11 +1320,7 @@ handlers.delete_client = async ({ user, sb }, args) => {
   }
 
   // Drop portal access before delete (client_id becomes null on users FK).
-  await sb
-    .from('users')
-    .update({ is_active: false, updated_at: nowIso() })
-    .eq('client_id', id)
-    .eq('role', 'client')
+  await retireClientPortalLogins(sb, id)
 
   const { error } = await sb.from('clients').delete().eq('id', id)
   if (error) throw mapDbError(error)
@@ -1317,13 +1341,9 @@ handlers.set_client_active = async ({ sb }, args) => {
     .single()
   if (error) throw mapDbError(error)
 
-  // Deactivated clients must not remain inviteable / portal-active.
+  // Deactivated clients must not remain inviteable / portal-active, or keep their login email.
   if (!isActive) {
-    await sb
-      .from('users')
-      .update({ is_active: false, updated_at: nowIso() })
-      .eq('client_id', id)
-      .eq('role', 'client')
+    await retireClientPortalLogins(sb, id)
   }
 
   return data

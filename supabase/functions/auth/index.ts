@@ -333,6 +333,50 @@ async function findUserByDestination(
   return data
 }
 
+/** Drop an inactive client login so the email can be reused. Unique index is on lower(email). */
+async function retirePortalUser(
+  supabase: ReturnType<typeof adminClient>,
+  user: { id: string; phone?: string | null },
+) {
+  const now = new Date().toISOString()
+  await supabase
+    .from('auth_sessions')
+    .update({ revoked_at: now })
+    .eq('user_id', user.id)
+    .is('revoked_at', null)
+  const { error } = await supabase
+    .from('users')
+    .update({
+      is_active: false,
+      email: user.phone ? null : `retired.${user.id}@inactive.invalid`,
+      updated_at: now,
+    })
+    .eq('id', user.id)
+  if (error) throwDb(error)
+}
+
+async function loginEmailHeldByInactiveClient(
+  supabase: ReturnType<typeof adminClient>,
+  owner: {
+    id: string
+    role?: string | null
+    client_id?: string | null
+    is_active?: boolean | null
+    phone?: string | null
+  },
+) {
+  if (owner.role !== 'client') return false
+  if (owner.is_active === false) return true
+  if (!owner.client_id) return true
+  const { data: ownerClient, error } = await supabase
+    .from('clients')
+    .select('id, is_active')
+    .eq('id', owner.client_id)
+    .maybeSingle()
+  if (error) throwDb(error)
+  return !ownerClient || ownerClient.is_active === false
+}
+
 async function findUserByLogin(
   supabase: ReturnType<typeof adminClient>,
   login: string,
@@ -862,22 +906,26 @@ async function handleInviteClient(
     })
   }
 
-  // Email must be unique across users (login key).
+  // Email must be unique across users (login key). Inactive client logins do not keep it.
   const { data: emailOwner, error: emailOwnerErr } = await supabase
     .from('users')
-    .select('id, client_id, role, name, email')
+    .select('id, client_id, role, name, email, phone, is_active')
     .ilike('email', email)
     .maybeSingle()
   if (emailOwnerErr) throwDb(emailOwnerErr)
   if (emailOwner && (!existing || emailOwner.id !== existing.id)) {
-    const who =
-      emailOwner.role === 'client'
-        ? `another client account (${emailOwner.name || 'unnamed'})`
-        : `a ${emailOwner.role} account (${emailOwner.name || emailOwner.email})`
-    return json(400, {
-      success: false,
-      message: `Cannot invite ${name}: email ${email} is already used by ${who}. Use a unique client email.`,
-    })
+    if (await loginEmailHeldByInactiveClient(supabase, emailOwner)) {
+      await retirePortalUser(supabase, emailOwner)
+    } else {
+      const who =
+        emailOwner.role === 'client'
+          ? `another client account (${emailOwner.name || 'unnamed'})`
+          : `a ${emailOwner.role} account (${emailOwner.name || emailOwner.email})`
+      return json(400, {
+        success: false,
+        message: `Cannot invite ${name}: email ${email} is already used by ${who}. Use a unique client email.`,
+      })
+    }
   }
 
   // Phone is also unique; shared numbers are common — drop phone rather than block invite.
@@ -1133,19 +1181,23 @@ async function handleSyncClientLoginEmail(
 
   const { data: emailOwner, error: emailOwnerErr } = await supabase
     .from('users')
-    .select('id, client_id, role, name, email')
+    .select('id, client_id, role, name, email, phone, is_active')
     .ilike('email', profileEmail)
     .maybeSingle()
   if (emailOwnerErr) throwDb(emailOwnerErr)
   if (emailOwner && emailOwner.id !== portalUser.id) {
-    const who =
-      emailOwner.role === 'client'
-        ? `another client account (${emailOwner.name || 'unnamed'})`
-        : `a ${emailOwner.role} account (${emailOwner.name || emailOwner.email})`
-    return json(400, {
-      success: false,
-      message: `Cannot use ${profileEmail}: email is already used by ${who}.`,
-    })
+    if (await loginEmailHeldByInactiveClient(supabase, emailOwner)) {
+      await retirePortalUser(supabase, emailOwner)
+    } else {
+      const who =
+        emailOwner.role === 'client'
+          ? `another client account (${emailOwner.name || 'unnamed'})`
+          : `a ${emailOwner.role} account (${emailOwner.name || emailOwner.email})`
+      return json(400, {
+        success: false,
+        message: `Cannot use ${profileEmail}: email is already used by ${who}.`,
+      })
+    }
   }
 
   const now = new Date().toISOString()
@@ -1196,15 +1248,12 @@ async function handleListPortalInvites(
     .eq('is_active', true)
   if (uErr) throw uErr
 
-  // Deactivate portal logins left behind after client delete / deactivate.
-  const orphanIds = (portalUsers || [])
-    .filter((u) => !u.client_id || !activeClientIds.has(String(u.client_id)))
-    .map((u) => u.id)
-  if (orphanIds.length) {
-    await supabase
-      .from('users')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .in('id', orphanIds)
+  // Deactivate portal logins left behind after client delete / deactivate, and free their emails.
+  const orphans = (portalUsers || []).filter(
+    (u) => !u.client_id || !activeClientIds.has(String(u.client_id)),
+  )
+  for (const u of orphans) {
+    await retirePortalUser(supabase, u)
   }
 
   const byClient = new Map(
