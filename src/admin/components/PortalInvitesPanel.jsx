@@ -385,7 +385,7 @@ export function PortalInvitesPanel() {
                 </div>
                 <button
                   type="button"
-                  className={`${adminBtnSecondary} shrink-0 text-xs`}
+                  className={`${adminBtnSecondary} hidden shrink-0 text-xs group-open:inline-flex`}
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
