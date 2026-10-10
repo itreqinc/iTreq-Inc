@@ -838,29 +838,62 @@ export function renderDocumentBody(model) {
     </div>`
 }
 
+/** Toolbar + optional Edit (opens the admin form via the opener tab). */
+export function printPreviewToolbarHtml({
+  hintHtml,
+  editUrl,
+  title,
+} = {}) {
+  const edit = editUrl
+    ? `<button type="button" class="no-print" onclick="goEditFromPreview()">Edit</button>`
+    : ''
+  const editScript = editUrl
+    ? `<script>
+function goEditFromPreview() {
+  var url = ${JSON.stringify(editUrl)};
+  try {
+    if (window.opener && !window.opener.closed) {
+      window.opener.location.assign(url);
+      window.opener.focus();
+      window.close();
+      return;
+    }
+  } catch (e) {}
+  window.location.assign(url);
+}
+</script>`
+    : ''
+  return `<div class="toolbar no-print">
+    <p class="print-hint no-print">${hintHtml}</p>
+    <button type="button" class="primary no-print" onclick="window.print()">Print / Save as PDF</button>
+    ${edit}
+    <button type="button" class="no-print" onclick="window.close()">Close</button>
+  </div>
+  ${editScript}
+  <script>
+    document.title = ${JSON.stringify(title || 'Document')};
+  </script>`
+}
+
 /** Full HTML page for print preview (includes toolbar). */
-export function buildBillingDocumentPrintPage(model) {
+export function buildBillingDocumentPrintPage(model, { editUrl } = {}) {
   const body = renderDocumentBody(model)
+  const title = `${model.title} ${model.docNumber}`
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(model.title)} ${escapeHtml(model.docNumber)}</title>
+  <title>${escapeHtml(title)}</title>
   <style>${PRINT_STYLES}</style>
 </head>
 <body>
-  <div class="toolbar no-print">
-    <p class="print-hint no-print">
-      Sized for <strong>A4</strong>; long documents continue on further pages. In the print
-      dialog, turn off <strong>Headers and footers</strong> for a clean PDF.
-    </p>
-    <button type="button" class="primary no-print" onclick="window.print()">Print / Save as PDF</button>
-    <button type="button" class="no-print" onclick="window.close()">Close</button>
-  </div>
+  ${printPreviewToolbarHtml({
+    title,
+    editUrl,
+    hintHtml:
+      'Sized for <strong>A4</strong>; long documents continue on further pages. In the print dialog, turn off <strong>Headers and footers</strong> for a clean PDF.',
+  })}
   ${body}
-  <script>
-    document.title = ${JSON.stringify(`${model.title} ${model.docNumber}`)};
-  </script>
 </body>
 </html>`
 }

@@ -58,9 +58,9 @@ export function fillPrintWindowWithHtml(win, { html, title, path }) {
   return { ok: true }
 }
 
-export function fillBillingDocumentPrintWindow(win, model) {
+export function fillBillingDocumentPrintWindow(win, model, { editUrl } = {}) {
   return fillPrintWindowWithHtml(win, {
-    html: buildBillingDocumentPrintPage(model),
+    html: buildBillingDocumentPrintPage(model, { editUrl }),
     title: `${model.title} ${model.docNumber}`,
     path: getBillingDocumentPrintPath(model),
   })

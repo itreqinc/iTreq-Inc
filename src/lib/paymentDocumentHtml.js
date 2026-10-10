@@ -5,6 +5,7 @@ import { paymentMethodLabel } from './payments'
 import {
   getBillingDocumentLogoUrl,
   getBillingDocumentWatermarkUrl,
+  printPreviewToolbarHtml,
 } from './billingDocumentHtml'
 
 function escapeHtml(value) {
@@ -479,28 +480,24 @@ export function getPaymentDocumentPrintPath(model) {
   return `/print/payment-receipt/${slug || 'receipt'}`
 }
 
-export function buildPaymentDocumentPrintPage(model) {
+export function buildPaymentDocumentPrintPage(model, { editUrl } = {}) {
   const body = renderPaymentBody(model)
+  const title = `${model.title} ${model.docNumber}`
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(model.title)} ${escapeHtml(model.docNumber)}</title>
+  <title>${escapeHtml(title)}</title>
   <style>${PRINT_STYLES}</style>
 </head>
 <body>
-  <div class="toolbar no-print">
-    <p class="print-hint no-print">
-      Sized for <strong>A4</strong>. In the print dialog, turn off
-      <strong>Headers and footers</strong> for a clean PDF.
-    </p>
-    <button type="button" class="primary no-print" onclick="window.print()">Print / Save as PDF</button>
-    <button type="button" class="no-print" onclick="window.close()">Close</button>
-  </div>
+  ${printPreviewToolbarHtml({
+    title,
+    editUrl,
+    hintHtml:
+      'Sized for <strong>A4</strong>. In the print dialog, turn off <strong>Headers and footers</strong> for a clean PDF.',
+  })}
   ${body}
-  <script>
-    document.title = ${JSON.stringify(`${model.title} ${model.docNumber}`)};
-  </script>
 </body>
 </html>`
 }

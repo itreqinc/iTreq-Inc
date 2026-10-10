@@ -22,6 +22,7 @@ import {
   peekClientsReturn,
   readAccountsSelected,
   rememberAccountsSelected,
+  stashClientsReturn,
   takeClientsReturn,
 } from '../../lib/clientsReturnNav'
 import { statementLineLabel, statementLineMethodSuffix, invoiceBalanceDue } from '../../lib/payments'
@@ -31,6 +32,11 @@ import {
   fillBillingDocumentPrintWindow,
   closeBillingDocumentPrintWindow,
 } from '../../lib/billingDocument'
+import {
+  openPaymentDocumentPrintWindow,
+  fillPaymentDocumentPrintWindow,
+  closePaymentDocumentPrintWindow,
+} from '../../lib/paymentDocument'
 import { quotationDisplayStatus } from '../../lib/portalQuote'
 import {
   openStatementDocumentPrintWindow,
@@ -662,15 +668,24 @@ export default function ClientsPage() {
     return items
   }
 
+  function invoiceEditUrl(invoiceId) {
+    return invoiceUrlFromClients(selectedId, { openInvoiceId: invoiceId })
+  }
+
+  function paymentEditUrl(paymentId) {
+    return paymentUrlFromClients(selectedId, { openPaymentId: paymentId })
+  }
+
+  function quotationEditUrl(quotationId) {
+    if (selectedId) stashClientsReturn(selectedId)
+    return `/admin/quotations?open=${quotationId}`
+  }
+
   function openTransaction(line) {
     if (!line?.id || !selectedId) return
-    if (line.type === 'invoice') {
-      navigate(invoiceUrlFromClients(selectedId, { openInvoiceId: line.id }))
-    } else if (line.type === 'payment') {
-      navigate(paymentUrlFromClients(selectedId, { openPaymentId: line.id }))
-    } else if (line.type === 'quotation') {
-      navigate(`/admin/quotations?open=${line.id}`)
-    }
+    if (line.type === 'invoice') printAccountInvoice(line.id)
+    else if (line.type === 'payment') printAccountPayment(line.id)
+    else if (line.type === 'quotation') printAccountQuotation(line.id)
   }
 
   async function printAccountInvoice(invoiceId) {
@@ -689,7 +704,53 @@ export default function ClientsPage() {
       showError(error.message)
       return
     }
-    const result = fillBillingDocumentPrintWindow(win, data.model)
+    const result = fillBillingDocumentPrintWindow(win, data.model, {
+      editUrl: invoiceEditUrl(invoiceId),
+    })
+    if (!result.ok) showError(result.message)
+  }
+
+  async function printAccountPayment(paymentId) {
+    if (!paymentId || invoiceActionBusy) return
+    const opened = openPaymentDocumentPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+    setInvoiceActionBusy(true)
+    const { data, error } = await opsApi.getPaymentDocumentBundle(paymentId)
+    setInvoiceActionBusy(false)
+    if (error) {
+      closePaymentDocumentPrintWindow(win)
+      showError(error.message)
+      return
+    }
+    const result = fillPaymentDocumentPrintWindow(win, data.model, {
+      editUrl: paymentEditUrl(paymentId),
+    })
+    if (!result.ok) showError(result.message)
+  }
+
+  async function printAccountQuotation(quotationId) {
+    if (!quotationId || invoiceActionBusy) return
+    const opened = openBillingDocumentPrintWindow()
+    if (!opened.ok) {
+      showError(opened.message)
+      return
+    }
+    const { win } = opened
+    setInvoiceActionBusy(true)
+    const { data, error } = await opsApi.getBillingDocumentBundle('quote', quotationId)
+    setInvoiceActionBusy(false)
+    if (error) {
+      closeBillingDocumentPrintWindow(win)
+      showError(error.message)
+      return
+    }
+    const result = fillBillingDocumentPrintWindow(win, data.model, {
+      editUrl: quotationEditUrl(quotationId),
+    })
     if (!result.ok) showError(result.message)
   }
 

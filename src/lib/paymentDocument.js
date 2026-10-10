@@ -16,9 +16,9 @@ export {
   closeBillingDocumentPrintWindow as closePaymentDocumentPrintWindow,
 }
 
-export function fillPaymentDocumentPrintWindow(win, model) {
+export function fillPaymentDocumentPrintWindow(win, model, { editUrl } = {}) {
   return fillPrintWindowWithHtml(win, {
-    html: buildPaymentDocumentPrintPage(model),
+    html: buildPaymentDocumentPrintPage(model, { editUrl }),
     title: `${model.title} ${model.docNumber}`,
     path: getPaymentDocumentPrintPath(model),
   })
