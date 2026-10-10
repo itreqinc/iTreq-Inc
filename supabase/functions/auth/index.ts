@@ -1215,6 +1215,7 @@ async function handleListPortalInvites(
 
   const pending: Record<string, unknown>[] = []
   const notified: Record<string, unknown>[] = []
+  const signedIn: Record<string, unknown>[] = []
 
   for (const c of activeClients) {
     const email = String(c.email || '').trim()
@@ -1231,7 +1232,19 @@ async function handleListPortalInvites(
       })
       continue
     }
-    if (u.first_login_at) continue
+    if (u.first_login_at) {
+      signedIn.push({
+        client_id: c.id,
+        client_name: c.name,
+        email: c.email,
+        login_email: loginEmail,
+        phone: c.cellphone || c.phone || null,
+        user_id: u.id,
+        invited_at: u.invited_at,
+        first_login_at: u.first_login_at,
+      })
+      continue
+    }
     if (!u.invited_at) {
       pending.push({
         client_id: c.id,
@@ -1255,8 +1268,11 @@ async function handleListPortalInvites(
   }
 
   notified.sort((a, b) => String(b.invited_at).localeCompare(String(a.invited_at)))
+  signedIn.sort((a, b) =>
+    String(b.first_login_at || '').localeCompare(String(a.first_login_at || '')),
+  )
 
-  return json(200, { success: true, pending, notified })
+  return json(200, { success: true, pending, notified, signedIn })
 }
 
 async function handleSetAfterHours(

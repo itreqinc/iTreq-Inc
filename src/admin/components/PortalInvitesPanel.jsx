@@ -55,6 +55,8 @@ export function PortalInvitesPanel() {
   const { showError, showSuccess, showWarning, confirm, runWithProgress } = useOpsAlert()
   const [pending, setPending] = useState([])
   const [notified, setNotified] = useState([])
+  const [signedIn, setSignedIn] = useState([])
+  const [showSignedIn, setShowSignedIn] = useState(false)
   const [loading, setLoading] = useState(!AUTH_BYPASS)
   const [busyId, setBusyId] = useState(null)
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -91,8 +93,10 @@ export function PortalInvitesPanel() {
     }
     const nextPending = data.pending || []
     const nextNotified = data.notified || []
+    const nextSignedIn = data.signedIn || []
     setPending(nextPending)
     setNotified(nextNotified)
+    setSignedIn(nextSignedIn)
     const pendingInviteable = new Set(
       nextPending.filter(rowInviteable).map((r) => r.client_id),
     )
@@ -360,23 +364,41 @@ export function PortalInvitesPanel() {
               </div>
             </DetailsCollapse>
 
-            <DetailsCollapse constrainBody={false} className={detailsClass}>
+            <DetailsCollapse
+              constrainBody={false}
+              className={detailsClass}
+              open={showSignedIn ? true : undefined}
+            >
               <summary className={summaryClass}>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-ink-200">
-                    Notified (awaiting first login)
+                    {showSignedIn ? 'Logged in' : 'Notified (awaiting first login)'}
                     <span className="ml-2 text-xs font-normal tabular-nums text-ink-400">
-                      ({notified.length})
+                      ({showSignedIn ? signedIn.length : notified.length})
                     </span>
                   </p>
                   <p className="mt-0.5 text-xs text-ink-400">
-                    Invited by email but have not signed in to the portal yet.
+                    {showSignedIn
+                      ? 'Clients who have signed in to the portal.'
+                      : 'Invited by email but have not signed in to the portal yet.'}
                   </p>
                 </div>
+                <button
+                  type="button"
+                  className={`${adminBtnSecondary} shrink-0 text-xs`}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setShowSignedIn((v) => !v)
+                    setSelectedNotified([])
+                  }}
+                >
+                  {showSignedIn ? 'Reset' : 'Logged in'}
+                </button>
                 <DetailsChevron className="mt-0.5" />
               </summary>
               <div className="space-y-2 border-t border-white/10 p-2">
-                {selectedNotified.length > 0 ? (
+                {!showSignedIn && selectedNotified.length > 0 ? (
                   <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                     <p className="text-xs text-ink-400">
                       {selectedNotified.length} selected
@@ -392,6 +414,47 @@ export function PortalInvitesPanel() {
                   </div>
                 ) : null}
                 <div className={`${adminTableShellClass} max-h-[min(50vh,28rem)] overflow-y-auto`}>
+                  {showSignedIn ? (
+                    <table className={adminTableClass}>
+                      <thead className="sticky top-0 z-10 border-b border-white/10 bg-ink-950 text-ink-400">
+                        <tr>
+                          <th className={`${adminCellPad} min-w-0`}>Client</th>
+                          <th className={`${adminCellPad} ${adminColSecondary}`}>Login email</th>
+                          <th className={`${adminCellPad} ${adminColSecondary}`}>Logged in</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {signedIn.map((row) => (
+                          <tr key={row.client_id} className="border-b border-white/5">
+                            <td className={`${adminCellPad} min-w-0 break-words text-white`}>
+                              <div className="flex flex-col gap-0.5">
+                                <span>{row.client_name}</span>
+                                <span className="break-all text-[11px] text-ink-400 sm:hidden">
+                                  {rowLoginEmail(row) ? truncateEmail(rowLoginEmail(row)) : '—'}
+                                </span>
+                              </div>
+                            </td>
+                            <td
+                              className={`${adminCellPad} text-ink-300 ${adminColSecondary}`}
+                              title={rowLoginEmail(row) || undefined}
+                            >
+                              {rowLoginEmail(row) ? truncateEmail(rowLoginEmail(row)) : '—'}
+                            </td>
+                            <td className={`${adminCellPad} text-ink-300 ${adminColSecondary}`}>
+                              {formatWhen(row.first_login_at)}
+                            </td>
+                          </tr>
+                        ))}
+                        {!signedIn.length ? (
+                          <tr>
+                            <td colSpan={3} className="px-3 py-4 text-ink-500">
+                              No clients have signed in yet.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  ) : (
                   <table className={adminTableClass}>
                     <thead className="sticky top-0 z-10 border-b border-white/10 bg-ink-950 text-ink-400">
                       <tr>
@@ -472,6 +535,7 @@ export function PortalInvitesPanel() {
                       ) : null}
                     </tbody>
                   </table>
+                  )}
                 </div>
               </div>
             </DetailsCollapse>
