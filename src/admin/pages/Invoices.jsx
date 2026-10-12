@@ -864,7 +864,7 @@ export default function InvoicesPage() {
     const ok = await confirm({
       title: `Remind ${remindRows.length} client(s)?`,
       message:
-        `Each email attaches that monthly fee invoice and a statement as text PDFs — the same documents as Print / Save PDF. Statements cover up to 1 year, or from the 1st of the first month of that client's transactions.` +
+        `Each email attaches that monthly fee invoice and a statement. They are the same Print / Save documents. Statements cover up to 1 year, or from the 1st of the first month of that client's transactions.` +
         (missingEmail.length
           ? ` ${missingEmail.length} selected invoice(s) have no client email and will be skipped.`
           : ''),
