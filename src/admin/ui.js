@@ -17,9 +17,12 @@ export const adminBtnDanger =
 /**
  * Rounded table frame. Tables must fit the viewport on mobile (no page or
  * inner horizontal scroll) — hide extra columns and let cells wrap.
+ * The frame class leaves overflow visible so toolbar menus can open over the table.
  */
-export const adminTableShellClass =
-  'max-w-full overflow-x-clip rounded-2xl border border-white/10 bg-ink-900/90'
+export const adminTableShellFrameClass =
+  'max-w-full rounded-2xl border border-white/10 bg-ink-900/90'
+
+export const adminTableShellClass = `${adminTableShellFrameClass} overflow-x-clip`
 
 export const adminTableShellSmClass =
   'max-w-full overflow-x-clip rounded-xl border border-white/10 bg-ink-900/90'

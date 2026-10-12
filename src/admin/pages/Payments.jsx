@@ -32,6 +32,8 @@ import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import { filterByDateRange, sortByDateDescThenNameAsc } from '../../lib/dateRange'
 import { ClientSelect } from '../ClientSelect'
+import { ListLookupFilters } from '../ListLookupFilters'
+import { clientSearchParts, clientsForLookup, matchesListQuery } from '../../lib/listLookup'
 import { AdminIconAction } from '../AdminIconAction'
 import { CornerHintIcon } from '../components/CornerHintIcon'
 import {
@@ -48,6 +50,11 @@ import {
   clickableRowClass,
   formatPula,
 } from '../ui'
+
+const PAYMENT_METHOD_OPTIONS = [
+  ...PAYMENT_METHODS.map((method) => ({ value: method.value, label: method.label })),
+  { value: 'adjustment', label: 'Adjustment' },
+]
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -104,6 +111,9 @@ export default function PaymentsPage() {
   const [fromNotification, setFromNotification] = useState(null)
   const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.payments')
   const [listView, setListView] = useState('payments') // payments | adjustments | all
+  const [paymentQuery, setPaymentQuery] = useState('')
+  const [paymentClientId, setPaymentClientId] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('')
   const [unallocatedByPayment, setUnallocatedByPayment] = useState({})
   const [clientsWithUnpaidInvoices, setClientsWithUnpaidInvoices] = useState(() => new Set())
   const [clientsWithUnsettledOpening, setClientsWithUnsettledOpening] = useState(() => new Set())
@@ -373,19 +383,56 @@ export default function PaymentsPage() {
     [editingId, form, baseline],
   )
 
+  const filterClients = useMemo(() => clientsForLookup(clients, rows), [clients, rows])
+
+  const paymentLookupActive = Boolean(
+    paymentQuery.trim() || paymentClientId || paymentMethod,
+  )
+
   const visibleRows = useMemo(() => {
-    const filtered = rows.filter((row) => {
+    const byView = rows.filter((row) => {
       const isAdj = Boolean(row.is_adjustment)
       if (listView === 'payments') return !isAdj
       if (listView === 'adjustments') return isAdj
       return true
     })
+    const byDate = filterByDateRange(byView, dateFrom, dateTo, (row) => row.payment_date)
+    const clientById = new Map(filterClients.map((client) => [String(client.id), client]))
+    const matched = byDate.filter((row) => {
+      if (paymentClientId && String(row.client_id) !== String(paymentClientId)) return false
+      if (paymentMethod === 'adjustment') {
+        if (!row.is_adjustment) return false
+      } else if (paymentMethod && (row.is_adjustment || row.method !== paymentMethod)) {
+        return false
+      }
+      const client = clientById.get(String(row.client_id))
+      return matchesListQuery(paymentQuery, [
+        row.clients?.name,
+        ...clientSearchParts(client),
+        row.reference,
+        row.notes,
+        row.payment_date,
+        row.amount,
+        formatPula(row.amount),
+        paymentDisplayMethod(row),
+        paymentMethodLabel(row.method),
+      ])
+    })
     return sortByDateDescThenNameAsc(
-      filterByDateRange(filtered, dateFrom, dateTo, (row) => row.payment_date),
+      matched,
       (row) => row.payment_date,
       (row) => row.clients?.name || '',
     )
-  }, [rows, dateFrom, dateTo, listView])
+  }, [
+    rows,
+    dateFrom,
+    dateTo,
+    listView,
+    filterClients,
+    paymentQuery,
+    paymentClientId,
+    paymentMethod,
+  ])
 
   const listTotalForFilter = useMemo(() => {
     if (listView === 'all') return rows.length
@@ -949,6 +996,22 @@ export default function PaymentsPage() {
         shown={visibleRows.length}
         total={listTotalForFilter}
         size="compact"
+        filtersActive={paymentLookupActive}
+        filters={
+          <ListLookupFilters
+            query={paymentQuery}
+            onQueryChange={setPaymentQuery}
+            queryPlaceholder="Reference, client, notes, or amount"
+            clients={filterClients}
+            clientId={paymentClientId}
+            onClientChange={setPaymentClientId}
+            selectLabel="Method"
+            selectValue={paymentMethod}
+            onSelectChange={setPaymentMethod}
+            selectPlaceholder="All methods"
+            selectOptions={PAYMENT_METHOD_OPTIONS}
+          />
+        }
         leading={
           <div className="grid w-full grid-cols-3 gap-0.5 rounded-xl border border-white/10 bg-ink-950/50 p-0.5 sm:inline-flex sm:w-auto">
             {[
@@ -996,10 +1059,10 @@ export default function PaymentsPage() {
                   {listTotalForFilter === 0
                     ? listView === 'adjustments'
                       ? 'No adjustments recorded yet.'
-                      : listView === 'all'
-                        ? 'No payments recorded yet.'
-                        : 'No payments recorded yet.'
-                    : 'No rows in the selected date range.'}
+                      : 'No payments recorded yet.'
+                    : paymentLookupActive
+                      ? 'No payments match these filters.'
+                      : 'No rows in the selected date range.'}
                 </td>
               </tr>
             ) : (

@@ -37,7 +37,7 @@ import { upsertById, removeById } from '../../lib/listState'
 import { emptyLine,
   mapDocLinesForEditor,
   normalizeLines } from '../../lib/billing'
-import { formatBillingPeriodLabel } from '../../lib/invoiceDates'
+import { formatBillingPeriodLabel, formatBillingPeriodMonthAbbr } from '../../lib/invoiceDates'
 import {
   dueDateFromIssueDate,
   invoiceBalanceDue,
@@ -53,6 +53,8 @@ import {
 import { htmlPrintToPdfBase64 } from '../../lib/printHtmlToPdf'
 import { prepareStatementDocument } from '../../lib/statementDocument'
 import { ClientSelect } from '../ClientSelect'
+import { ListLookupFilters } from '../ListLookupFilters'
+import { clientSearchParts, clientsForLookup, matchesListQuery } from '../../lib/listLookup'
 import { LineItemsEditor } from '../LineItemsEditor'
 import { BillingDocumentButtons } from '../BillingDocumentButtons'
 import {
@@ -78,6 +80,15 @@ import { adminBtnDanger,
   adminColSecondary,
   adminColAction,
 } from '../ui'
+
+const INVOICE_STATUS_OPTIONS = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'due', label: 'Due' },
+  { value: 'partial', label: 'Partial' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'void', label: 'Void' },
+]
 
 function invoiceRowClass(status) {
   switch (status) {
@@ -200,6 +211,9 @@ export default function InvoicesPage() {
   const [form, setForm] = useState(() => newInvoiceForm())
   const [listView, setListView] = useState('invoices')
   const [creditByClient, setCreditByClient] = useState({})
+  const [invoiceQuery, setInvoiceQuery] = useState('')
+  const [invoiceClientId, setInvoiceClientId] = useState('')
+  const [invoiceStatus, setInvoiceStatus] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -407,15 +421,55 @@ export default function InvoicesPage() {
     [form, baseline],
   )
 
+  const filterClients = useMemo(() => clientsForLookup(clients, rows), [clients, rows])
+
+  const invoiceLookupActive = Boolean(
+    invoiceQuery.trim() || invoiceClientId || invoiceStatus,
+  )
+
   const visibleRows = useMemo(() => {
-    const filtered = filterByDateRange(rows, dateFrom, dateTo, documentFilterDate)
-    const withUnread = withUnreadRows(filtered, rows, unreadByInvoice)
+    const byDate = filterByDateRange(rows, dateFrom, dateTo, documentFilterDate)
+    const withUnread = withUnreadRows(byDate, rows, unreadByInvoice)
+    const clientById = new Map(filterClients.map((client) => [String(client.id), client]))
+    const matched = withUnread.filter((row) => {
+      if (invoiceClientId && String(row.client_id) !== String(invoiceClientId)) return false
+      const displayStatus = invoiceDisplayStatus(row)
+      if (invoiceStatus && displayStatus !== invoiceStatus) return false
+      const client = clientById.get(String(row.client_id))
+      const balance = invoiceBalanceDue(row)
+      return matchesListQuery(invoiceQuery, [
+        row.number,
+        displayStatus,
+        row.status,
+        row.clients?.name,
+        ...clientSearchParts(client),
+        row.notes,
+        row.billing_period,
+        formatBillingPeriodLabel(row.billing_period),
+        formatBillingPeriodMonthAbbr(row.billing_period),
+        row.issue_date,
+        row.due_date,
+        row.total,
+        formatPula(row.total),
+        balance,
+        formatPula(balance),
+      ])
+    })
     return sortByDateDescThenNameAsc(
-      withUnread,
+      matched,
       documentFilterDate,
       (row) => row.clients?.name || '',
     )
-  }, [rows, dateFrom, dateTo, unreadByInvoice])
+  }, [
+    rows,
+    dateFrom,
+    dateTo,
+    unreadByInvoice,
+    filterClients,
+    invoiceQuery,
+    invoiceClientId,
+    invoiceStatus,
+  ])
 
   const issueableDraftIds = useMemo(() => {
     // Draft and void invoices can be issued / re-issued. Skip the open dirty form.
@@ -1551,8 +1605,24 @@ export default function InvoicesPage() {
         dateLabel="issue date"
         shown={visibleRows.length}
         total={rows.length}
+        filtersActive={invoiceLookupActive}
+        filters={
+          <ListLookupFilters
+            query={invoiceQuery}
+            onQueryChange={setInvoiceQuery}
+            queryPlaceholder="Number, client, notes, or amount"
+            clients={filterClients}
+            clientId={invoiceClientId}
+            onClientChange={setInvoiceClientId}
+            selectLabel="Status"
+            selectValue={invoiceStatus}
+            onSelectChange={setInvoiceStatus}
+            selectPlaceholder="All statuses"
+            selectOptions={INVOICE_STATUS_OPTIONS}
+          />
+        }
       >
-        <div className="flex flex-wrap items-center justify-end gap-2 px-3 pb-2 sm:px-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 px-3 py-3 sm:px-4">
           <button
             type="button"
             disabled={saving || selectedIssueIds.length === 0}
@@ -1636,7 +1706,9 @@ export default function InvoicesPage() {
                 <td colSpan={8} className="px-4 py-6 text-ink-400">
                   {rows.length === 0
                     ? 'No invoices yet.'
-                    : 'No invoices in the selected date range.'}
+                    : invoiceLookupActive
+                      ? 'No invoices match these filters.'
+                      : 'No invoices in the selected date range.'}
                 </td>
               </tr>
             ) : (

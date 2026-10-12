@@ -135,7 +135,13 @@ export function YearMonthDaySelect({
   }
 
   const selects = (
-    <div className={`grid grid-cols-3 ${compact ? 'gap-1.5' : 'gap-2'}`}>
+    <div
+      className={`grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)_minmax(0,0.7fr)] ${
+        compact
+          ? 'gap-1.5 sm:grid-cols-[5.25rem_minmax(6.5rem,1fr)_4.25rem]'
+          : 'gap-2 sm:grid-cols-[6.75rem_minmax(9.25rem,1fr)_5.25rem] sm:gap-2.5'
+      }`}
+    >
       <div className="min-w-0">
         <span className="sr-only">Year</span>
         <select

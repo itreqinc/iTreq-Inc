@@ -1,5 +1,5 @@
 import { YearMonthDaySelect } from './YearMonthDaySelect'
-import { adminBtnSecondary, adminTableShellClass } from '../admin/ui'
+import { adminBtnSecondary, adminTableShellFrameClass } from '../admin/ui'
 import { dateRangeIsBackwards, endOfNextMonthIso, todayIso } from '../lib/dateRange'
 
 /**
@@ -20,11 +20,25 @@ export function DateRangeFilter({
   leading = null,
   size = 'default',
   dateClassName = '',
+  filters = null,
+  filtersActive = false,
 }) {
   const active = Boolean(from || to)
   const backwards = dateRangeIsBackwards(from, to)
   const toMax = endOfNextMonthIso()
   const compact = size === 'compact'
+  const dateFieldClass = compact
+    ? `w-full min-w-0 sm:w-auto sm:min-w-[18.5rem] sm:flex-1 ${dateClassName}`.trim()
+    : `w-full min-w-0 sm:w-auto sm:min-w-[26rem] sm:flex-1 ${dateClassName}`.trim()
+  const summary = backwards
+    ? 'The “From” date is after the “To” date.'
+    : active && filtersActive
+      ? `Showing ${shown} of ${total}.`
+      : active
+        ? `Showing ${shown} of ${total} — by ${dateLabel}.`
+        : filtersActive
+          ? `Showing ${shown} of ${total}.`
+          : `Pick a range to filter by ${dateLabel}.`
 
   function clear() {
     onFromChange('')
@@ -32,7 +46,7 @@ export function DateRangeFilter({
   }
 
   return (
-    <div className={`${adminTableShellClass} ${className}`.trim()}>
+    <div className={`${adminTableShellFrameClass} ${className}`.trim()}>
       <div className="grid grid-cols-1 gap-3 border-b border-white/10 p-3 sm:flex sm:flex-wrap sm:items-end sm:gap-3 sm:p-4">
         {leading ? <div className="min-w-0 w-full sm:w-auto">{leading}</div> : null}
         <YearMonthDaySelect
@@ -41,7 +55,7 @@ export function DateRangeFilter({
           value={from}
           onChange={onFromChange}
           maxYmd={todayIso()}
-          className={`w-full min-w-0 sm:w-[14.5rem] ${dateClassName}`.trim()}
+          className={dateFieldClass}
         />
         <YearMonthDaySelect
           size={size}
@@ -49,7 +63,7 @@ export function DateRangeFilter({
           value={to}
           onChange={onToChange}
           maxYmd={toMax}
-          className={`w-full min-w-0 sm:w-[14.5rem] ${dateClassName}`.trim()}
+          className={dateFieldClass}
         />
         <button
           type="button"
@@ -59,15 +73,12 @@ export function DateRangeFilter({
         >
           Clear
         </button>
-        <p className="w-full text-xs text-ink-400 sm:ml-auto sm:max-w-xs">
-          {backwards
-            ? 'The “From” date is after the “To” date.'
-            : active
-              ? `Showing ${shown} of ${total} — by ${dateLabel}.`
-              : `Pick a range to filter by ${dateLabel}.`}
-        </p>
+        <p className="w-full text-xs text-ink-400 sm:ml-auto sm:max-w-xs">{summary}</p>
       </div>
-      {children}
+      {filters ? (
+        <div className="relative z-20 border-b border-white/10 p-3 sm:p-4">{filters}</div>
+      ) : null}
+      <div className="overflow-x-clip rounded-b-2xl">{children}</div>
     </div>
   )
 }
