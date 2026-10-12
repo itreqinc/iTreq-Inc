@@ -30,6 +30,7 @@ import {
 } from '../../lib/paymentDocument'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
+import { ListPagination, useListPagination } from '../ListPagination'
 import { filterByDateRange, sortByDateDescThenNameAsc } from '../../lib/dateRange'
 import { ClientSelect } from '../ClientSelect'
 import { ListLookupFilters } from '../ListLookupFilters'
@@ -433,6 +434,11 @@ export default function PaymentsPage() {
     paymentClientId,
     paymentMethod,
   ])
+
+  const paymentPage = useListPagination(visibleRows, {
+    resetKey: `${dateFrom}|${dateTo}|${listView}|${paymentQuery}|${paymentClientId}|${paymentMethod}`,
+    focusId: highlightId,
+  })
 
   const listTotalForFilter = useMemo(() => {
     if (listView === 'all') return rows.length
@@ -1066,7 +1072,7 @@ export default function PaymentsPage() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row) => {
+              paymentPage.rows.map((row) => {
                 const open = () => startEdit(row)
                 return (
                 <tr
@@ -1150,6 +1156,7 @@ export default function PaymentsPage() {
             )}
           </tbody>
         </table>
+        <ListPagination list={paymentPage} />
       </DateRangeFilter>
     </div>
   )

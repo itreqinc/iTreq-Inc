@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ListPagination, useListPagination } from '../ListPagination'
 import { opsApi } from '../../lib/opsApi'
 import {
   COLLAPSE_BODY_CLASS,
@@ -174,6 +175,13 @@ export default function ReportsPage() {
   const [stmtLoading, setStmtLoading] = useState(false)
   const [stmtPrinting, setStmtPrinting] = useState(false)
   const [openSection, setOpenSection] = useState(null)
+
+  const incomePage = useListPagination(income?.payments || [], {
+    resetKey: `${incomeFrom}|${incomeTo}|${income?.paymentCount ?? ''}`,
+  })
+  const expensePage = useListPagination(expensesReport?.expenses || [], {
+    resetKey: `${expenseFrom}|${expenseTo}|${expensesReport?.expenseCount ?? ''}`,
+  })
 
   function toggleSection(id) {
     setOpenSection((current) => (current === id ? null : id))
@@ -608,7 +616,7 @@ export default function ReportsPage() {
                       </td>
                     </tr>
                   ) : (
-                    income.payments.map((row) => {
+                    incomePage.rows.map((row) => {
                       const open = () => navigate(`/admin/payments?open=${row.id}`)
                       return (
                         <tr
@@ -638,6 +646,7 @@ export default function ReportsPage() {
                   )}
                 </tbody>
               </table>
+              <ListPagination list={incomePage} />
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
@@ -750,7 +759,7 @@ export default function ReportsPage() {
                       </td>
                     </tr>
                   ) : (
-                    expensesReport.expenses.map((row) => {
+                    expensePage.rows.map((row) => {
                       const open = () => navigate(`/admin/expenses?open=${row.id}`)
                       return (
                         <tr
@@ -783,6 +792,7 @@ export default function ReportsPage() {
                   )}
                 </tbody>
               </table>
+              <ListPagination list={expensePage} />
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">

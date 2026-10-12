@@ -17,6 +17,7 @@ import { useOpsAlert } from '../OpsAlertContext'
 import { AdminIconAction } from '../AdminIconAction'
 import { FieldBox } from '../../components/FieldBox'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
+import { ListPagination, useListPagination } from '../ListPagination'
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -210,6 +211,10 @@ export default function StockPage() {
     () => (orders || []).filter((o) => o.status === 'open'),
     [orders],
   )
+
+  const levelPage = useListPagination(levels)
+  const orderPage = useListPagination(orders)
+  const adjustmentPage = useListPagination(adjustments)
 
   async function openDetail(id) {
     const { data, error } = await opsApi.getPurchaseOrder(id)
@@ -451,7 +456,7 @@ export default function StockPage() {
       {view === 'list' ? (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
-            {levels.map((row) => (
+            {levelPage.rows.map((row) => (
               <div
                 key={row.product_id}
                 className="rounded-2xl border border-white/10 bg-ink-900/90 p-4"
@@ -463,6 +468,7 @@ export default function StockPage() {
               </div>
             ))}
           </div>
+          <ListPagination list={levelPage} />
 
           <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
             <CollapsiblePanel
@@ -500,7 +506,7 @@ export default function StockPage() {
                         </td>
                       </tr>
                     ) : (
-                      orders.map((row) => {
+                      orderPage.rows.map((row) => {
                         const open = () => openDetail(row.id)
                         return (
                           <tr
@@ -532,6 +538,7 @@ export default function StockPage() {
                     )}
                   </tbody>
                 </table>
+                <ListPagination list={orderPage} />
               </div>
             </CollapsiblePanel>
           </div>
@@ -562,7 +569,7 @@ export default function StockPage() {
                         </td>
                       </tr>
                     ) : (
-                      adjustments.map((row) => {
+                      adjustmentPage.rows.map((row) => {
                         const p = Array.isArray(row.products) ? row.products[0] : row.products
                         const delta = Number(row.quantity_delta) || 0
                         const when = row.created_at
@@ -603,6 +610,7 @@ export default function StockPage() {
                     )}
                   </tbody>
                 </table>
+                <ListPagination list={adjustmentPage} />
               </div>
 
               <div className="rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4">

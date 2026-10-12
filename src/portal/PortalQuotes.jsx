@@ -17,6 +17,7 @@ import {
   filterByDateRange,
 } from '../lib/dateRange'
 import { DateRangeFilter } from '../components/DateRangeFilter'
+import { ListPagination, useListPagination } from '../admin/ListPagination'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   adminBtnPrimary,
@@ -98,6 +99,10 @@ export default function PortalQuotes() {
     [rows, from, to],
   )
 
+  const quotePage = useListPagination(visibleRows, {
+    resetKey: `${from}|${to}`,
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -155,7 +160,7 @@ export default function PortalQuotes() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map((q) => {
+              quotePage.rows.map((q) => {
                 const canEdit = clientCanEditPortalQuote(q)
                 const awaiting = portalQuoteAwaitingApproval(q)
                 const open = () => navigate(`/portal/quotes/${q.id}`)
@@ -226,6 +231,7 @@ export default function PortalQuotes() {
             )}
           </tbody>
         </table>
+        <ListPagination list={quotePage} />
       </DateRangeFilter>
     </div>
   )

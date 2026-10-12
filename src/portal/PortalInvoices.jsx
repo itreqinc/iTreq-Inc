@@ -16,6 +16,7 @@ import {
 } from '../lib/dateRange'
 import { withUnreadRows } from '../lib/invoiceDisputes'
 import { DateRangeFilter } from '../components/DateRangeFilter'
+import { ListPagination, useListPagination } from '../admin/ListPagination'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
@@ -84,6 +85,10 @@ export default function PortalInvoices() {
     return withUnreadRows(filtered, rows, unreadByInvoice)
   }, [rows, from, to, unreadByInvoice])
 
+  const invoicePage = useListPagination(visibleRows, {
+    resetKey: `${from}|${to}`,
+  })
+
   return (
     <div className="space-y-6">
       <div>
@@ -129,7 +134,7 @@ export default function PortalInvoices() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map((inv) => {
+              invoicePage.rows.map((inv) => {
                 const billing = clientInvoiceBillingDisplay(inv)
                 const displayStatus = invoiceDisplayStatus(inv)
                 const unread = unreadByInvoice[inv.id] || 0
@@ -188,6 +193,7 @@ export default function PortalInvoices() {
             )}
           </tbody>
         </table>
+        <ListPagination list={invoicePage} />
       </DateRangeFilter>
     </div>
   )

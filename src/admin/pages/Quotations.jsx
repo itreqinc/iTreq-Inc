@@ -28,6 +28,7 @@ import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
+import { ListPagination, useListPagination } from '../ListPagination'
 import {
   documentFilterDate,
   filterByDateRange,
@@ -220,6 +221,11 @@ export default function QuotationsPage() {
       ),
     [rows, dateFrom, dateTo],
   )
+
+  const quotePage = useListPagination(visibleRows, {
+    resetKey: `${dateFrom}|${dateTo}`,
+    focusId: highlightId,
+  })
 
   const readOnly = ['converted', 'cancelled', 'declined'].includes(form.status)
   /** New quotes always; existing only after a change. */
@@ -776,7 +782,7 @@ export default function QuotationsPage() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row) => {
+              quotePage.rows.map((row) => {
                 const awaiting = portalQuoteAwaitingApproval(row)
                 const open = () => openRow(row.id)
                 return (
@@ -829,6 +835,7 @@ export default function QuotationsPage() {
             )}
           </tbody>
         </table>
+        <ListPagination list={quotePage} />
       </DateRangeFilter>
     </div>
   )

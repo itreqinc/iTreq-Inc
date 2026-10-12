@@ -5,6 +5,7 @@ import { paymentMethodLabel } from '../lib/payments'
 import { usePersistedDateRange } from '../hooks/usePersistedDateRange'
 import { filterByDateRange } from '../lib/dateRange'
 import { DateRangeFilter } from '../components/DateRangeFilter'
+import { ListPagination, useListPagination } from '../admin/ListPagination'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
@@ -45,6 +46,10 @@ export default function PortalPayments() {
     () => filterByDateRange(rows, from, to, (pay) => pay.payment_date),
     [rows, from, to],
   )
+
+  const paymentPage = useListPagination(visibleRows, {
+    resetKey: `${from}|${to}`,
+  })
 
   return (
     <div className="space-y-6">
@@ -93,7 +98,7 @@ export default function PortalPayments() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map((pay) => {
+              paymentPage.rows.map((pay) => {
                 const open = () => navigate(`/portal/payments/${pay.id}`)
                 const credit = Number(pay.unallocated_amount) || 0
                 return (
@@ -141,6 +146,7 @@ export default function PortalPayments() {
             )}
           </tbody>
         </table>
+        <ListPagination list={paymentPage} />
       </DateRangeFilter>
 
       <p className="text-xs text-ink-400">

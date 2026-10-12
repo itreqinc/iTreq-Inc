@@ -6,6 +6,7 @@ import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
+import { ListPagination, useListPagination } from '../ListPagination'
 import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import { filterByDateRange } from '../../lib/dateRange'
 import {
@@ -100,6 +101,10 @@ export default function ExpensesPage() {
     () => filterByDateRange(rows, dateFrom, dateTo, (row) => row.expense_date),
     [rows, dateFrom, dateTo],
   )
+
+  const expensePage = useListPagination(visibleRows, {
+    resetKey: `${dateFrom}|${dateTo}`,
+  })
 
   const isDirty = useMemo(
     () => Boolean(editingId) && snapshotExpenseForm(form) !== baseline,
@@ -392,7 +397,7 @@ export default function ExpensesPage() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row) => {
+              expensePage.rows.map((row) => {
                 const open = () => openRow(row)
                 return (
                   <tr
@@ -446,6 +451,7 @@ export default function ExpensesPage() {
             )}
           </tbody>
         </table>
+        <ListPagination list={expensePage} />
       </DateRangeFilter>
     </div>
   )

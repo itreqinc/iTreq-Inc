@@ -13,6 +13,7 @@ import { ClientRegistrationFields } from '../../components/ClientRegistrationFie
 import { ActionsMenu } from '../ActionsMenu'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
+import { ListPagination, useListPagination } from '../ListPagination'
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -104,6 +105,11 @@ export default function LeadsPage() {
       return hay.includes(q)
     })
   }, [rows, searchQuery])
+
+  const leadPage = useListPagination(filteredRows, {
+    resetKey: `${statusFilter}|${searchQuery}`,
+    focusId: highlightId,
+  })
 
   const selectedLead = useMemo(
     () => rows.find((r) => r.id === selectedId) || null,
@@ -436,7 +442,7 @@ export default function LeadsPage() {
                 </td>
               </tr>
             ) : (
-              filteredRows.map((lead) => {
+              leadPage.rows.map((lead) => {
                 const open = () => openLead(lead)
                 const isNew = lead.status === 'new'
                 const requestPreview = leadRequestText(lead)
@@ -511,6 +517,7 @@ export default function LeadsPage() {
             )}
           </tbody>
         </table>
+        <ListPagination list={leadPage} />
       </div>
     </div>
   )

@@ -15,6 +15,7 @@ import {
   } from '../lib/statementDocument'
 import { fillDocumentPackPrintWindow } from '../lib/documentPack'
 import { useOpsAlert } from '../admin/OpsAlertContext'
+import { ListPagination, useListPagination } from '../admin/ListPagination'
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -53,6 +54,9 @@ export default function PortalStatement() {
   const [loading, setLoading] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [packing, setPacking] = useState(false)
+  const statementPage = useListPagination(statement?.lines || [], {
+    resetKey: `${from}|${to}|${statement?.client?.id || ''}`,
+  })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -242,7 +246,7 @@ export default function PortalStatement() {
                     </td>
                   </tr>
                 ) : (
-                  statement.lines.map((line) => {
+                  statementPage.rows.map((line) => {
                     const openable =
                       Boolean(line.id) && (line.type === 'invoice' || line.type === 'payment')
                     const open = () =>
@@ -294,6 +298,7 @@ export default function PortalStatement() {
                 )}
               </tbody>
             </table>
+            <ListPagination list={statementPage} />
           </div>
         </>
       ) : loading ? (

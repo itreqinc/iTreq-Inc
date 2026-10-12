@@ -12,6 +12,7 @@ import {
 import { calcLineTotal } from '../../lib/billing'
 import { isBundleProduct, normalizeProductKind, PRODUCT_KIND } from '../../lib/productKind'
 import { useAuth } from '../../contexts/AuthContext'
+import { ListPagination, useListPagination } from '../ListPagination'
 import { isAdmin } from '../../lib/authConfig'
 import { linesFromTrackableItem } from '../LineItemsEditor'
 import { CatalogExplainer } from '../components/CatalogExplainer'
@@ -85,6 +86,7 @@ export default function TrackingCatalogPage() {
   )
   const [saving, setSaving] = useState(false)
   const [didApplyQuery, setDidApplyQuery] = useState(false)
+  const catalogPage = useListPagination(items, { focusId: selectedId })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -345,6 +347,7 @@ export default function TrackingCatalogPage() {
               {canManage ? 'No items yet. Use New item to add one.' : 'No catalog items yet.'}
             </p>
           ) : (
+            <>
             <ul>
               {creating ? (
                 <li>
@@ -357,7 +360,7 @@ export default function TrackingCatalogPage() {
                   </button>
                 </li>
               ) : null}
-              {items.map((item) => {
+              {catalogPage.rows.map((item) => {
                 const summary = bundleSummaryText(item, products)
                 const ready = isPortalReady(item)
                 return (
@@ -381,6 +384,8 @@ export default function TrackingCatalogPage() {
                 )
               })}
             </ul>
+            <ListPagination list={catalogPage} />
+            </>
           )}
           {!loading && !showRight && items.length > 0 ? (
             <p className="border-t border-white/10 px-3 py-3 text-xs text-ink-500">

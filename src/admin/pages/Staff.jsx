@@ -14,6 +14,7 @@ import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { useOpsAlert } from '../OpsAlertContext'
 import { AdminIconAction } from '../AdminIconAction'
 import { ActionsMenu } from '../ActionsMenu'
+import { ListPagination, useListPagination } from '../ListPagination'
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -129,6 +130,8 @@ export default function StaffPage() {
       return hay.includes(q)
     })
   }, [staff, searchQuery])
+
+  const staffPage = useListPagination(filteredStaff, { resetKey: searchQuery })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -969,7 +972,7 @@ export default function StaffPage() {
                 </td>
               </tr>
             ) : (
-              filteredStaff.map((row) => {
+              staffPage.rows.map((row) => {
                 const isSelected = selectedId === row.id
                 return (
                   <Fragment key={row.id}>
@@ -1241,6 +1244,7 @@ export default function StaffPage() {
             )}
           </tbody>
         </table>
+        <ListPagination list={staffPage} />
       </div>
       </div>
 

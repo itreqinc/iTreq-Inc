@@ -7,6 +7,7 @@ import {
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
+import { ListPagination, useListPagination } from '../ListPagination'
 import { useAuth } from '../../contexts/AuthContext'
 import { isAdmin } from '../../lib/authConfig'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
@@ -471,6 +472,11 @@ export default function InvoicesPage() {
     invoiceClientId,
     invoiceStatus,
   ])
+
+  const invoicePage = useListPagination(visibleRows, {
+    resetKey: `${dateFrom}|${dateTo}|${invoiceQuery}|${invoiceClientId}|${invoiceStatus}`,
+    focusId: highlightId,
+  })
 
   const issueableDraftIds = useMemo(() => {
     // Draft and void invoices can be issued / re-issued. Skip the open dirty form.
@@ -1719,7 +1725,7 @@ export default function InvoicesPage() {
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row) => {
+              invoicePage.rows.map((row) => {
                 const displayStatus = invoiceDisplayStatus(row)
                 const unread = unreadByInvoice[row.id] || 0
                 const open = () => openRow(row.id)
@@ -1820,6 +1826,7 @@ export default function InvoicesPage() {
             )}
           </tbody>
         </table>
+        <ListPagination list={invoicePage} />
       </DateRangeFilter>
       ) : null}
     </div>

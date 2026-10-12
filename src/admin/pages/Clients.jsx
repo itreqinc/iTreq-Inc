@@ -6,6 +6,7 @@ import {
   useRef,
   useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ListPagination, useListPagination } from '../ListPagination'
 import { useAuth } from '../../contexts/AuthContext'
 import { isAdmin, isStaffLike, canStaffEditOpeningBalance, VIEW_MODES, truncateEmail } from '../../lib/authConfig'
 import { syncClientLoginEmail, resetClientPassword } from '../../lib/authApi'
@@ -232,6 +233,11 @@ export default function ClientsPage() {
       return hay.includes(q)
     })
   }, [clients, searchQuery])
+
+  const clientList = useListPagination(filteredClients, {
+    resetKey: `${view}|${searchQuery}|${showAllClients}`,
+    focusId: highlightId || (view === 'accounts' ? selectedId : null),
+  })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1079,6 +1085,10 @@ export default function ClientsPage() {
     return filtered
   }, [statement, showAllTx, txDateSort])
 
+  const txPage = useListPagination(visibleLines, {
+    resetKey: `${selectedId}|${showAllTx}|${txDateSort}|${txFrom}|${txTo}`,
+  })
+
   const hasInactive = useMemo(
     () => (statement?.lines || []).some((l) => l.inactive && !l.alwaysShow),
     [statement],
@@ -1258,7 +1268,7 @@ export default function ClientsPage() {
                       </td>
                     </tr>
                   ) : (
-                    visibleLines.map((line, i) => {
+                    txPage.rows.map((line, i) => {
                       const openable = Boolean(line.id) && line.type !== 'opening_balance'
                       const open = () => openTransaction(line)
                       const label = statementLineLabel(line)
@@ -1337,6 +1347,7 @@ export default function ClientsPage() {
                 </tbody>
               </table>
             </div>
+            <ListPagination list={txPage} />
           </div>
         )}
       </div>
@@ -1597,7 +1608,7 @@ export default function ClientsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredClients.map((c) => {
+                clientList.rows.map((c) => {
                   const open = () => openClientDetails(c)
                   return (
                     <tr
@@ -1648,6 +1659,7 @@ export default function ClientsPage() {
               )}
             </tbody>
           </table>
+          <ListPagination list={clientList} />
           </div>
         </div>
       ) : (
@@ -1705,16 +1717,19 @@ export default function ClientsPage() {
               Clients
             </div>
             {renderAccountsClientListEmpty() ?? (
-              <ul className="py-3">
-                {filteredClients.map((c) => (
-                  <Fragment key={c.id}>
-                    <li>{renderAccountsClientButton(c)}</li>
-                    {c.id === selectedId ? (
-                      <li className="border-b border-white/10">{renderAccountsDetailPanel()}</li>
-                    ) : null}
-                  </Fragment>
-                ))}
-              </ul>
+              <>
+                <ul className="py-3">
+                  {clientList.rows.map((c) => (
+                    <Fragment key={c.id}>
+                      <li>{renderAccountsClientButton(c)}</li>
+                      {c.id === selectedId ? (
+                        <li className="border-b border-white/10">{renderAccountsDetailPanel()}</li>
+                      ) : null}
+                    </Fragment>
+                  ))}
+                </ul>
+                <ListPagination list={clientList} />
+              </>
             )}
           </div>
 
@@ -1730,11 +1745,14 @@ export default function ClientsPage() {
               Clients
             </div>
             {renderAccountsClientListEmpty() ?? (
-              <ul className="py-3">
-                {filteredClients.map((c) => (
-                  <li key={c.id}>{renderAccountsClientButton(c)}</li>
-                ))}
-              </ul>
+              <>
+                <ul className="py-3">
+                  {clientList.rows.map((c) => (
+                    <li key={c.id}>{renderAccountsClientButton(c)}</li>
+                  ))}
+                </ul>
+                <ListPagination list={clientList} />
+              </>
             )}
           </aside>
 

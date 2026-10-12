@@ -17,6 +17,7 @@ import { bundleRefsByProductId } from '../../lib/catalogPresentation'
 import { Link } from 'react-router-dom'
 import { useOpsAlert } from '../OpsAlertContext'
 import { CatalogExplainer } from '../components/CatalogExplainer'
+import { ListPagination, useListPagination } from '../ListPagination'
 import { adminBtnPrimary,
   adminBtnSecondary,
   adminFieldClass,
@@ -204,6 +205,8 @@ export default function ProductsPage() {
     }
     return products
   }, [products, tab])
+
+  const productPage = useListPagination(filteredProducts, { resetKey: tab })
 
   function startEdit(p) {
     setEditingId(p.id)
@@ -510,7 +513,7 @@ export default function ProductsPage() {
                 </td>
               </tr>
             ) : (
-              filteredProducts.map((p) => {
+              productPage.rows.map((p) => {
                 const editing = canManage && editingId === p.id
                 const busy = busyId === p.id
 
@@ -644,6 +647,7 @@ export default function ProductsPage() {
             )}
           </tbody>
         </table>
+        <ListPagination list={productPage} />
       </div>
     </div>
   )
