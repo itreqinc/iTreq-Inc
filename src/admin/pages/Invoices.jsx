@@ -214,6 +214,7 @@ export default function InvoicesPage() {
   const [invoiceQuery, setInvoiceQuery] = useState('')
   const [invoiceClientId, setInvoiceClientId] = useState('')
   const [invoiceStatus, setInvoiceStatus] = useState('')
+  const [bulkAction, setBulkAction] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -797,6 +798,7 @@ export default function InvoicesPage() {
     })
     if (!ok) return
 
+    setBulkAction('issue')
     setSaving(true)
     const issued = []
     try {
@@ -818,6 +820,7 @@ export default function InvoicesPage() {
       })
     } catch (err) {
       setSaving(false)
+      setBulkAction(null)
       if (issued.length) {
         setRows((prev) => {
           let next = prev
@@ -830,6 +833,7 @@ export default function InvoicesPage() {
       return
     }
     setSaving(false)
+    setBulkAction(null)
 
     setRows((prev) => {
       let next = prev
@@ -868,10 +872,12 @@ export default function InvoicesPage() {
     })
     if (!ok) return
 
+    setBulkAction('remind')
     setSaving(true)
     const settingsRes = await opsApi.getSettings()
     if (settingsRes.error) {
       setSaving(false)
+      setBulkAction(null)
       showError(settingsRes.error.message)
       return
     }
@@ -962,6 +968,7 @@ export default function InvoicesPage() {
       })
     } finally {
       setSaving(false)
+      setBulkAction(null)
     }
 
     if (sent.length) {
@@ -1634,7 +1641,7 @@ export default function InvoicesPage() {
                 : 'Select draft or voided invoices to issue'
             }
           >
-            {saving ? 'Issuing…' : `Issue selected (${selectedIssueIds.length})`}
+            {bulkAction === 'issue' ? 'Issuing…' : `Issue selected (${selectedIssueIds.length})`}
           </button>
           <button
             type="button"
@@ -1647,7 +1654,7 @@ export default function InvoicesPage() {
                 : 'Select issued monthly fee invoices to email with a statement'
             }
           >
-            {saving ? 'Sending…' : `Remind (${selectedRemindIds.length})`}
+            {bulkAction === 'remind' ? 'Sending…' : `Remind (${selectedRemindIds.length})`}
           </button>
           {!showForm ? (
             <button

@@ -4,10 +4,16 @@ import { adminClient, requireStaffOps } from '../_shared/session.ts'
 
 type ResendAttachment = { filename: string; content: string; type?: string }
 
+const MAX_PDF_BYTES = 5 * 1024 * 1024
+
+function pdfByteLength(base64: string) {
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0
+  return Math.floor((base64.length * 3) / 4) - padding
+}
+
 function normalizePdfAttachments(raw: unknown): ResendAttachment[] {
   if (!Array.isArray(raw) || raw.length === 0) return []
   const out: ResendAttachment[] = []
-  let totalChars = 0
   for (const item of raw) {
     const rec = (item || {}) as Record<string, unknown>
     const filename = String(rec.filename || '')
@@ -22,9 +28,8 @@ function normalizePdfAttachments(raw: unknown): ResendAttachment[] {
     if (!content || !/^[A-Za-z0-9+/=]+$/.test(content)) {
       throw new Error('An attachment could not be read.')
     }
-    totalChars += content.length
-    if (totalChars > 5_500_000) {
-      throw new Error('Attachments are too large to send. Try fewer invoices.')
+    if (pdfByteLength(content) > MAX_PDF_BYTES) {
+      throw new Error(`${filename || 'A file'} is larger than 5 MB.`)
     }
     out.push({ filename: filename || 'document.pdf', content, type: 'application/pdf' })
   }
