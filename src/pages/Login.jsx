@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { AUTH_BYPASS, DEV_AUTH_SWITCHER } from '../lib/authConfig'
 import { authAction } from '../lib/authApi'
 import { CountryPhoneInput } from '../components/CountryPhoneInput'
+import { LegalLinks } from '../components/LegalDocument'
 import { PasswordField } from '../components/PasswordField'
 import { SeedUserPicker } from '../components/SeedUserPicker'
 import { adminBtnPrimary, adminBtnSecondary, adminFieldClass } from '../admin/ui'
@@ -299,6 +300,9 @@ export default function Login() {
           <Link to="/" className="mt-6 block text-center text-sm font-semibold text-brand-400">
             ← Back to site
           </Link>
+          <p className="mt-3 text-center text-xs text-ink-500">
+            <LegalLinks />
+          </p>
         </div>
       </div>
     </div>

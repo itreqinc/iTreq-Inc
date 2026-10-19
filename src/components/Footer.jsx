@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { COMPANY, NAV_LINKS } from '../data/site'
+import { LegalLinks } from './LegalDocument'
 import { Logo } from './Logo'
 
 export function Footer() {
@@ -68,7 +69,13 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-ink-400 sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} {COMPANY.name}. All rights reserved.</p>
-          <p>Serving Botswana and beyond.</p>
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <LegalLinks />
+            <span className="hidden sm:inline" aria-hidden="true">
+              ·
+            </span>
+            <span>Serving Botswana and beyond.</span>
+          </p>
         </div>
       </div>
     </footer>

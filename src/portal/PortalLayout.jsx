@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { LegalLinks } from '../components/LegalDocument'
 import { Logo } from '../components/Logo'
 import { useAuth } from '../contexts/AuthContext'
 import { AUTH_BYPASS, ROLES, VIEW_MODES } from '../lib/authConfig'
@@ -354,6 +355,9 @@ function PortalShell() {
           <Outlet context={outletContext} />
         )}
       </main>
+      <footer className="mx-auto max-w-5xl px-4 pb-8 text-xs text-ink-500 sm:px-6">
+        <LegalLinks />
+      </footer>
     </div>
   )
 }

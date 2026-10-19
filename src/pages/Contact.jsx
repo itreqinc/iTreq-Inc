@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { PageHero } from '../components/PageHero'
@@ -44,6 +45,7 @@ const contactCards = [
 export default function Contact() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState(emptyClientForm)
 
@@ -60,6 +62,11 @@ export default function Contact() {
     const check = validateClientForm(form)
     if (!check.ok) {
       setError(check.message)
+      return
+    }
+
+    if (!acceptedPrivacy) {
+      setError('Please confirm that you have read the Privacy Notice before sending this request.')
       return
     }
 
@@ -196,6 +203,23 @@ export default function Contact() {
                     showNotes={false}
                   />
                 </div>
+
+                <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-300">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={acceptedPrivacy}
+                    onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-white/20 bg-ink-950 text-brand-500 focus:ring-brand-500/30"
+                  />
+                  <span>
+                    I have read the{' '}
+                    <Link to="/privacy" className="font-semibold text-brand-300 hover:text-brand-200">
+                      Privacy Notice
+                    </Link>{' '}
+                    and I agree that iTreq Inc may use these details to respond to this request.
+                  </span>
+                </label>
 
                 {error ? (
                   <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">

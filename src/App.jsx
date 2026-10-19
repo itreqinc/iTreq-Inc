@@ -36,6 +36,8 @@ import WhatWeTrack from './pages/WhatWeTrack'
 import SuccessStories from './pages/SuccessStories'
 import About from './pages/About'
 import Contact from './pages/Contact'
+import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 import Login from './pages/Login'
 import Unauthorized from './pages/Unauthorized'
 import RoleRedirect from './pages/RoleRedirect'
@@ -57,6 +59,8 @@ export default function App() {
         <Route path="/success-stories" element={<SuccessStories />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
       </Route>
 
       <Route path="/login" element={<Login />} />
