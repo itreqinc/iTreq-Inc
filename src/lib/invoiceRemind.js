@@ -52,6 +52,27 @@ function linkifyEscaped(escaped) {
     )
 }
 
+function documentsAccessParagraph(count) {
+  const lead = count > 1 ? 'Both of these documents' : 'This document'
+  return `${lead} can be accessed on your portal on ${PORTAL_HOST} (you should login with your email and password).
+
+For any enquiries on payments please contact iTreq Inc Staff at ${SALES_EMAIL} or call/WhatsApp ${PAYMENTS_PHONE_DISPLAY}.
+
+Regards`
+}
+
+function emailHtmlFromText(text) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<body style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#222">
+${text
+  .split(/\n\n/)
+  .map((block) => `<p>${linkifyEscaped(escapeHtml(block)).replace(/\n/g, '<br/>')}</p>`)
+  .join('\n')}
+</body>
+</html>`
+}
+
 export function buildInvoiceRemindPlainText({
   clientName,
   monthLabel,
@@ -62,11 +83,7 @@ export function buildInvoiceRemindPlainText({
 
 Please find attached here your ${monthLabel} Invoice. This invoice takes your total balance to ${totalLabel}. Also attached with this invoice is your statement for the period ${periodLabel} for your acknowledgement.
 
-Both of these documents can be accessed on your portal on ${PORTAL_HOST} (you should login with your email and password).
-
-For any enquiries on payments please contact iTreq Inc Staff at ${SALES_EMAIL} or call/WhatsApp ${PAYMENTS_PHONE_DISPLAY}.
-
-Regards`
+${documentsAccessParagraph(2)}`
 }
 
 export function buildInvoiceRemindEmail({
@@ -82,19 +99,38 @@ export function buildInvoiceRemindEmail({
     totalLabel,
     periodLabel,
   })
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<body style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#222">
-${text
-  .split(/\n\n/)
-  .map((block) => `<p>${linkifyEscaped(escapeHtml(block)).replace(/\n/g, '<br/>')}</p>`)
-  .join('\n')}
-</body>
-</html>`
   const subjectNumber = docNumber ? ` (${docNumber})` : ''
   return {
     subject: `${monthLabel} invoice${subjectNumber} — ${COMPANY.name}`,
-    html,
+    html: emailHtmlFromText(text),
     text,
   }
+}
+
+/** One invoice from the invoice or accounts menu: invoice PDF, statement PDF, or both. */
+export function buildClientDocumentsEmail({
+  clientName,
+  includeInvoice,
+  includeStatement,
+  monthLabel,
+  totalLabel,
+  periodLabel,
+  docNumber,
+}) {
+  const subjectNumber = docNumber ? ` (${docNumber})` : ''
+  let subject = `Statement — ${COMPANY.name}`
+  let body = `Please find attached your statement for the period ${periodLabel} for your acknowledgement. Your balance on this statement is ${totalLabel}.`
+  if (includeInvoice && includeStatement) {
+    subject = `${monthLabel} invoice${subjectNumber} — ${COMPANY.name}`
+    body = `Please find attached here your ${monthLabel} Invoice. This invoice takes your total balance to ${totalLabel}. Also attached with this invoice is your statement for the period ${periodLabel} for your acknowledgement.`
+  } else if (includeInvoice) {
+    subject = `${monthLabel} invoice${subjectNumber} — ${COMPANY.name}`
+    body = `Please find attached here your ${monthLabel} Invoice${subjectNumber}.`
+  }
+  const text = `Dear ${clientName}
+
+${body}
+
+${documentsAccessParagraph(includeInvoice && includeStatement ? 2 : 1)}`
+  return { subject, html: emailHtmlFromText(text), text }
 }

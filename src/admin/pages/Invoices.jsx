@@ -67,6 +67,7 @@ import {
 import { ActionsMenu } from '../ActionsMenu'
 import { InvoiceQueryThread } from '../../components/InvoiceQueryThread'
 import { useOpsAlert } from '../OpsAlertContext'
+import { useEmailClientDocuments } from '../useEmailClientDocuments'
 import { useOwnClientGuard } from '../hooks/useOwnClientGuard'
 import { OpeningBalancesPanel } from '../components/OpeningBalancesPanel'
 import { CornerHintIcon } from '../components/CornerHintIcon'
@@ -194,6 +195,7 @@ export default function InvoicesPage() {
   const saveInFlightRef = useRef(false)
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, showWarning, confirm, runWithProgress } = useOpsAlert()
+  const { emailClientDocuments, emailDocumentsBusy } = useEmailClientDocuments()
   const [rows, setRows] = useState([])
   const [clients, setClients] = useState([])
   const [products, setProducts] = useState([])
@@ -1239,6 +1241,7 @@ export default function InvoicesPage() {
     onApply,
     onPrint,
     onEmail,
+    onEmailDocuments,
     onVoidOrDelete,
   }) {
     const dangerIsDelete = status === 'draft' || status === 'void'
@@ -1268,6 +1271,12 @@ export default function InvoicesPage() {
         icon: 'mail',
         disabled: !canShare,
         onClick: onEmail,
+      },
+      {
+        label: 'Email documents',
+        icon: 'mail',
+        disabled: !canShare,
+        onClick: onEmailDocuments,
       },
       {
         label: status === 'void' ? 'Re-issue invoice' : 'Issue invoice',
@@ -1309,7 +1318,7 @@ export default function InvoicesPage() {
       applyLabel: canApplyCredit
         ? `Apply credit (${formatPula(applyCreditAmount)})`
         : 'Apply credit',
-      canShare: Boolean(editingId) && !isDirty && !saving,
+      canShare: Boolean(editingId) && !isDirty && !saving && !emailDocumentsBusy,
       canDelete,
       canVoid,
       onSave: () => handleSave(),
@@ -1318,6 +1327,7 @@ export default function InvoicesPage() {
       onApply: () => handleApplyCreditFor(editingId, form),
       onPrint: () => printInvoice(editingId),
       onEmail: () => emailInvoice(editingId),
+      onEmailDocuments: () => emailClientDocuments(editingId, form.client_id),
       onVoidOrDelete: () => handleVoidOrDelete(),
     })
   }
@@ -1354,7 +1364,7 @@ export default function InvoicesPage() {
         canApply && applyAmt > 0.001
           ? `Apply credit (${formatPula(applyAmt)})`
           : 'Apply credit',
-      canShare: !blocked && !saving,
+      canShare: !blocked && !saving && !emailDocumentsBusy,
       canDelete: rowCanDelete,
       canVoid: status !== 'void' && !blocked && !saving,
       onOpen: () => openRow(id),
@@ -1364,6 +1374,7 @@ export default function InvoicesPage() {
       onApply: () => handleApplyCreditFor(id, row),
       onPrint: () => printInvoice(id),
       onEmail: () => emailInvoice(id),
+      onEmailDocuments: () => emailClientDocuments(id, row.client_id),
       onVoidOrDelete: () => handleVoidOrDelete(id, row),
     })
   }

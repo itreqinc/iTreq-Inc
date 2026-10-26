@@ -12,6 +12,7 @@ const closedAlert = {
   cancelLabel: 'Cancel',
   promptLabel: '',
   promptPlaceholder: '',
+  choices: null,
   onConfirm: null,
   _resolveCancel: null,
 }
@@ -84,6 +85,7 @@ export function OpsAlertProvider({ children }) {
         cancelLabel: options.cancelLabel || 'Cancel',
         promptLabel: options.promptLabel || '',
         promptPlaceholder: options.promptPlaceholder || '',
+        choices: Array.isArray(options.choices) ? options.choices : null,
         onConfirm: (result) => {
           setAlert({ ...closedAlert })
           resolve(result ?? true)
@@ -229,6 +231,7 @@ export function OpsAlertProvider({ children }) {
         cancelLabel={alert.cancelLabel}
         promptLabel={alert.promptLabel}
         promptPlaceholder={alert.promptPlaceholder}
+        choices={alert.choices}
         onConfirm={alert.onConfirm || undefined}
         onClose={handleClose}
       />

@@ -87,6 +87,7 @@ export function AlertModal({
   cancelLabel = 'Cancel',
   promptLabel = '',
   promptPlaceholder = '',
+  choices = null,
   progress = null,
   onConfirm,
   onClose,
@@ -96,10 +97,18 @@ export function AlertModal({
   const confirmRef = useRef(null)
   const inputRef = useRef(null)
   const [value, setValue] = useState('')
+  const [checked, setChecked] = useState({})
   const variant = VARIANTS[type] || VARIANTS.info
   const isProgress = Boolean(progress)
   const isConfirm = !isProgress && typeof onConfirm === 'function'
   const isPrompt = isConfirm && Boolean(promptLabel)
+  const choiceList = Array.isArray(choices) ? choices : []
+  const hasChoices = isConfirm && choiceList.length > 0
+  function choiceOn(choice) {
+    if (Object.prototype.hasOwnProperty.call(checked, choice.id)) return Boolean(checked[choice.id])
+    return choice.checked !== false
+  }
+  const anyChoiceChecked = choiceList.some((choice) => choiceOn(choice))
 
   const total = Math.max(0, Number(progress?.total) || 0)
   const current = Math.min(total, Math.max(0, Number(progress?.current) || 0))
@@ -114,6 +123,11 @@ export function AlertModal({
   useEffect(() => {
     if (!open) return undefined
     setValue('')
+    const next = {}
+    for (const choice of Array.isArray(choices) ? choices : []) {
+      next[choice.id] = choice.checked !== false
+    }
+    setChecked(next)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const t = window.setTimeout(
@@ -129,7 +143,7 @@ export function AlertModal({
       window.clearTimeout(t)
       window.removeEventListener('keydown', onKey)
     }
-  }, [open, onClose, isProgress])
+  }, [open, onClose, isProgress, choices])
 
   if (!open) return null
 
@@ -210,6 +224,30 @@ export function AlertModal({
           </div>
         ) : null}
 
+        {hasChoices ? (
+          <fieldset className="mt-4 space-y-2">
+            <legend className="text-xs uppercase tracking-wider text-ink-400">Include</legend>
+            {choiceList.map((choice) => (
+              <label key={choice.id} className="flex items-start gap-2 text-sm text-ink-100">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-ink-950 text-brand-500"
+                  checked={choiceOn(choice)}
+                  onChange={(e) =>
+                    setChecked((prev) => ({ ...prev, [choice.id]: e.target.checked }))
+                  }
+                />
+                <span>
+                  {choice.label}
+                  {choice.hint ? (
+                    <span className="mt-0.5 block text-xs text-ink-400">{choice.hint}</span>
+                  ) : null}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
+
         {isPrompt ? (
           <label className="mt-4 block">
             <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
@@ -236,11 +274,20 @@ export function AlertModal({
             <button
               ref={confirmRef}
               type="button"
-              disabled={isPrompt && !value.trim()}
+              disabled={(isPrompt && !value.trim()) || (hasChoices && !anyChoiceChecked)}
               className={adminBtnPrimary}
               onClick={() => {
-                if (isConfirm) onConfirm(isPrompt ? value.trim() : true)
-                else onClose?.()
+                if (!isConfirm) {
+                  onClose?.()
+                  return
+                }
+                if (hasChoices) {
+                  const selected = {}
+                  for (const choice of choiceList) selected[choice.id] = Boolean(checked[choice.id])
+                  onConfirm(selected)
+                  return
+                }
+                onConfirm(isPrompt ? value.trim() : true)
               }}
             >
               {isConfirm ? confirmLabel : confirmLabel || 'OK'}

@@ -59,6 +59,7 @@ import { ActionsMenu } from '../ActionsMenu'
 import { AdminIconAction } from '../AdminIconAction'
 import { useOpeningBalanceActions } from '../components/OpeningBalanceActions'
 import { useOpsAlert } from '../OpsAlertContext'
+import { useEmailClientDocuments } from '../useEmailClientDocuments'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { adminBtnPrimary,
   adminBtnSecondary,
@@ -127,6 +128,7 @@ export default function ClientsPage() {
   const admin = isAdmin(user?.role)
   const staffLike = isStaffLike(user?.role)
   const { showError, showSuccess, showWarning, confirm } = useOpsAlert()
+  const { emailClientDocuments, emailDocumentsBusy } = useEmailClientDocuments()
 
   const initialAccounts = params.get('view') === 'accounts'
   const initialAccountId = initialAccounts
@@ -915,7 +917,7 @@ export default function ClientsPage() {
   function transactionMenuItems(line) {
     if (line.type === 'invoice' && line.id) {
       const status = line.status
-      const busy = invoiceActionBusy
+      const busy = invoiceActionBusy || emailDocumentsBusy
       const canIssue = (status === 'draft' || status === 'void') && !busy
       const canApply =
         ['issued', 'partial'].includes(status) &&
@@ -943,6 +945,12 @@ export default function ClientsPage() {
           icon: 'mail',
           disabled: busy,
           onClick: () => emailAccountInvoice(line.id),
+        },
+        {
+          label: 'Email documents',
+          icon: 'mail',
+          disabled: busy,
+          onClick: () => emailClientDocuments(line.id, selectedId),
         },
         {
           label: status === 'void' ? 'Re-issue invoice' : 'Issue invoice',
