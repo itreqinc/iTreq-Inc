@@ -137,25 +137,33 @@ async function attachContactEmailsLocal(clients) {
 async function assertUniqueLoginEmailLocal(email, clientId) {
   const login = normEmail(email)
   if (!login || !supabase || isOfficePlaceholderEmail(login)) return { error: null }
-  const { data, error } = await supabase.from('clients').select('id').ilike('email', login)
+  const { data, error } = await supabase.from('clients').select('id, is_active').ilike('email', login)
   if (error) return mapError(error)
-  const clash = (data || []).find((row) => String(row.id) !== String(clientId || ''))
+  const clash = (data || []).find(
+    (row) => String(row.id) !== String(clientId || '') && row.is_active !== false,
+  )
   if (clash) {
     return { data: null, error: { message: 'That login email is already used by another client.' } }
   }
   const { data: user, error: userErr } = await supabase
     .from('users')
-    .select('id, client_id, role')
+    .select('id, client_id, role, is_active')
     .ilike('email', login)
     .maybeSingle()
   if (userErr) return mapError(userErr)
-  if (user && user.role !== 'client') {
+  if (!user || user.is_active === false) return { error: null }
+  if (user.role !== 'client') {
     return { data: null, error: { message: 'That login email belongs to a staff account.' } }
   }
-  if (user?.client_id && String(user.client_id) !== String(clientId || '')) {
-    return { data: null, error: { message: 'That login email is already used by another client.' } }
-  }
-  return { error: null }
+  if (!user.client_id || String(user.client_id) === String(clientId || '')) return { error: null }
+  const { data: owner, error: ownerErr } = await supabase
+    .from('clients')
+    .select('is_active')
+    .eq('id', user.client_id)
+    .maybeSingle()
+  if (ownerErr) return mapError(ownerErr)
+  if (!owner || owner.is_active === false) return { error: null }
+  return { data: null, error: { message: 'That login email is already used by another client.' } }
 }
 
 async function saveContactEmailsLocal(clientId, form) {

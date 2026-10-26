@@ -659,24 +659,32 @@ async function assertUniqueLoginEmail(
   clientId?: string,
 ) {
   if (!email || email === 'info@itreqinc.com') return
-  const { data, error } = await sb.from('clients').select('id').ilike('email', email)
+  const { data, error } = await sb.from('clients').select('id, is_active').ilike('email', email)
   if (error) throw mapDbError(error)
-  const clash = (data || []).find((row) => String(row.id) !== String(clientId || ''))
+  const clash = (data || []).find(
+    (row) => String(row.id) !== String(clientId || '') && row.is_active !== false,
+  )
   if (clash) throw new OpsError('That login email is already used by another client.')
 
   const { data: user, error: userErr } = await sb
     .from('users')
-    .select('id, client_id, role')
+    .select('id, client_id, role, is_active')
     .ilike('email', email)
     .maybeSingle()
   if (userErr) throw mapDbError(userErr)
-  if (!user) return
+  if (!user || user.is_active === false) return
   if (user.role !== 'client') {
     throw new OpsError('That login email belongs to a staff account.')
   }
-  if (user.client_id && String(user.client_id) !== String(clientId || '')) {
-    throw new OpsError('That login email is already used by another client.')
-  }
+  if (!user.client_id || String(user.client_id) === String(clientId || '')) return
+  const { data: owner, error: ownerErr } = await sb
+    .from('clients')
+    .select('is_active')
+    .eq('id', user.client_id)
+    .maybeSingle()
+  if (ownerErr) throw mapDbError(ownerErr)
+  if (!owner || owner.is_active === false) return
+  throw new OpsError('That login email is already used by another client.')
 }
 
 function contactEmailRows(form: Record<string, unknown>, loginEmail: string) {
