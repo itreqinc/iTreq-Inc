@@ -1,3 +1,4 @@
+import { documentRecipients } from './clientEmails'
 import {
   openBillingDocumentPrintWindow,
   closeBillingDocumentPrintWindow,
@@ -35,13 +36,13 @@ export function preparePaymentDocumentBundle({ payment, client, settings }) {
 }
 
 export function buildMailtoForPaymentDocument(model) {
-  const to = model.client.email?.trim()
-  if (!to) {
+  const recipients = documentRecipients(model.client)
+  if (!recipients.length) {
     return { ok: false, message: 'This client has no email address on file.' }
   }
   const subject = encodeURIComponent(`${model.title} ${model.docNumber} — ${model.company.name}`)
   const body = encodeURIComponent(
     `${buildPaymentDocumentPlainText(model)}\n\n—\n${model.company.name}\n${model.company.email}`,
   )
-  return { ok: true, href: `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}` }
+  return { ok: true, href: `mailto:${encodeURIComponent(recipients.join(','))}?subject=${subject}&body=${body}` }
 }

@@ -2,6 +2,9 @@ import { isSupabaseConfigured, supabase } from './supabase'
 import { invokeFn } from './invokeFn'
 import { AUTH_BYPASS, isAdmin, isStaffLike, readSessionRole, canSessionEditOpeningBalance } from './authConfig'
 import { buildClientDisplayName, formToClientRow, formToContactSubmissionRow, clientOpeningBalanceAmount, clientOpeningBalanceDate } from './clientRegistration'
+import { documentRecipients, normalizeContactEmails } from './clientEmails'
+import { isOfficePlaceholderEmail } from './portalInvite'
+import { normEmail } from './clientValidation'
 import { calcDocTotals, normalizeLines } from './billing'
 import { prepareBillingDocumentBundle } from './billingDocument'
 import { preparePaymentDocumentBundle } from './paymentDocument'
@@ -107,6 +110,69 @@ function mapError(error) {
     data: null,
     error: { message, technical: raw || undefined },
   }
+}
+
+async function attachContactEmailsLocal(clients) {
+  if (!supabase || !clients?.length) return clients || []
+  const ids = clients.map((c) => c.id).filter(Boolean)
+  if (!ids.length) return clients
+  const { data, error } = await supabase
+    .from('client_contact_emails')
+    .select('id, client_id, email, receives_communication, created_at')
+    .in('client_id', ids)
+    .order('created_at', { ascending: true })
+  if (error) return clients
+  const byClient = {}
+  for (const row of data || []) {
+    const key = String(row.client_id)
+    if (!byClient[key]) byClient[key] = []
+    byClient[key].push(row)
+  }
+  return clients.map((c) => ({
+    ...c,
+    contact_emails: byClient[String(c.id)] || [],
+  }))
+}
+
+async function assertUniqueLoginEmailLocal(email, clientId) {
+  const login = normEmail(email)
+  if (!login || !supabase || isOfficePlaceholderEmail(login)) return { error: null }
+  const { data, error } = await supabase.from('clients').select('id').ilike('email', login)
+  if (error) return mapError(error)
+  const clash = (data || []).find((row) => String(row.id) !== String(clientId || ''))
+  if (clash) {
+    return { data: null, error: { message: 'That login email is already used by another client.' } }
+  }
+  const { data: user, error: userErr } = await supabase
+    .from('users')
+    .select('id, client_id, role')
+    .ilike('email', login)
+    .maybeSingle()
+  if (userErr) return mapError(userErr)
+  if (user && user.role !== 'client') {
+    return { data: null, error: { message: 'That login email belongs to a staff account.' } }
+  }
+  if (user?.client_id && String(user.client_id) !== String(clientId || '')) {
+    return { data: null, error: { message: 'That login email is already used by another client.' } }
+  }
+  return { error: null }
+}
+
+async function saveContactEmailsLocal(clientId, form) {
+  if (!form?.is_company || !supabase) return { error: null }
+  const normalized = normalizeContactEmails(form)
+  if (!normalized.ok) return { data: null, error: { message: normalized.message } }
+  const { error: delErr } = await supabase
+    .from('client_contact_emails')
+    .delete()
+    .eq('client_id', clientId)
+  if (delErr) return mapError(delErr)
+  if (!normalized.rows.length) return { error: null }
+  const { error } = await supabase.from('client_contact_emails').insert(
+    normalized.rows.map((row) => ({ client_id: clientId, ...row })),
+  )
+  if (error) return mapError(error)
+  return { error: null }
 }
 
 async function clientHasFinancialRecordsLocal(clientId) {
@@ -330,7 +396,8 @@ const directOpsApi = {
     const { data, error } = await q
     if (error) return mapError(error)
     const rows = activeOnly ? data || [] : await enrichClientsFinancialFlagsLocal(data || [])
-    const enriched = await this.attachPortalLoginEmails(rows)
+    const withEmails = await attachContactEmailsLocal(rows)
+    const enriched = await this.attachPortalLoginEmails(withEmails)
     return { data: enriched, error: null }
   },
 
@@ -375,7 +442,8 @@ const directOpsApi = {
     if (!supabase) return dbUnavailable()
     const { data, error } = await supabase.from('clients').select('*').eq('id', id).single()
     if (error) return mapError(error)
-    return { data, error: null }
+    const [client] = await attachContactEmailsLocal([data])
+    return { data: client, error: null }
   },
 
   async createClient(form) {
@@ -385,6 +453,8 @@ const directOpsApi = {
       return { data: null, error: { message: 'First name or surname is required.' } }
     }
     const row = formToClientRow(form)
+    const unique = await assertUniqueLoginEmailLocal(row.email)
+    if (unique.error) return unique
     if (!canSessionEditOpeningBalance()) {
       delete row.opening_balance
       delete row.opening_balance_date
@@ -396,7 +466,10 @@ const directOpsApi = {
     }
     const { data, error } = await supabase.from('clients').insert(row).select().single()
     if (error) return mapError(error)
-    return { data, error: null }
+    const savedEmails = await saveContactEmailsLocal(data.id, form)
+    if (savedEmails.error) return savedEmails
+    const [client] = await attachContactEmailsLocal([data])
+    return { data: client, error: null }
   },
 
   async updateClient(id, form) {
@@ -406,6 +479,8 @@ const directOpsApi = {
       return { data: null, error: { message: 'First name or surname is required.' } }
     }
     const row = formToClientRow(form)
+    const unique = await assertUniqueLoginEmailLocal(row.email, id)
+    if (unique.error) return unique
     if (!canSessionEditOpeningBalance(id)) {
       delete row.opening_balance
       delete row.opening_balance_date
@@ -422,7 +497,10 @@ const directOpsApi = {
       .select()
       .single()
     if (error) return mapError(error)
-    return { data, error: null }
+    const savedEmails = await saveContactEmailsLocal(id, form)
+    if (savedEmails.error) return savedEmails
+    const [client] = await attachContactEmailsLocal([data])
+    return { data: client, error: null }
   },
 
   /** Staff: update brought-forward fields without rewriting the whole client. */
@@ -2137,13 +2215,13 @@ const directOpsApi = {
     if (bundleRes.error) return bundleRes
 
     const { model, emailHtml, plainText } = bundleRes.data
-    const to = model.client.email?.trim()
-    if (!to) {
+    const recipients = documentRecipients(model.client)
+    if (!recipients.length) {
       return { data: null, error: { message: 'This client has no email address on file.' } }
     }
 
     return this.invoke('send-billing-document', {
-      to,
+      to: recipients,
       subject: `${model.title} ${model.docNumber} — ${model.company.name}`,
       html: emailHtml,
       text: plainText,
@@ -2151,12 +2229,14 @@ const directOpsApi = {
   },
 
   async sendInvoiceRemindEmail({ to, subject, html, text, attachments }) {
-    const recipient = String(to || '').trim()
-    if (!recipient) {
+    const recipients = (Array.isArray(to) ? to : [to])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+    if (!recipients.length) {
       return { data: null, error: { message: 'This client has no email address on file.' } }
     }
     return this.invoke('send-billing-document', {
-      to: recipient,
+      to: recipients,
       subject,
       html,
       text,
@@ -2268,13 +2348,13 @@ const directOpsApi = {
     if (bundleRes.error) return bundleRes
 
     const { model, emailHtml, plainText } = bundleRes.data
-    const to = model.client.email?.trim()
-    if (!to) {
+    const recipients = documentRecipients(model.client)
+    if (!recipients.length) {
       return { data: null, error: { message: 'This client has no email address on file.' } }
     }
 
     return this.invoke('send-billing-document', {
-      to,
+      to: recipients,
       subject: `${model.title} ${model.docNumber} — ${model.company.name}`,
       html: emailHtml,
       text: plainText,

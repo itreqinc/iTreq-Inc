@@ -27,6 +27,7 @@ import {
 } from '../../lib/invoiceDefaults'
 import { withUnreadRows } from '../../lib/invoiceDisputes'
 import { opsApi } from '../../lib/opsApi'
+import { clientCommunicationEmails, documentRecipients, formatRecipientList } from '../../lib/clientEmails'
 import {
   clearClientsReturn,
   clientsAccountsUrl,
@@ -863,8 +864,7 @@ export default function InvoicesPage() {
       .filter(Boolean)
     const clientById = Object.fromEntries((clients || []).map((c) => [c.id, c]))
     const missingEmail = remindRows.filter((row) => {
-      const email = String(clientById[row.client_id]?.email || '').trim()
-      return !email
+      return !clientCommunicationEmails(clientById[row.client_id]).length
     })
 
     const ok = await confirm({
@@ -905,8 +905,8 @@ export default function InvoicesPage() {
             const bundleRes = await opsApi.getBillingDocumentBundle('invoice', row.id)
             if (bundleRes.error) throw new Error(bundleRes.error.message)
             const { model, printPageHtml } = bundleRes.data
-            const to = model.client.email?.trim()
-            if (!to) {
+            const recipients = documentRecipients(model.client)
+            if (!recipients.length) {
               skipped.push(`${row.clients?.name || 'Client'} · ${row.number || 'Invoice'}`)
               return
             }
@@ -944,7 +944,7 @@ export default function InvoicesPage() {
             ])
 
             const sendRes = await opsApi.sendInvoiceRemindEmail({
-              to,
+              to: recipients,
               subject,
               html,
               text,
@@ -1195,14 +1195,14 @@ export default function InvoicesPage() {
       showError(preview.error.message)
       return
     }
-    const to = preview.data.model.client.email?.trim()
-    if (!to) {
+    const recipients = documentRecipients(preview.data.model.client)
+    if (!recipients.length) {
       showError('This client has no email address on file. Update the client record first.')
       return
     }
     const ok = await confirm({
       title: 'Email invoice to client?',
-      message: `A copy will be sent to ${to}.`,
+      message: `A copy will be sent to ${formatRecipientList(recipients)}.`,
       confirmLabel: 'Send email',
     })
     if (!ok) return

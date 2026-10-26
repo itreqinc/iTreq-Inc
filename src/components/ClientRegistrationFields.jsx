@@ -4,7 +4,14 @@ import { CountryPhoneInput } from './CountryPhoneInput'
  * Shared client / lead registration fields (admin clients page + public contact form).
  * Pass showNotes={false} when the host page has its own request / notes field.
  */
-export function ClientRegistrationFields({ form, setForm, fieldClass, showNotes = true }) {
+export function ClientRegistrationFields({
+  form,
+  setForm,
+  fieldClass,
+  showNotes = true,
+  requireId = true,
+  emailLabel = 'Email',
+}) {
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
   }
@@ -63,10 +70,10 @@ export function ClientRegistrationFields({ form, setForm, fieldClass, showNotes 
         </label>
         <label className="block min-w-0 flex-1">
           <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-            ID / Passport number *
+            ID / Passport number{requireId ? ' *' : ''}
           </span>
           <input
-            required
+            required={requireId}
             className={fieldClass}
             value={form.id_number}
             onChange={(e) => setField('id_number', e.target.value)}
@@ -88,7 +95,7 @@ export function ClientRegistrationFields({ form, setForm, fieldClass, showNotes 
 
         <label className="block sm:col-span-2">
           <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-            Email *
+            {emailLabel} *
           </span>
           <input
             required

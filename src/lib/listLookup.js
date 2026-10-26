@@ -34,5 +34,6 @@ export function clientsForLookup(clients, rows) {
 
 export function clientSearchParts(client) {
   if (!client) return []
-  return [client.name, client.email, client.phone, client.cellphone, client.id_number]
+  return [client.name, client.company_name, client.email, client.phone, client.cellphone, client.id_number]
+    .concat((client.contact_emails || []).map((row) => row.email))
 }

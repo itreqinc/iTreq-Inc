@@ -39,7 +39,7 @@ function normalizePdfAttachments(raw: unknown): ResendAttachment[] {
 async function sendViaResend(
   apiKey: string,
   from: string,
-  to: string,
+  to: string | string[],
   subject: string,
   html: string,
   text: string,
@@ -47,7 +47,7 @@ async function sendViaResend(
 ) {
   const payload: Record<string, unknown> = {
     from,
-    to: [to],
+    to: Array.isArray(to) ? to : [to],
     subject,
     html,
     text,
@@ -102,25 +102,27 @@ serve(async (req) => {
       )
     }
 
-    const to = String(body?.to || '').trim()
+    const toList = (Array.isArray(body?.to) ? body.to : String(body?.to || '').split(/[,;]/))
+      .map((value) => String(value || '').trim().toLowerCase())
+      .filter(Boolean)
     const subject = String(body?.subject || '').trim()
     const html = String(body?.html || '')
     const text = String(body?.text || '')
     const attachments = normalizePdfAttachments(body?.attachments)
 
-    if (!to || !subject || !html) {
+    if (!toList.length || !subject || !html) {
       return fail(400, 'Missing to, subject, or html.')
     }
 
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRe.test(to)) {
-      return fail(400, 'Invalid recipient email.')
+    for (const email of toList) {
+      if (!emailRe.test(email)) return fail(400, 'Invalid recipient email.')
     }
 
     await sendViaResend(
       RESEND_API_KEY,
       FROM,
-      to,
+      toList,
       subject,
       html,
       text || subject,

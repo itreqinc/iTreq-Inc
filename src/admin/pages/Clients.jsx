@@ -16,6 +16,7 @@ import { clientToForm,
   emptyClientForm,
 } from '../../lib/clientRegistration'
 import { validateClientForm, normEmail } from '../../lib/clientValidation'
+import { documentRecipients, formatRecipientList } from '../../lib/clientEmails'
 import {
   clearAccountsSelected,
   invoiceUrlFromClients,
@@ -223,10 +224,14 @@ export default function ClientsPage() {
     return clients.filter((c) => {
       const hay = [
         c.name,
+        c.company_name,
+        c.first_name,
+        c.surname,
         c.email,
         c.phone,
         c.cellphone,
         c.id_number,
+        ...(c.contact_emails || []).map((row) => row.email),
       ]
         .map((v) => String(v || '').toLowerCase())
         .join(' ')
@@ -769,14 +774,14 @@ export default function ClientsPage() {
       showError(preview.error.message)
       return
     }
-    const to = preview.data.model.client.email?.trim()
-    if (!to) {
+    const recipients = documentRecipients(preview.data.model.client)
+    if (!recipients.length) {
       showError('This client has no email address on file. Update the client record first.')
       return
     }
     const ok = await confirm({
       title: 'Email invoice to client?',
-      message: `A copy will be sent to ${to}.`,
+      message: `A copy will be sent to ${formatRecipientList(recipients)}.`,
       confirmLabel: 'Send email',
     })
     if (!ok) return
@@ -1466,15 +1471,51 @@ export default function ClientsPage() {
           </div>
 
           <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <DetailField label="First name">{dash(viewing.first_name)}</DetailField>
-            <DetailField label="Middle name">{dash(viewing.middle_name)}</DetailField>
-            <DetailField label="Last name">{dash(viewing.surname)}</DetailField>
+            <DetailField label="Company">{viewing.is_company ? 'Yes' : 'No'}</DetailField>
+            {viewing.is_company ? (
+              <DetailField label="Company name" className="sm:col-span-2">
+                {dash(viewing.company_name)}
+              </DetailField>
+            ) : null}
+            <DetailField label={viewing.is_company ? 'Contact first name' : 'First name'}>
+              {dash(viewing.first_name)}
+            </DetailField>
+            <DetailField label={viewing.is_company ? 'Contact middle name' : 'Middle name'}>
+              {dash(viewing.middle_name)}
+            </DetailField>
+            <DetailField label={viewing.is_company ? 'Contact last name' : 'Last name'}>
+              {dash(viewing.surname)}
+            </DetailField>
             <DetailField label="Gender">{genderLabel(viewing.gender)}</DetailField>
             <DetailField label="ID number">{dash(viewing.id_number)}</DetailField>
             <DetailField label="Country">{dash(viewing.country)}</DetailField>
-            <DetailField label="Email">{dash(viewing.email)}</DetailField>
+            <DetailField label={viewing.is_company ? 'Login email' : 'Email'}>
+              {dash(viewing.email)}
+            </DetailField>
             <DetailField label="Cellphone">{dash(viewing.cellphone || viewing.phone)}</DetailField>
             <DetailField label="Landline">{dash(viewing.landline)}</DetailField>
+            {viewing.is_company ? (
+              <DetailField label="Other emails" className="sm:col-span-2 lg:col-span-3">
+                {(viewing.contact_emails || []).length ? (
+                  <ul className="space-y-1">
+                    {viewing.contact_emails.map((row) => (
+                      <li key={row.id || row.email}>
+                        {row.email}
+                        <span className="text-ink-500">
+                          {' '}
+                          ·{' '}
+                          {row.receives_communication === false
+                            ? 'Does not receive invoices and statements'
+                            : 'Receives invoices and statements'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  '—'
+                )}
+              </DetailField>
+            ) : null}
             <DetailField label="Postal address" className="sm:col-span-2 lg:col-span-3">
               {dash(viewing.postal_address)}
             </DetailField>
@@ -1502,7 +1543,109 @@ export default function ClientsPage() {
               Close
             </button>
           </div>
-          <ClientRegistrationFields form={form} setForm={setForm} fieldClass={adminFieldClass} />
+          <label className="flex items-center gap-2 text-sm text-ink-200">
+            <input
+              type="checkbox"
+              checked={Boolean(form.is_company)}
+              onChange={(e) => setForm((f) => ({ ...f, is_company: e.target.checked }))}
+              className="h-4 w-4 rounded border-white/20 bg-ink-950 text-brand-500"
+            />
+            This client is a company
+          </label>
+          {form.is_company ? (
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Company name *
+              </span>
+              <input
+                required
+                className={adminFieldClass}
+                value={form.company_name || ''}
+                onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))}
+              />
+            </label>
+          ) : null}
+          <ClientRegistrationFields
+            form={form}
+            setForm={setForm}
+            fieldClass={adminFieldClass}
+            requireId={!form.is_company}
+            emailLabel={form.is_company ? 'Login email' : 'Email'}
+          />
+          {form.is_company ? (
+            <div className="space-y-3 rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Other emails</p>
+                <p className="mt-1 text-xs text-ink-400">
+                  These addresses do not sign in. The same address can be used on more than one
+                  company. Tick an address to include it on invoices and statements. The login
+                  email always receives them.
+                </p>
+              </div>
+              {(form.contact_emails || []).map((row, index) => (
+                <div key={index} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    type="email"
+                    className={adminFieldClass}
+                    value={row.email}
+                    placeholder="name@company.com"
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const next = [...(f.contact_emails || [])]
+                        next[index] = { ...next[index], email: e.target.value }
+                        return { ...f, contact_emails: next }
+                      })
+                    }
+                  />
+                  <label className="flex shrink-0 items-center gap-2 text-sm text-ink-300">
+                    <input
+                      type="checkbox"
+                      checked={row.receives_communication !== false}
+                      onChange={(e) =>
+                        setForm((f) => {
+                          const next = [...(f.contact_emails || [])]
+                          next[index] = {
+                            ...next[index],
+                            receives_communication: e.target.checked,
+                          }
+                          return { ...f, contact_emails: next }
+                        })
+                      }
+                      className="h-4 w-4 rounded border-white/20 bg-ink-950 text-brand-500"
+                    />
+                    Receives invoices and statements
+                  </label>
+                  <button
+                    type="button"
+                    className={adminBtnSecondary}
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        contact_emails: (f.contact_emails || []).filter((_, i) => i !== index),
+                      }))
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className={adminBtnSecondary}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    contact_emails: [
+                      ...(f.contact_emails || []),
+                      { email: '', receives_communication: true },
+                    ],
+                  }))
+                }
+              >
+                Add email
+              </button>
+            </div>
+          ) : null}
           {canEditOpeningOnForm || (!editingId && staffLike) ? (
             <div className="space-y-3 rounded-xl border border-white/10 bg-ink-950/40 p-3 sm:p-4">
               <div>
@@ -1628,6 +1771,9 @@ export default function ClientsPage() {
                         >
                           {c.name}
                         </span>
+                        {c.is_company ? (
+                          <span className="ml-2 text-xs text-ink-500">Company</span>
+                        ) : null}
                         {c.is_active === false ? (
                           <span className="ml-2 text-xs text-red-300">Inactive</span>
                         ) : null}

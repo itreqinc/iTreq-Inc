@@ -1,3 +1,4 @@
+import { clientCommunicationEmails } from './clientEmails'
 import { COMPANY } from '../data/site'
 import { documentLetterheadFromSettings } from './companyDocumentSettings'
 import { formatDocMoney } from './money'
@@ -87,7 +88,14 @@ export function buildPaymentDocumentModel({ payment, client, settings }) {
     },
     client: {
       name: client?.name || payment.clients?.name || 'Client',
+      contactName: client?.is_company
+        ? [client.first_name, client.middle_name, client.surname]
+            .map((part) => String(part || '').trim())
+            .filter(Boolean)
+            .join(' ')
+        : '',
       email: client?.email || '',
+      communicationEmails: clientCommunicationEmails(client),
       phone: phoneDisplay,
       address: clientAddress(client),
     },
@@ -365,6 +373,7 @@ function renderPaymentBody(model) {
 
   const clientBody = [
     model.client.name,
+    model.client.contactName ? `Contact: ${model.client.contactName}` : '',
     model.client.address,
     model.client.phone,
     model.client.email,

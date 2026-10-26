@@ -6,6 +6,7 @@ import {
   closeBillingDocumentPrintWindow,
   buildMailtoForBillingDocument,
 } from '../lib/billingDocument'
+import { documentRecipients, formatRecipientList } from '../lib/clientEmails'
 import { useOpsAlert } from './OpsAlertContext'
 import { adminBtnPrimary, adminBtnSecondary } from './ui'
 
@@ -77,15 +78,15 @@ export function useBillingDocumentActions({
     }
 
     const { model } = preview.data
-    const to = model.client.email?.trim()
-    if (!to) {
+    const recipients = documentRecipients(model.client)
+    if (!recipients.length) {
       showError('This client has no email address on file. Update the client record first.')
       return
     }
 
     const ok = await confirm({
       title: `Email ${model.title.toLowerCase()} to client?`,
-      message: `A copy will be sent to ${to}. The message includes the full ${model.title.toLowerCase()} details.`,
+      message: `A copy will be sent to ${formatRecipientList(recipients)}. The message includes the full ${model.title.toLowerCase()} details.`,
       confirmLabel: 'Send email',
     })
     if (!ok) return

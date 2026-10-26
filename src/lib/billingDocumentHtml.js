@@ -1,3 +1,4 @@
+import { clientCommunicationEmails } from './clientEmails'
 import { COMPANY } from '../data/site'
 import { documentLetterheadFromSettings } from './companyDocumentSettings'
 import { DEFAULT_QUOTATION_TERMS } from './quotationTerms'
@@ -19,6 +20,13 @@ function formatDocDate(isoDate) {
   const parts = String(isoDate).slice(0, 10).split('-')
   if (parts.length !== 3) return isoDate
   return `${parts[0]}/${parts[1]}/${parts[2]}`
+}
+
+function contactPersonFrom(client) {
+  return [client?.first_name, client?.middle_name, client?.surname]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' ')
 }
 
 function clientAddress(client) {
@@ -144,7 +152,9 @@ export function buildBillingDocumentModel({ type, doc, client, settings, product
     },
     client: {
       name: client?.name || doc.clients?.name || 'Client',
+      contactName: client?.is_company ? contactPersonFrom(client) : '',
       email: client?.email || '',
+      communicationEmails: clientCommunicationEmails(client),
       phone: phoneDisplay,
       address: clientAddress(client),
     },
@@ -665,6 +675,7 @@ export function renderDocumentBody(model) {
 
   const clientBody = [
     model.client.name,
+    model.client.contactName ? `Contact: ${model.client.contactName}` : '',
     model.client.address,
     model.client.phone,
     model.client.email,

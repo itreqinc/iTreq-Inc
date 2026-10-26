@@ -1,3 +1,4 @@
+import { normalizeContactEmails } from './clientEmails'
 import { validatePhoneForCountry } from './phoneCountry'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -29,8 +30,12 @@ export function validateClientForm(form) {
     return { ok: false, message: 'Surname is required.', field: 'surname' }
   }
 
+  if (form.is_company && !normStr(form.company_name)) {
+    return { ok: false, message: 'Company name is required.', field: 'company_name' }
+  }
+
   const idn = normIdNumber(form.id_number)
-  if (!idn) {
+  if (!form.is_company && !idn) {
     return { ok: false, message: 'ID / Passport number is required.', field: 'id_number' }
   }
 
@@ -46,6 +51,9 @@ export function validateClientForm(form) {
   if (!EMAIL_RE.test(String(form.email ?? '').trim())) {
     return { ok: false, message: 'Enter a valid email address.', field: 'email' }
   }
+
+  const extras = normalizeContactEmails(form)
+  if (!extras.ok) return { ok: false, message: extras.message, field: 'contact_emails' }
 
   return { ok: true }
 }

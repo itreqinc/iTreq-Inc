@@ -5,12 +5,30 @@ import { normEmail, normIdNumber } from './clientValidation'
  * `name` is a display-only column: auto-built from first/middle/surname
  * (same idea as iRegistry joining first + last at render / save).
  */
-export function buildClientDisplayName({ first_name, middle_name, surname, name }) {
+export function buildClientDisplayName({
+  first_name,
+  middle_name,
+  surname,
+  name,
+  is_company,
+  company_name,
+}) {
+  if (is_company) {
+    const company = String(company_name || '').trim()
+    if (company) return company
+  }
   const parts = [first_name, middle_name, surname]
     .map((p) => String(p || '').trim())
     .filter(Boolean)
   if (parts.length) return parts.join(' ')
   return String(name || '').trim()
+}
+
+export function contactPersonName({ first_name, middle_name, surname }) {
+  return [first_name, middle_name, surname]
+    .map((p) => String(p || '').trim())
+    .filter(Boolean)
+    .join(' ')
 }
 
 function formToPersonRow(form) {
@@ -51,6 +69,9 @@ export function emptyClientForm() {
     postal_address: '',
     physical_address: '',
     notes: '',
+    is_company: false,
+    company_name: '',
+    contact_emails: [],
     opening_balance: '',
     opening_balance_date: '',
   }
@@ -81,6 +102,12 @@ export function clientToForm(client) {
     postal_address: client.postal_address || '',
     physical_address: client.physical_address || client.address || '',
     notes: client.notes || '',
+    is_company: Boolean(client.is_company),
+    company_name: client.company_name || '',
+    contact_emails: (client.contact_emails || []).map((row) => ({
+      email: row.email || '',
+      receives_communication: row.receives_communication !== false,
+    })),
     opening_balance:
       Number.isFinite(opening) && opening !== 0 ? String(opening) : opening === 0 ? '0' : '',
     opening_balance_date: client.opening_balance_date
@@ -101,6 +128,8 @@ export function formToClientRow(form) {
   const dateRaw = String(form.opening_balance_date || '').trim().slice(0, 10)
   return {
     ...formToPersonRow(form),
+    is_company: Boolean(form.is_company),
+    company_name: String(form.company_name || '').trim() || null,
     opening_balance: opening,
     opening_balance_date: opening !== 0 && dateRaw ? dateRaw : null,
   }

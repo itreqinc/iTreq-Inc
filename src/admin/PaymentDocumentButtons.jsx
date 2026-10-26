@@ -6,6 +6,7 @@ import {
   closePaymentDocumentPrintWindow,
   buildMailtoForPaymentDocument,
 } from '../lib/paymentDocument'
+import { documentRecipients, formatRecipientList } from '../lib/clientEmails'
 import { useOpsAlert } from './OpsAlertContext'
 import { adminBtnPrimary, adminBtnSecondary } from './ui'
 
@@ -65,15 +66,15 @@ export function usePaymentDocumentActions({
     }
 
     const { model } = preview.data
-    const to = model.client.email?.trim()
-    if (!to) {
+    const recipients = documentRecipients(model.client)
+    if (!recipients.length) {
       showError('This client has no email address on file. Update the client record first.')
       return
     }
 
     const ok = await confirm({
       title: 'Email payment receipt to client?',
-      message: `A copy will be sent to ${to}.`,
+      message: `A copy will be sent to ${formatRecipientList(recipients)}.`,
       confirmLabel: 'Send email',
     })
     if (!ok) return

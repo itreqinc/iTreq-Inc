@@ -359,6 +359,10 @@ function normIdNumber(v: unknown) {
 }
 
 function buildClientDisplayName(form: Record<string, unknown>) {
+  if (form.is_company) {
+    const company = String(form.company_name || '').trim()
+    if (company) return company
+  }
   const parts = [form.first_name, form.middle_name, form.surname]
     .map((p) => String(p || '').trim())
     .filter(Boolean)
@@ -395,6 +399,8 @@ function formToClientRow(form: Record<string, unknown>) {
   const dateRaw = String(form.opening_balance_date || '').trim().slice(0, 10)
   return {
     ...formToPersonRow(form),
+    is_company: Boolean(form.is_company),
+    company_name: String(form.company_name || '').trim() || null,
     opening_balance: opening,
     opening_balance_date: opening !== 0 && dateRaw ? dateRaw : null,
   }
@@ -488,7 +494,7 @@ function relName(row: Record<string, unknown>, key: string) {
 type ResendAttachment = { filename: string; content: string; type?: string }
 
 async function sendViaResend(
-  to: string,
+  to: string | string[],
   subject: string,
   html: string,
   text: string,
@@ -505,9 +511,12 @@ async function sendViaResend(
     Deno.env.get('OPS_EMAIL_FROM')?.trim() ||
     Deno.env.get('RESEND_FROM')?.trim() ||
     'iTreq Inc <no-reply@itreqinc.com>'
+  const recipients = (Array.isArray(to) ? to : [to])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
   const payload: Record<string, unknown> = {
     from,
-    to: [to],
+    to: recipients,
     subject,
     html,
     text: text || subject,
@@ -561,7 +570,7 @@ async function listClientsInternal(sb: SupabaseClient, { activeOnly = false } = 
   if (activeOnly) q = q.eq('is_active', true)
   const { data, error } = await q
   if (error) throw mapDbError(error)
-  return (data || []) as Record<string, unknown>[]
+  return attachContactEmails(sb, (data || []) as Record<string, unknown>[])
 }
 
 async function clientHasFinancialRecords(sb: SupabaseClient, clientId: string) {
@@ -599,7 +608,122 @@ async function enrichClientsFinancialFlags(
 async function getClientInternal(sb: SupabaseClient, id: string) {
   const { data, error } = await sb.from('clients').select('*').eq('id', id).single()
   if (error) throw mapDbError(error)
-  return data as Record<string, unknown>
+  const [client] = await attachContactEmails(sb, [data as Record<string, unknown>])
+  return client
+}
+
+async function attachContactEmails(
+  sb: SupabaseClient,
+  clients: Record<string, unknown>[],
+) {
+  if (!clients.length) return clients
+  const ids = clients.map((c) => c.id).filter(Boolean)
+  const { data, error } = await sb
+    .from('client_contact_emails')
+    .select('id, client_id, email, receives_communication, created_at')
+    .in('client_id', ids)
+    .order('created_at', { ascending: true })
+  if (error) throw mapDbError(error)
+  const byClient: Record<string, Record<string, unknown>[]> = {}
+  for (const row of data || []) {
+    const key = String((row as { client_id: string }).client_id)
+    if (!byClient[key]) byClient[key] = []
+    byClient[key].push(row as Record<string, unknown>)
+  }
+  return clients.map((c) => ({
+    ...c,
+    contact_emails: byClient[String(c.id)] || [],
+  }))
+}
+
+function communicationRecipients(client: Record<string, unknown>) {
+  const login = normEmail(client.email)
+  const extras = client.is_company
+    ? ((client.contact_emails as Record<string, unknown>[]) || [])
+        .filter((row) => row?.receives_communication !== false)
+        .map((row) => normEmail(row.email))
+    : []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const email of [login, ...extras]) {
+    if (!email || seen.has(email)) continue
+    seen.add(email)
+    out.push(email)
+  }
+  return out
+}
+
+async function assertUniqueLoginEmail(
+  sb: SupabaseClient,
+  email: string,
+  clientId?: string,
+) {
+  if (!email || email === 'info@itreqinc.com') return
+  const { data, error } = await sb.from('clients').select('id').ilike('email', email)
+  if (error) throw mapDbError(error)
+  const clash = (data || []).find((row) => String(row.id) !== String(clientId || ''))
+  if (clash) throw new OpsError('That login email is already used by another client.')
+
+  const { data: user, error: userErr } = await sb
+    .from('users')
+    .select('id, client_id, role')
+    .ilike('email', email)
+    .maybeSingle()
+  if (userErr) throw mapDbError(userErr)
+  if (!user) return
+  if (user.role !== 'client') {
+    throw new OpsError('That login email belongs to a staff account.')
+  }
+  if (user.client_id && String(user.client_id) !== String(clientId || '')) {
+    throw new OpsError('That login email is already used by another client.')
+  }
+}
+
+function contactEmailRows(form: Record<string, unknown>, loginEmail: string) {
+  if (!form.is_company) return []
+  const seen = new Set<string>()
+  const rows: { email: string; receives_communication: boolean }[] = []
+  const raw = Array.isArray(form.contact_emails) ? form.contact_emails : []
+  for (const item of raw) {
+    const row = (item || {}) as Record<string, unknown>
+    const email = normEmail(row.email)
+    if (!email) continue
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new OpsError(`Enter a valid email address for ${email}.`)
+    }
+    if (email === loginEmail) {
+      throw new OpsError('An extra email cannot be the same as this account’s login email.')
+    }
+    if (seen.has(email)) {
+      throw new OpsError(`${email} is listed more than once on this account.`)
+    }
+    seen.add(email)
+    rows.push({
+      email,
+      receives_communication: row.receives_communication !== false,
+    })
+  }
+  return rows
+}
+
+async function saveContactEmails(
+  sb: SupabaseClient,
+  clientId: string,
+  form: Record<string, unknown>,
+  loginEmail: string,
+) {
+  if (!form.is_company) return
+  const rows = contactEmailRows(form, loginEmail)
+  const { error: delErr } = await sb
+    .from('client_contact_emails')
+    .delete()
+    .eq('client_id', clientId)
+  if (delErr) throw mapDbError(delErr)
+  if (!rows.length) return
+  const { error } = await sb.from('client_contact_emails').insert(
+    rows.map((row) => ({ client_id: clientId, ...row })),
+  )
+  if (error) throw mapDbError(error)
 }
 
 async function listProductsInternal(
@@ -1268,10 +1392,12 @@ handlers.create_client = async ({ user, sb }, args) => {
   const displayName = buildClientDisplayName(form)
   if (!displayName) throw new OpsError('First name or surname is required.')
   const row = formToClientRow(form)
+  await assertUniqueLoginEmail(sb, normEmail(row.email))
   applyOpeningBalanceFields(user, row)
   const { data, error } = await sb.from('clients').insert(row).select().single()
   if (error) throw mapDbError(error)
-  return data
+  await saveContactEmails(sb, String(data.id), form, normEmail(row.email))
+  return getClientInternal(sb, String(data.id))
 }
 
 handlers.update_client = async ({ user, sb }, args) => {
@@ -1280,15 +1406,15 @@ handlers.update_client = async ({ user, sb }, args) => {
   const displayName = buildClientDisplayName(form)
   if (!displayName) throw new OpsError('First name or surname is required.')
   const row = formToClientRow(form)
+  await assertUniqueLoginEmail(sb, normEmail(row.email), id)
   applyOpeningBalanceFields(user, row, id)
-  const { data, error } = await sb
+  const { error } = await sb
     .from('clients')
     .update({ ...row, updated_at: nowIso() })
     .eq('id', id)
-    .select()
-    .single()
   if (error) throw mapDbError(error)
-  return data
+  await saveContactEmails(sb, id, form, normEmail(row.email))
+  return getClientInternal(sb, id)
 }
 
 handlers.update_client_opening_balance = async ({ user, sb }, args) => {
@@ -2532,8 +2658,8 @@ handlers.send_billing_document_email = async ({ sb }, args) => {
   const doc = bundle.doc as Record<string, unknown>
   const client = bundle.client as Record<string, unknown>
   const settings = bundle.settings as Record<string, unknown>
-  const to = client.email ? String(client.email).trim() : ''
-  if (!to) throw new OpsError('This client has no email address on file.')
+  const to = communicationRecipients(client)
+  if (!to.length) throw new OpsError('This client has no email address on file.')
   const companyName = settings.company_name ? String(settings.company_name).trim() : 'iTreq Inc'
   const docNumber = doc.number ? String(doc.number) : 'Draft'
   const subject = `${type} ${docNumber} — ${companyName}`
@@ -2582,18 +2708,21 @@ function normalizePdfAttachments(raw: unknown): ResendAttachment[] {
 
 handlers.send_invoice_remind_email = async (_ctx, args) => {
   const payload = (args[0] || {}) as Record<string, unknown>
-  const to = String(payload.to || '').trim()
+  const rawTo = payload.to
+  const recipients = (Array.isArray(rawTo) ? rawTo : [rawTo])
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean)
   const subject = String(payload.subject || '').trim()
   const html = String(payload.html || '')
   const text = String(payload.text || '')
-  if (!to || !subject || !html) {
+  if (!recipients.length || !subject || !html) {
     throw new OpsError('Missing to, subject, or html.')
   }
-  if (!EMAIL_RE.test(to)) {
-    throw new OpsError('Invalid recipient email.')
+  for (const email of recipients) {
+    if (!EMAIL_RE.test(email)) throw new OpsError('Invalid recipient email.')
   }
   const attachments = normalizePdfAttachments(payload.attachments)
-  await sendViaResend(to, subject, html, text || subject, attachments)
+  await sendViaResend(recipients, subject, html, text || subject, attachments)
   return { ok: true }
 }
 
@@ -2674,8 +2803,8 @@ handlers.send_payment_document_email = async ({ sb }, args) => {
   const payment = bundle.payment as Record<string, unknown>
   const client = bundle.client as Record<string, unknown>
   const settings = bundle.settings as Record<string, unknown>
-  const to = client.email ? String(client.email).trim() : ''
-  if (!to) throw new OpsError('This client has no email address on file.')
+  const to = communicationRecipients(client)
+  if (!to.length) throw new OpsError('This client has no email address on file.')
   const companyName = settings.company_name ? String(settings.company_name).trim() : 'iTreq Inc'
   const ref = payment.reference ? String(payment.reference) : 'Payment'
   const subject = `Payment receipt ${ref} — ${companyName}`
