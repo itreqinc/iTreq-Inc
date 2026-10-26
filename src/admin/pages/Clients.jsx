@@ -148,6 +148,7 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false)
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const pendingAccountFocusRef = useRef(initialAccountId)
+  const profileRef = useRef(null)
 
   /** Keep the selected client as the 3rd visible row in the accounts list. */
   function scrollAccountsClientToThird(clientId) {
@@ -463,8 +464,24 @@ export default function ClientsPage() {
   }
 
   function closeViewProfile() {
+    const id = viewId
     setViewId(null)
+    if (!id) return
+    highlightRow(id, { scroll: false })
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-row-id="${id}"]`)?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+      })
+    })
   }
+
+  useEffect(() => {
+    if (!viewId || showForm || view !== 'directory') return
+    profileRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [viewId, showForm, view])
 
   function startEdit(client) {
     setEditingId(client.id)
@@ -549,14 +566,6 @@ export default function ClientsPage() {
     setStmtModalClient(null)
     const result = fillStatementDocumentPrintWindow(win, model)
     if (!result.ok) showError(result.message)
-  }
-
-  function openClientDetails(client) {
-    setSelectedId(client.id)
-    setShowForm(false)
-    setViewId(null)
-    setView('accounts')
-    pendingAccountFocusRef.current = client.id
   }
 
   function clientIconActions(client) {
@@ -1445,7 +1454,10 @@ export default function ClientsPage() {
       </div>
 
       {viewing && !showForm && view === 'directory' ? (
-        <section className="rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5">
+        <section
+          ref={profileRef}
+          className="scroll-mt-24 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-semibold text-white">{viewing.name}</h2>
@@ -1471,24 +1483,42 @@ export default function ClientsPage() {
             </div>
           </div>
 
+          {viewing.is_company ? (
+            <div className="mt-5 rounded-xl border border-white/10 bg-ink-950/50 p-4 sm:p-5">
+              <h3 className="text-sm font-semibold text-white">Contact person</h3>
+              <p className="mt-2 text-base font-medium text-white">
+                {dash(
+                  [viewing.first_name, viewing.middle_name, viewing.surname]
+                    .map((part) => String(part || '').trim())
+                    .filter(Boolean)
+                    .join(' '),
+                )}
+              </p>
+              <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <DetailField label="First name">{dash(viewing.first_name)}</DetailField>
+                <DetailField label="Middle name">{dash(viewing.middle_name)}</DetailField>
+                <DetailField label="Last name">{dash(viewing.surname)}</DetailField>
+                <DetailField label="Gender">{genderLabel(viewing.gender)}</DetailField>
+                <DetailField label="ID number">{dash(viewing.id_number)}</DetailField>
+              </dl>
+            </div>
+          ) : null}
+
           <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <DetailField label="Company">{viewing.is_company ? 'Yes' : 'No'}</DetailField>
             {viewing.is_company ? (
               <DetailField label="Company name" className="sm:col-span-2">
                 {dash(viewing.company_name)}
               </DetailField>
-            ) : null}
-            <DetailField label={viewing.is_company ? 'Contact first name' : 'First name'}>
-              {dash(viewing.first_name)}
-            </DetailField>
-            <DetailField label={viewing.is_company ? 'Contact middle name' : 'Middle name'}>
-              {dash(viewing.middle_name)}
-            </DetailField>
-            <DetailField label={viewing.is_company ? 'Contact last name' : 'Last name'}>
-              {dash(viewing.surname)}
-            </DetailField>
-            <DetailField label="Gender">{genderLabel(viewing.gender)}</DetailField>
-            <DetailField label="ID number">{dash(viewing.id_number)}</DetailField>
+            ) : (
+              <>
+                <DetailField label="First name">{dash(viewing.first_name)}</DetailField>
+                <DetailField label="Middle name">{dash(viewing.middle_name)}</DetailField>
+                <DetailField label="Last name">{dash(viewing.surname)}</DetailField>
+                <DetailField label="Gender">{genderLabel(viewing.gender)}</DetailField>
+                <DetailField label="ID number">{dash(viewing.id_number)}</DetailField>
+              </>
+            )}
             <DetailField label="Country">{dash(viewing.country)}</DetailField>
             <DetailField label={viewing.is_company ? 'Login email' : 'Email'}>
               {dash(viewing.email)}
@@ -1753,7 +1783,7 @@ export default function ClientsPage() {
                 </tr>
               ) : (
                 clientList.rows.map((c) => {
-                  const open = () => openClientDetails(c)
+                  const open = () => openViewProfile(c)
                   return (
                     <tr
                       key={c.id}
