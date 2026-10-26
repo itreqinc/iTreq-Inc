@@ -226,6 +226,7 @@ export default function ClientsPage() {
         c.name,
         c.company_name,
         c.first_name,
+        c.middle_name,
         c.surname,
         c.email,
         c.phone,
