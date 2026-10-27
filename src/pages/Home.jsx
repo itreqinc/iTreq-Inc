@@ -40,7 +40,7 @@ export default function Home() {
             <span className="text-gradient">Valuable Assets</span>
           </h1>
           <p className="mt-6 max-w-2xl animate-[fadeUp_0.7s_0.16s_ease_both] text-base leading-relaxed text-ink-300 sm:text-lg">
-            From vehicles and fleet units to televisions, laptops, solar batteries and business
+            From vehicles and fleet units to televisions, laptops, Solar Panels and business
             equipment, iTreq Inc helps you monitor, protect and recover what matters.
           </p>
           <div className="mt-9 flex flex-wrap gap-3 animate-[fadeUp_0.7s_0.24s_ease_both]">
@@ -78,7 +78,7 @@ export default function Home() {
           </div>
           <p className="text-base leading-relaxed text-ink-300 sm:text-lg">
             iTreq Inc provides GPS tracking solutions for vehicles, household assets, business
-            equipment, solar systems, batteries and more. Based in Gaborone, we deliver practical
+            equipment, solar panels, batteries and more. Based in Gaborone, we deliver practical
             tracking and recovery support for individuals and businesses across Botswana — and
             beyond when cross-border visibility is needed.
           </p>
