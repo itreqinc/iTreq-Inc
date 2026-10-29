@@ -847,7 +847,7 @@ async function attachOpenInvoiceParts(
 
   const { data: latest, error: latestErr } = await sb
     .from('invoices')
-    .select('total')
+    .select('total, billing_period')
     .eq('client_id', clientId)
     .not('billing_period', 'is', null)
     .neq('status', 'void')
@@ -856,6 +856,9 @@ async function attachOpenInvoiceParts(
     .maybeSingle()
   if (latestErr) throw mapDbError(latestErr)
   const clientMonthlyFee = Number(latest?.total) || 0
+  const clientMonthlyPeriod = latest?.billing_period
+    ? String(latest.billing_period).slice(0, 10)
+    : ''
 
   return rows.map((inv) => ({
     ...inv,
@@ -863,6 +866,7 @@ async function attachOpenInvoiceParts(
     _fee: Math.round((fee.get(String(inv.id)) || 0) * 100) / 100,
     _lines_subtotal: Math.round((sub.get(String(inv.id)) || 0) * 100) / 100,
     _client_monthly_fee: clientMonthlyFee,
+    _client_monthly_period: clientMonthlyPeriod,
   }))
 }
 

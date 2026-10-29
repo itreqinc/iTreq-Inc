@@ -91,11 +91,19 @@ function grossFee(inv) {
  * Brought forward plus months → "Prev. Bal + September 2026" or "Prev. Bal + Sep - Nov 2026".
  * Installation only → "Supply & Fit".
  * Installation plus months → "Supply & Fit + September 2026" or "Supply & Fit + Sep - Nov 2026".
- * Months are counted from the client's monthly fee, oldest unpaid month first.
+ * Open months are taken oldest first. Anything above that balance continues into later months
+ * at the client's monthly fee. Those months start after the latest invoice.
  * A partial last month is included. Returns '' when the amount is empty, or when money
  * spills onto an invoice that is neither an installation nor a monthly fee.
+ *
+ * baseline: { fee, period } from the latest monthly invoice, including one that is already paid.
  */
-export function monthlyFeePaymentReference(openInvoices, amount, openingBalanceDue = 0) {
+export function monthlyFeePaymentReference(
+  openInvoices,
+  amount,
+  openingBalanceDue = 0,
+  baseline = {},
+) {
   const pay = money(amount)
   if (pay <= 0.001) return ''
 
@@ -103,7 +111,8 @@ export function monthlyFeePaymentReference(openInvoices, amount, openingBalanceD
   const monthlyInvoices = []
   const installation = []
   let otherDue = 0
-  let monthlyFee = 0
+  let monthlyFee = money(baseline?.fee)
+  let latestPeriod = monthStart(baseline?.period)
 
   for (const inv of openInvoices || []) {
     const due = money(inv._allocatable ?? inv.total)
@@ -111,6 +120,7 @@ export function monthlyFeePaymentReference(openInvoices, amount, openingBalanceD
     if (!monthlyFee && Number(inv._client_monthly_fee) > 0.001) {
       monthlyFee = money(inv._client_monthly_fee)
     }
+    if (!latestPeriod) latestPeriod = monthStart(inv._client_monthly_period)
     const period = monthStart(inv.billing_period)
     if (period) {
       monthlyInvoices.push({ period, due, total: money(inv.total) })
@@ -144,8 +154,16 @@ export function monthlyFeePaymentReference(openInvoices, amount, openingBalanceD
     const onInstall = installation.find((row) => row.fee > 0.001)
     if (onInstall) monthlyFee = onInstall.fee
   }
+  if (!latestPeriod) latestPeriod = monthlyInvoices.at(-1)?.period || ''
 
-  if (!broughtForward && !installation.length && !monthlyInvoices.length && otherDue <= 0.001) {
+  const canNameMonths = monthlyFee > 0.001 && Boolean(latestPeriod || monthlyInvoices.length)
+  if (
+    !broughtForward &&
+    !installation.length &&
+    !monthlyInvoices.length &&
+    otherDue <= 0.001 &&
+    !canNameMonths
+  ) {
     return ''
   }
 
@@ -159,44 +177,42 @@ export function monthlyFeePaymentReference(openInvoices, amount, openingBalanceD
 
   if (otherDue > 0.001 && left > 0.001) return ''
 
-  let span = ''
-  if (paysInstall && left > 0.001 && monthlyFee > 0.001) {
-    const feeMonth = installation
-      .filter((row) => row.feeDue > 0.001 && row.issue)
-      .map((row) => row.issue)
-      .sort()[0]
-    const start =
-      feeMonth ||
-      monthlyInvoices[0]?.period ||
-      installation.map((row) => row.issue).filter(Boolean).sort()[0] ||
-      ''
-    if (start) {
-      const covered = []
-      let cursor = start
-      let guard = 0
-      while (left > 0.001 && guard < 36) {
-        covered.push(cursor)
-        left = money(left - monthlyFee)
-        cursor = nextBillingPeriod(cursor)
-        guard += 1
-      }
-      span = monthSpanLabel(covered)
+  const covered = []
+  const feeDueByMonth = new Map()
+  for (const row of installation) {
+    if (row.feeDue > 0.001 && row.issue) {
+      feeDueByMonth.set(row.issue, money((feeDueByMonth.get(row.issue) || 0) + row.feeDue))
     }
-  } else if (!paysInstall && left > 0.001) {
-    const covered = []
-    for (const row of monthlyInvoices) {
-      if (left <= 0.001) break
-      if (!covered.some((period) => period.slice(0, 7) === row.period.slice(0, 7))) {
-        covered.push(row.period)
-      }
-      left = money(left - row.due)
-    }
-    span = monthSpanLabel(covered)
-    if (otherDue > 0.001 && left > 0.001 && !span) return ''
+  }
+  for (const period of [...feeDueByMonth.keys()].sort()) {
+    if (left <= 0.001) break
+    if (!covered.some((item) => item.slice(0, 7) === period.slice(0, 7))) covered.push(period)
+    left = money(left - feeDueByMonth.get(period))
   }
 
-  if (!paysInstall && otherDue > 0.001 && left > 0.001) return ''
+  for (const row of monthlyInvoices) {
+    if (left <= 0.001) break
+    if (!covered.some((period) => period.slice(0, 7) === row.period.slice(0, 7))) {
+      covered.push(row.period)
+    }
+    left = money(left - row.due)
+  }
 
+  if (left > 0.001 && monthlyFee > 0.001) {
+    const anchor = [latestPeriod, covered.at(-1)].filter(Boolean).sort().at(-1)
+    let cursor = anchor ? nextBillingPeriod(anchor) : ''
+    let guard = covered.length
+    while (left > 0.001 && cursor && guard < 36) {
+      if (!covered.some((period) => period.slice(0, 7) === cursor.slice(0, 7))) {
+        covered.push(cursor)
+      }
+      left = money(left - monthlyFee)
+      cursor = nextBillingPeriod(cursor)
+      guard += 1
+    }
+  }
+
+  const span = monthSpanLabel([...covered].sort())
   const parts = []
   if (paysBroughtForward) parts.push(paysInstall || span ? 'Prev. Bal' : 'Previous Bal')
   if (paysInstall) parts.push('Supply & Fit')

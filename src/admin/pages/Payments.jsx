@@ -74,6 +74,16 @@ function emptyPaymentForm() {
   }
 }
 
+function baselineFromInvoices(invoices) {
+  const row = (invoices || []).find(
+    (inv) => inv._client_monthly_period || Number(inv._client_monthly_fee) > 0.001,
+  )
+  return {
+    fee: Number(row?._client_monthly_fee) || 0,
+    period: row?._client_monthly_period ? String(row._client_monthly_period).slice(0, 10) : '',
+  }
+}
+
 function snapshotPaymentForm(form) {
   return JSON.stringify({
     client_id: form.client_id || '',
@@ -94,6 +104,10 @@ export default function PaymentsPage() {
   const saveInFlightRef = useRef(false)
   /** Last reference this form wrote from monthly-fee months. A hand-typed value is left alone. */
   const seededReferenceRef = useRef('')
+  /** Amount the reference was built from. Typing does not allocate until the field is left. */
+  const [committedAmount, setCommittedAmount] = useState('')
+  /** Latest monthly invoice: fee per month, and the period coming months follow. */
+  const [monthlyBaseline, setMonthlyBaseline] = useState({ fee: 0, period: '' })
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [rows, setRows] = useState([])
@@ -159,6 +173,7 @@ export default function PaymentsPage() {
         setOpeningBalanceDue(0)
         setAccountCredit(0)
         setApplyAccountCredit(false)
+        setMonthlyBaseline({ fee: 0, period: '' })
         return []
       }
       const [invRes, creditRes, clientRes, appliedRes] = await Promise.all([
@@ -173,6 +188,7 @@ export default function PaymentsPage() {
         setOpeningBalanceDue(0)
         setAccountCredit(creditRes.data?.balance ?? 0)
         setApplyAccountCredit(false)
+        setMonthlyBaseline({ fee: 0, period: '' })
         return []
       }
       if (clientRes.error) {
@@ -181,7 +197,23 @@ export default function PaymentsPage() {
       if (appliedRes.error) {
         showError(appliedRes.error.message)
       }
-      const invoices = invRes.data || []
+      const invoices = Array.isArray(invRes.data) ? invRes.data : []
+      const stamped = baselineFromInvoices(invoices)
+      let nextBaseline = stamped
+      if (!stamped.period || stamped.fee <= 0.001) {
+        const listRes = await opsApi.listInvoices({ client_id: clientId })
+        const latest = (listRes.error ? [] : listRes.data || [])
+          .filter((inv) => inv.billing_period && inv.status !== 'void')
+          .sort((a, b) => String(a.billing_period).localeCompare(String(b.billing_period)))
+          .at(-1)
+        if (latest) {
+          nextBaseline = {
+            fee: stamped.fee > 0.001 ? stamped.fee : Number(latest.total) || 0,
+            period: stamped.period || String(latest.billing_period).slice(0, 10),
+          }
+        }
+      }
+      setMonthlyBaseline(nextBaseline)
       const editingOpeningApplied = Math.max(
         0,
         -(Number(opts.openingBalanceDelta) || 0),
@@ -243,6 +275,7 @@ export default function PaymentsPage() {
         selectedIds: [],
       }
       setForm(nextForm)
+      setCommittedAmount(String(data.amount ?? ''))
       setShowForm(true)
       scrollToForm()
       const appliedIds = await loadOpenInvoices(data.client_id, data.id, selectedIds, {
@@ -281,6 +314,7 @@ export default function PaymentsPage() {
         notes: data.note || '',
         amount: String(data.amount ?? ''),
       })
+      setCommittedAmount(String(data.amount ?? ''))
       setShowForm(true)
       scrollToForm()
       await loadOpenInvoices(
@@ -332,6 +366,8 @@ export default function PaymentsPage() {
       setBaseline('')
       setFromNotification(null)
       setApplyAccountCredit(false)
+      setCommittedAmount('')
+      setMonthlyBaseline({ fee: 0, period: '' })
       setForm({ ...emptyPaymentForm(), client_id: clientId })
       setShowForm(true)
       scrollToForm()
@@ -364,6 +400,9 @@ export default function PaymentsPage() {
     setOpeningBalanceDue(0)
     setAccountCredit(0)
     setApplyAccountCredit(false)
+    setCommittedAmount('')
+    setMonthlyBaseline({ fee: 0, period: '' })
+    seededReferenceRef.current = ''
     setForm(emptyPaymentForm())
     if (id) highlightRow(id)
     setFromNotification(null)
@@ -377,6 +416,9 @@ export default function PaymentsPage() {
     setOpeningBalanceDue(0)
     setAccountCredit(0)
     setApplyAccountCredit(false)
+    setCommittedAmount('')
+    setMonthlyBaseline({ fee: 0, period: '' })
+    seededReferenceRef.current = ''
     setFromNotification(null)
     setShowForm(true)
     scrollToForm()
@@ -454,8 +496,14 @@ export default function PaymentsPage() {
   const paymentAmount = Number(form.amount) || 0
 
   const feeReference = useMemo(
-    () => monthlyFeePaymentReference(openInvoices, form.amount, openingBalanceDue),
-    [openInvoices, form.amount, openingBalanceDue],
+    () =>
+      monthlyFeePaymentReference(
+        openInvoices,
+        committedAmount,
+        openingBalanceDue,
+        monthlyBaseline,
+      ),
+    [openInvoices, committedAmount, openingBalanceDue, monthlyBaseline],
   )
 
   useEffect(() => {
@@ -613,12 +661,27 @@ export default function PaymentsPage() {
     // Lock before any await so Close / click-through cannot navigate away and abort fetch.
     saveInFlightRef.current = true
     setSaving(true)
+    const suggestion = monthlyFeePaymentReference(
+      openInvoices,
+      form.amount,
+      openingBalanceDue,
+      monthlyBaseline,
+    )
+    const typedReference = String(form.reference || '')
+    const seeded = seededReferenceRef.current
+    const reference = !typedReference || typedReference === seeded ? suggestion : typedReference
+    if (reference !== typedReference) {
+      seededReferenceRef.current = suggestion
+      setCommittedAmount(String(form.amount ?? ''))
+      setForm((current) => ({ ...current, reference }))
+    }
+
     const payload = {
       client_id: form.client_id,
       amount: paymentAmount,
       payment_date: form.payment_date,
       method: form.method,
-      reference: form.reference,
+      reference,
       notes: form.notes,
       allocations: allocationRows,
       opening_amount: openingAmount,
@@ -806,7 +869,21 @@ export default function PaymentsPage() {
               clients={clients}
               value={form.client_id}
               onChange={(client_id) => {
-                setForm((f) => ({ ...f, client_id, amount: '', selectedIds: [] }))
+                setCommittedAmount('')
+                setMonthlyBaseline({ fee: 0, period: '' })
+                setForm((f) => {
+                  const reference = String(f.reference || '')
+                  const seeded = seededReferenceRef.current
+                  const keepReference = reference && reference !== seeded
+                  seededReferenceRef.current = ''
+                  return {
+                    ...f,
+                    client_id,
+                    amount: '',
+                    selectedIds: [],
+                    reference: keepReference ? reference : '',
+                  }
+                })
                 loadOpenInvoices(client_id)
               }}
             />
@@ -852,7 +929,17 @@ export default function PaymentsPage() {
               className={adminFieldClass}
               value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              onBlur={(e) => setCommittedAmount(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                }
+              }}
             />
+            <span className="mt-1 block text-xs text-ink-500">
+              Leave this field to fill the reference from the months this amount covers.
+            </span>
           </label>
 
           <label className="block">
@@ -867,7 +954,7 @@ export default function PaymentsPage() {
             />
             {feeReference && form.reference === feeReference ? (
               <span className="mt-1 block text-xs text-ink-500">
-                Suggested from the balance this amount covers. You can change it.
+                Suggested from the months this amount covers. You can change it.
               </span>
             ) : null}
           </label>

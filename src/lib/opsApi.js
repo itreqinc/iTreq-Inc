@@ -2327,7 +2327,7 @@ const directOpsApi = {
 
     const { data: latest, error: latestErr } = await supabase
       .from('invoices')
-      .select('total')
+      .select('total, billing_period')
       .eq('client_id', clientId)
       .not('billing_period', 'is', null)
       .neq('status', 'void')
@@ -2336,6 +2336,9 @@ const directOpsApi = {
       .maybeSingle()
     if (latestErr) return mapError(latestErr)
     const clientMonthlyFee = Number(latest?.total) || 0
+    const clientMonthlyPeriod = latest?.billing_period
+      ? String(latest.billing_period).slice(0, 10)
+      : ''
 
     return {
       data: open.map((inv) => ({
@@ -2344,6 +2347,7 @@ const directOpsApi = {
         _fee: Math.round((fee[inv.id] || 0) * 100) / 100,
         _lines_subtotal: Math.round((sub[inv.id] || 0) * 100) / 100,
         _client_monthly_fee: clientMonthlyFee,
+        _client_monthly_period: clientMonthlyPeriod,
       })),
       error: null,
     }
