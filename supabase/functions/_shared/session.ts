@@ -257,8 +257,22 @@ export function enforcePortalClient(user: UserRow, bodyClientId: string | null |
   return sessionClient
 }
 
+function dbErrorText(err: unknown): string {
+  if (!err) return ''
+  if (typeof err === 'string') return err
+  if (typeof err === 'object') {
+    const rec = err as Record<string, unknown>
+    const parts = [rec.message, rec.details, rec.hint]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .filter((part) => part && part !== '[object Object]')
+    if (parts.length) return parts.join(' — ')
+  }
+  if (err instanceof Error && err.message && err.message !== '[object Object]') return err.message
+  return ''
+}
+
 export function mapDbError(err: unknown): OpsError {
-  const raw = err instanceof Error ? err.message : String(err || '')
+  const raw = dbErrorText(err)
   const lower = raw.toLowerCase()
   if (lower.includes('insufficient stock')) {
     return new OpsError(raw.replace(/^.*Insufficient stock/i, 'Insufficient stock'), 400)
@@ -266,7 +280,7 @@ export function mapDbError(err: unknown): OpsError {
   if (lower.includes('duplicate') || lower.includes('unique')) {
     return new OpsError('That record already exists. Check the details and try again.', 400)
   }
-  if (raw.length < 120 && !lower.includes('pgrst') && !lower.includes('postgres')) {
+  if (raw && raw.length < 120 && !lower.includes('pgrst') && !lower.includes('postgres')) {
     return new OpsError(raw, 400)
   }
   return new OpsError('Something went wrong. Please try again.', 500)

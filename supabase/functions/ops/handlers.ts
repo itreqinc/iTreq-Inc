@@ -408,8 +408,9 @@ function formToClientRow(form: Record<string, unknown>) {
 
 function formToLeadRow(form: Record<string, unknown>) {
   const base = formToPersonRow(form)
+  const { address: _address, ...lead } = base
   return {
-    ...base,
+    ...lead,
     phone: base.phone || base.cellphone,
   }
 }

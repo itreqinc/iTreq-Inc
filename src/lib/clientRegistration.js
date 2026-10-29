@@ -120,7 +120,8 @@ export function clientToForm(client) {
 export const contactSubmissionToForm = clientToForm
 
 export function formToContactSubmissionRow(form) {
-  return formToPersonRow(form)
+  const { address: _address, ...row } = formToPersonRow(form)
+  return row
 }
 
 export function formToClientRow(form) {
