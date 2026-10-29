@@ -792,6 +792,80 @@ function productIsMonthlyFee(
   return !product.tracks_stock
 }
 
+function lineProductKind(
+  product?: { product_kind?: string; tracks_stock?: boolean } | { product_kind?: string; tracks_stock?: boolean }[] | null,
+  description?: string,
+) {
+  const row = Array.isArray(product) ? product[0] : product
+  if (row?.product_kind === 'hardware' || row?.product_kind === 'monthly_fee' || row?.product_kind === 'usage') {
+    return row.product_kind
+  }
+  if (row && row.tracks_stock) return 'hardware'
+  if (row && !row.tracks_stock && !row.product_kind) return 'monthly_fee'
+  if (/installation/i.test(String(description || ''))) return 'hardware'
+  return ''
+}
+
+/** Hardware and monthly-fee portions, plus the client's current monthly charge. */
+async function attachOpenInvoiceParts(
+  sb: SupabaseClient,
+  clientId: string,
+  invoices: Record<string, unknown>[],
+) {
+  const rows = invoices || []
+  const hardware = new Map<string, number>()
+  const fee = new Map<string, number>()
+  const sub = new Map<string, number>()
+  const ids = rows.map((row) => String(row.id || '')).filter(Boolean)
+  if (ids.length) {
+    const { data: lines, error } = await sb
+      .from('invoice_lines')
+      .select('invoice_id, line_total, quantity, unit_price, description, products(product_kind, tracks_stock)')
+      .in('invoice_id', ids)
+    if (error) throw mapDbError(error)
+    for (const line of lines || []) {
+      const rec = line as {
+        invoice_id: string
+        line_total?: number | null
+        quantity?: number | null
+        unit_price?: number | null
+        description?: string | null
+        products?: { product_kind?: string; tracks_stock?: boolean } | { product_kind?: string; tracks_stock?: boolean }[] | null
+      }
+      const amount =
+        Math.round(
+          (Number(rec.line_total) ||
+            (Number(rec.quantity) || 0) * (Number(rec.unit_price) || 0)) * 100,
+        ) / 100
+      const id = String(rec.invoice_id)
+      sub.set(id, (sub.get(id) || 0) + amount)
+      const kind = lineProductKind(rec.products, rec.description || '')
+      if (kind === 'hardware') hardware.set(id, (hardware.get(id) || 0) + amount)
+      if (kind === 'monthly_fee') fee.set(id, (fee.get(id) || 0) + amount)
+    }
+  }
+
+  const { data: latest, error: latestErr } = await sb
+    .from('invoices')
+    .select('total')
+    .eq('client_id', clientId)
+    .not('billing_period', 'is', null)
+    .neq('status', 'void')
+    .order('billing_period', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (latestErr) throw mapDbError(latestErr)
+  const clientMonthlyFee = Number(latest?.total) || 0
+
+  return rows.map((inv) => ({
+    ...inv,
+    _hardware: Math.round((hardware.get(String(inv.id)) || 0) * 100) / 100,
+    _fee: Math.round((fee.get(String(inv.id)) || 0) * 100) / 100,
+    _lines_subtotal: Math.round((sub.get(String(inv.id)) || 0) * 100) / 100,
+    _client_monthly_fee: clientMonthlyFee,
+  }))
+}
+
 async function attachMonthlyFeeFlags(
   sb: SupabaseClient,
   invoices: Record<string, unknown>[],
@@ -2770,7 +2844,7 @@ handlers.list_open_invoices_for_client = async ({ user, sb }, args) => {
     }
   }
 
-  return (data || [])
+  const open = (data || [])
     .map((inv) => {
       const paid = Number(inv.amount_paid) || 0
       const thisAlloc = currentAlloc[String(inv.id)] || 0
@@ -2778,6 +2852,8 @@ handlers.list_open_invoices_for_client = async ({ user, sb }, args) => {
       return { ...inv, _allocatable: due, _current_alloc: thisAlloc }
     })
     .filter((inv) => inv._allocatable > 0.001)
+
+  return attachOpenInvoiceParts(sb, clientId, open)
 }
 
 handlers.get_payment = async ({ sb }, args) => {

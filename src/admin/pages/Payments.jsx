@@ -32,6 +32,7 @@ import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import { ListPagination, useListPagination } from '../ListPagination'
 import { filterByDateRange, sortByDateDescThenNameAsc } from '../../lib/dateRange'
+import { monthlyFeePaymentReference } from '../../lib/invoiceDates'
 import { ClientSelect } from '../ClientSelect'
 import { ListLookupFilters } from '../ListLookupFilters'
 import { clientSearchParts, clientsForLookup, matchesListQuery } from '../../lib/listLookup'
@@ -91,6 +92,8 @@ export default function PaymentsPage() {
   const clientsReturnClientIdRef = useRef(null)
   const deepLinkHandledRef = useRef(false)
   const saveInFlightRef = useRef(false)
+  /** Last reference this form wrote from monthly-fee months. A hand-typed value is left alone. */
+  const seededReferenceRef = useRef('')
   const { ownClientId, isBlocked, blockMessage } = useOwnClientGuard()
   const { showError, showSuccess, confirm } = useOpsAlert()
   const [rows, setRows] = useState([])
@@ -449,6 +452,25 @@ export default function PaymentsPage() {
   }, [rows, listView])
 
   const paymentAmount = Number(form.amount) || 0
+
+  const feeReference = useMemo(
+    () => monthlyFeePaymentReference(openInvoices, form.amount, openingBalanceDue),
+    [openInvoices, form.amount, openingBalanceDue],
+  )
+
+  useEffect(() => {
+    setForm((current) => {
+      const reference = String(current.reference || '')
+      const seeded = seededReferenceRef.current
+      if (reference && reference !== seeded) return current
+      if (reference === feeReference) {
+        seededReferenceRef.current = feeReference
+        return current
+      }
+      seededReferenceRef.current = feeReference
+      return { ...current, reference: feeReference }
+    })
+  }, [feeReference])
 
   const allocationTargets = useMemo(() => {
     const targets = []
@@ -820,18 +842,6 @@ export default function PaymentsPage() {
 
           <label className="block">
             <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Reference (optional)
-            </span>
-            <input
-              className={adminFieldClass}
-              value={form.reference}
-              onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
-              placeholder="Receipt #, EFT reference…"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
               Payment amount (P) *
             </span>
             <input
@@ -843,6 +853,23 @@ export default function PaymentsPage() {
               value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
             />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              Reference (optional)
+            </span>
+            <input
+              className={adminFieldClass}
+              value={form.reference}
+              onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
+              placeholder="Receipt #, EFT reference…"
+            />
+            {feeReference && form.reference === feeReference ? (
+              <span className="mt-1 block text-xs text-ink-500">
+                Suggested from the balance this amount covers. You can change it.
+              </span>
+            ) : null}
           </label>
 
           {form.client_id ? (

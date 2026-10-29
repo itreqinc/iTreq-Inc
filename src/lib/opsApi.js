@@ -2295,7 +2295,58 @@ const directOpsApi = {
         return { ...inv, _allocatable: due, _current_alloc: thisAlloc }
       })
       .filter((inv) => inv._allocatable > 0.001)
-    return { data: open, error: null }
+
+    const ids = open.map((inv) => inv.id).filter(Boolean)
+    const hardware = {}
+    const fee = {}
+    const sub = {}
+    if (ids.length) {
+      const { data: lines, error: lineErr } = await supabase
+        .from('invoice_lines')
+        .select('invoice_id, line_total, quantity, unit_price, description, products(product_kind, tracks_stock)')
+        .in('invoice_id', ids)
+      if (lineErr) return mapError(lineErr)
+      for (const line of lines || []) {
+        const amount =
+          Math.round(
+            (Number(line.line_total) ||
+              (Number(line.quantity) || 0) * (Number(line.unit_price) || 0)) *
+              100,
+          ) / 100
+        const id = String(line.invoice_id)
+        const product = Array.isArray(line.products) ? line.products[0] : line.products
+        let kind = product?.product_kind || ''
+        if (!kind && product?.tracks_stock) kind = 'hardware'
+        if (!kind && product) kind = 'monthly_fee'
+        if (!kind && /installation/i.test(String(line.description || ''))) kind = 'hardware'
+        sub[id] = (sub[id] || 0) + amount
+        if (kind === 'hardware') hardware[id] = (hardware[id] || 0) + amount
+        if (kind === 'monthly_fee') fee[id] = (fee[id] || 0) + amount
+      }
+    }
+
+    const { data: latest, error: latestErr } = await supabase
+      .from('invoices')
+      .select('total')
+      .eq('client_id', clientId)
+      .not('billing_period', 'is', null)
+      .neq('status', 'void')
+      .order('billing_period', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (latestErr) return mapError(latestErr)
+    const clientMonthlyFee = Number(latest?.total) || 0
+
+    return {
+      data: open.map((inv) => ({
+        ...inv,
+        _hardware: Math.round((hardware[inv.id] || 0) * 100) / 100,
+        _fee: Math.round((fee[inv.id] || 0) * 100) / 100,
+        _lines_subtotal: Math.round((sub[inv.id] || 0) * 100) / 100,
+        _client_monthly_fee: clientMonthlyFee,
+      })),
+      error: null,
+    }
   },
 
   async getPayment(id) {
