@@ -38,7 +38,6 @@ export default function PortalHome() {
   const [invoices, setInvoices] = useState([])
   const [unreadByInvoice, setUnreadByInvoice] = useState({})
   const [receivables, setReceivables] = useState(null)
-  const [credit, setCredit] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -47,9 +46,8 @@ export default function PortalHome() {
     Promise.all([
       opsApi.getClientStatement({ client_id: clientId }),
       opsApi.listInvoices({ client_id: clientId, forPortal: true }),
-      opsApi.getClientCreditBalance(clientId),
       opsApi.listInvoiceUnreadCounts({ role: 'client', client_id: clientId }),
-    ]).then(([stmtRes, invRes, creditRes, unreadRes]) => {
+    ]).then(([stmtRes, invRes, unreadRes]) => {
       if (cancelled) return
       setLoading(false)
       if (stmtRes.error) {
@@ -63,9 +61,6 @@ export default function PortalHome() {
         const list = invRes.data || []
         setInvoices(list)
         setReceivables(summarizeReceivables(list))
-      }
-      if (!creditRes.error) {
-        setCredit(creditRes.data?.balance || 0)
       }
       if (unreadRes.error) {
         showError(unreadRes.error.message)
@@ -99,19 +94,6 @@ export default function PortalHome() {
         <h1 className="mt-1 font-display text-2xl font-bold text-white">
           {client?.name || statement?.client?.name || 'Account'}
         </h1>
-        <p className="mt-2 text-sm text-ink-300">
-          Closing balance:{' '}
-          {loading ? (
-            <span className="text-ink-400">Loading…</span>
-          ) : (
-            <>
-              <span className={`font-semibold ${balanceClass(statement?.closingBalance)}`}>
-                {formatPula(statement?.closingBalance)}
-              </span>
-              <span className="text-ink-400"> · {balanceCaption(statement?.closingBalance)}</span>
-            </>
-          )}
-        </p>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-3">
@@ -143,17 +125,15 @@ export default function PortalHome() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/5 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
-            Account credit
+        <div className="rounded-2xl border border-white/10 bg-ink-950/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink-400">
+            Closing balance
           </p>
-          <p className="mt-2 text-xl font-bold tabular-nums text-white">
-            {loading ? '—' : formatPula(credit)}
+          <p className={`mt-2 text-xl font-bold tabular-nums ${loading ? 'text-white' : balanceClass(statement?.closingBalance)}`}>
+            {loading ? '—' : formatPula(statement?.closingBalance)}
           </p>
           <p className="mt-1 text-xs text-ink-400">
-            {credit > 0.001
-              ? 'Paid in advance. We apply this to your next invoice.'
-              : 'No unapplied payments on your account'}
+            {loading ? 'Checking…' : balanceCaption(statement?.closingBalance)}
           </p>
         </div>
       </section>

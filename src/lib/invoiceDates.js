@@ -68,6 +68,19 @@ function monthStart(iso) {
   return `${day.slice(0, 7)}-01`
 }
 
+/**
+ * Monthly fee on an installation invoice.
+ * Raised on the 20th or earlier → the 1st of that month.
+ * Raised after the 20th → the 1st of the next month.
+ */
+function installationFeeStart(issueIso) {
+  const start = monthStart(issueIso)
+  if (!start) return ''
+  const day = Number(String(issueIso).slice(8, 10))
+  if (day > 20) return nextBillingPeriod(start)
+  return start
+}
+
 /** Hardware's share of the invoice total, including tax in the same proportion. */
 function grossHardware(inv) {
   const part = Number(inv._hardware) || 0
@@ -91,6 +104,7 @@ function grossFee(inv) {
  * Brought forward plus months → "Prev. Bal + September 2026" or "Prev. Bal + Sep - Nov 2026".
  * Installation only → "Supply & Fit".
  * Installation plus months → "Supply & Fit + September 2026" or "Supply & Fit + Sep - Nov 2026".
+ * An installation raised after the 20th starts that fee on the 1st of the next month.
  * Open months are taken oldest first. Anything above that balance continues into later months
  * at the client's monthly fee. Those months start after the latest invoice.
  * A partial last month is included. Returns '' when the amount is empty, or when money
@@ -135,7 +149,7 @@ export function monthlyFeePaymentReference(
       const feeDue = feeFull > 0.001 ? Math.min(rest, feeFull) : 0
       installation.push({
         due: hardwareRemaining,
-        issue: monthStart(inv.issue_date),
+        feeStart: installationFeeStart(inv.issue_date),
         fee: feeFull,
         feeDue,
       })
@@ -180,8 +194,8 @@ export function monthlyFeePaymentReference(
   const covered = []
   const feeDueByMonth = new Map()
   for (const row of installation) {
-    if (row.feeDue > 0.001 && row.issue) {
-      feeDueByMonth.set(row.issue, money((feeDueByMonth.get(row.issue) || 0) + row.feeDue))
+    if (row.feeDue > 0.001 && row.feeStart) {
+      feeDueByMonth.set(row.feeStart, money((feeDueByMonth.get(row.feeStart) || 0) + row.feeDue))
     }
   }
   for (const period of [...feeDueByMonth.keys()].sort()) {
@@ -199,8 +213,15 @@ export function monthlyFeePaymentReference(
   }
 
   if (left > 0.001 && monthlyFee > 0.001) {
-    const anchor = [latestPeriod, covered.at(-1)].filter(Boolean).sort().at(-1)
-    let cursor = anchor ? nextBillingPeriod(anchor) : ''
+    const installStart = installation
+      .map((row) => row.feeStart)
+      .filter(Boolean)
+      .sort()[0] || ''
+    const anchor = [latestPeriod, covered.at(-1)].filter(Boolean).sort().at(-1) || ''
+    // No fee month has been named yet. A late installation starts on the 1st of the next month.
+    const startOnInstall =
+      !covered.length && installStart && (!anchor || installStart > anchor)
+    let cursor = startOnInstall ? installStart : anchor ? nextBillingPeriod(anchor) : ''
     let guard = covered.length
     while (left > 0.001 && cursor && guard < 36) {
       if (!covered.some((period) => period.slice(0, 7) === cursor.slice(0, 7))) {
