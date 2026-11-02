@@ -13,10 +13,26 @@ import { FieldBox } from './FieldBox'
 const COMPACT_SELECT_CLASS =
   'w-full rounded-lg border border-white/10 bg-ink-950/80 px-2 py-1.5 text-[13px] leading-snug text-white outline-none transition focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/20'
 
+/** True when the date groups stack, so the menus can use full words. */
+function useStackedDateLayout() {
+  const query = '(max-width: 639px)'
+  const [stacked, setStacked] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false,
+  )
+  useEffect(() => {
+    const media = window.matchMedia(query)
+    const sync = () => setStacked(media.matches)
+    sync()
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
+  }, [])
+  return stacked
+}
+
 /**
  * Date picker: year → month → day, combined as YYYY-MM-DD (same pattern as iRegistry).
  * When `label` is set, wraps in the shared FieldBox (Reports-style bordered legend).
- * Pass size="compact" for tighter toolbar layouts (short month names, smaller type).
+ * Pass size="compact" for tighter toolbar layouts. Short labels are used only when the groups sit side by side.
  */
 export function YearMonthDaySelect({
   label,
@@ -33,6 +49,8 @@ export function YearMonthDaySelect({
   className = '',
 }) {
   const compact = size === 'compact'
+  const stacked = useStackedDateLayout()
+  const shortLabels = compact && !stacked
   const fieldClass = selectClassName || (compact ? COMPACT_SELECT_CLASS : adminFieldClass)
 
   const now = new Date().getFullYear()
@@ -58,7 +76,7 @@ export function YearMonthDaySelect({
 
   const years = useMemo(() => yearOptions(yMin, yMax), [yMin, yMax])
   const months = useMemo(() => {
-    let list = monthOptions({ short: compact })
+    let list = monthOptions({ short: shortLabels })
     if (year && maxParts.year && Number(year) === Number(maxParts.year)) {
       list = list.filter((m) => m.value <= Number(maxParts.month))
     }
@@ -66,7 +84,7 @@ export function YearMonthDaySelect({
       list = list.filter((m) => m.value >= Number(minParts.month))
     }
     return list
-  }, [year, minParts, maxParts, compact])
+  }, [year, minParts, maxParts, shortLabels])
   const days = useMemo(() => {
     let list = dayOptions(year, month)
     const atMax =
@@ -151,7 +169,7 @@ export function YearMonthDaySelect({
           aria-label={label ? `${label} year` : 'Year'}
           className={fieldClass}
         >
-          <option value="">{compact ? 'Yr' : 'Year'}</option>
+          <option value="">{shortLabels ? 'Yr' : 'Year'}</option>
           {years.map((y) => (
             <option key={y} value={String(y)}>
               {y}
@@ -168,7 +186,7 @@ export function YearMonthDaySelect({
           aria-label={label ? `${label} month` : 'Month'}
           className={fieldClass}
         >
-          <option value="">{compact ? 'Mo' : 'Month'}</option>
+          <option value="">{shortLabels ? 'Mo' : 'Month'}</option>
           {months.map((m) => (
             <option key={m.value} value={String(m.value)}>
               {m.label}
@@ -185,7 +203,7 @@ export function YearMonthDaySelect({
           aria-label={label ? `${label} day` : 'Day'}
           className={fieldClass}
         >
-          <option value="">{compact ? 'Dy' : 'Day'}</option>
+          <option value="">{shortLabels ? 'Dy' : 'Day'}</option>
           {days.map((d) => (
             <option key={d} value={String(d)}>
               {d}

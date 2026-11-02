@@ -1849,8 +1849,8 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="grid grid-cols-1 items-end gap-2.5 sm:flex sm:flex-wrap">
-            <label className="block min-w-0 w-full max-w-sm sm:flex-1">
+          <div className="grid grid-cols-1 items-end gap-3 sm:flex sm:flex-wrap">
+            <label className="block w-full min-w-0 sm:w-auto sm:min-w-[14rem] sm:max-w-sm sm:flex-1">
               <span className="sr-only">Search clients</span>
               <input
                 type="search"
@@ -1867,7 +1867,7 @@ export default function ClientsPage() {
               value={txFrom}
               onChange={setTxFrom}
               maxYmd={rangeTodayIso()}
-              className="w-full min-w-0 sm:w-[14rem]"
+              className="w-full shrink-0 sm:w-[18.75rem]"
             />
             <YearMonthDaySelect
               size="compact"
@@ -1875,7 +1875,7 @@ export default function ClientsPage() {
               value={txTo}
               onChange={setTxTo}
               maxYmd={endOfNextMonthIso()}
-              className="w-full min-w-0 sm:w-[14rem]"
+              className="w-full shrink-0 sm:w-[18.75rem]"
             />
             <button
               type="button"
@@ -1884,7 +1884,7 @@ export default function ClientsPage() {
                 setTxFrom('')
                 setTxTo('')
               }}
-              className={`${adminBtnSecondary} px-3 py-1.5 text-[13px]`}
+              className={`${adminBtnSecondary} shrink-0 px-3 py-1.5 text-[13px]`}
             >
               Clear
             </button>
@@ -1971,20 +1971,20 @@ export default function ClientsPage() {
               Choose the period for{' '}
               <span className="text-ink-100">{stmtModalClient.name}</span>.
             </p>
-            <div className="mt-4 grid grid-cols-1 items-end gap-2.5 sm:flex sm:flex-wrap">
+            <div className="mt-4 grid grid-cols-1 items-end gap-3">
               <YearMonthDaySelect
                 size="compact"
                 label="From"
                 value={stmtFrom}
                 onChange={setStmtFrom}
-                className="w-full min-w-0 sm:w-[14rem]"
+                className="w-full"
               />
               <YearMonthDaySelect
                 size="compact"
                 label="To"
                 value={stmtTo}
                 onChange={setStmtTo}
-                className="w-full min-w-0 sm:w-[14rem]"
+                className="w-full"
               />
             </div>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
