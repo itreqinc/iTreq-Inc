@@ -60,6 +60,8 @@ export function LineItemsEditor({
   taxRate = 0,
   discountAmount = 0,
   onDiscountChange,
+  /** Invoice form captures discount beside the other document fields. */
+  hideDiscountField = false,
   /** When set (e.g. invoices), Add line saves first then appends a blank line. */
   onPersistAddBlankLine = null,
   /** When set, roaming add persists the full next lines array (save + keep open). */
@@ -475,23 +477,25 @@ export function LineItemsEditor({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <label className="block">
-          <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-            Discount (P)
-          </span>
-          <input
-            disabled={readOnly || !onDiscountChange}
-            type="number"
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            title="Discount amount in Pula, applied before tax"
-            className={`${adminFieldClass} w-36`}
-            value={discountAmount}
-            onChange={(e) => onDiscountChange?.(e.target.value)}
-          />
-        </label>
+      <div className={`flex flex-wrap items-end gap-4 ${hideDiscountField ? 'justify-end' : 'justify-between'}`}>
+        {hideDiscountField ? null : (
+          <label className="block">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              Discount (P)
+            </span>
+            <input
+              disabled={readOnly || !onDiscountChange}
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              title="Discount amount in Pula, applied before tax"
+              className={`${adminFieldClass} w-36`}
+              value={discountAmount}
+              onChange={(e) => onDiscountChange?.(e.target.value)}
+            />
+          </label>
+        )}
         <div className="space-y-1 text-right text-sm">
           <p className="text-ink-400">
             Subtotal: <span className="text-white">{formatPula(totals.subtotal)}</span>

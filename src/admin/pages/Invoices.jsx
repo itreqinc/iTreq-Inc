@@ -1496,6 +1496,27 @@ export default function InvoicesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               />
             </label>
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Discount (P)
+              </span>
+              <input
+                disabled={readOnly}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                className={`${adminFieldClass} w-36`}
+                value={form.discount_amount}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, discount_amount: e.target.value }))
+                }
+              />
+              <span className="mt-1 block text-xs text-ink-500">
+                For this invoice only. Enter it when this client pays the monthly fee upfront.
+                The next monthly fee starts at the full amount until you enter a discount again.
+              </span>
+            </label>
           </div>
 
           <LineItemsEditor
@@ -1505,9 +1526,7 @@ export default function InvoicesPage() {
             readOnly={readOnly}
             taxRate={taxRate}
             discountAmount={form.discount_amount}
-            onDiscountChange={(discount_amount) =>
-              setForm((f) => ({ ...f, discount_amount }))
-            }
+            hideDiscountField
             onChange={(lines) => setForm((f) => ({ ...f, lines }))}
             onPersistAddBlankLine={readOnly ? null : handlePersistAddBlankLine}
             onPersistLines={readOnly ? null : handlePersistLines}
