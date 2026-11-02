@@ -1124,7 +1124,7 @@ export default function ClientsPage() {
         data-row-id={c.id}
         data-accounts-client={c.id}
         onClick={() => setSelectedId(c.id)}
-        className={`flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm ${
+        className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${
           active ? 'accounts-tab-active text-white' : 'text-ink-200 hover:bg-white/5'
         }${focused ? ' ring-2 ring-amber-400/60' : ''}`}
       >
