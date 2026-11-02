@@ -51,7 +51,6 @@ import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import {
   dateRangeIsBackwards,
-  dayBeforeIso,
   endOfNextMonthIso,
   todayIso as rangeTodayIso,
 } from '../../lib/dateRange'
@@ -219,7 +218,6 @@ export default function ClientsPage() {
     { defaultFrom: '', defaultTo: '' },
   )
   const txRangeBackwards = dateRangeIsBackwards(txFrom, txTo)
-  const openingAsOf = txFrom ? dayBeforeIso(txFrom) : ''
 
   const filteredClients = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -1168,56 +1166,11 @@ export default function ClientsPage() {
           <p className="text-sm text-ink-400">No statement data.</p>
         ) : (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-white">
-                  {selectedClient?.name || statement.client?.name}
-                </h2>
-                {txFrom || txTo ? (
-                  <p className="mt-1 text-xs text-ink-500">
-                    Period:{' '}
-                    <span className="text-ink-300">
-                      {txFrom || '…'} → {txTo || '…'}
-                    </span>
-                  </p>
-                ) : null}
-                {txFrom ? (
-                  <p className="mt-1 text-sm text-ink-300">
-                    Opening balance
-                    {openingAsOf ? (
-                      <span className="text-ink-500"> (as of {openingAsOf})</span>
-                    ) : null}
-                    :{' '}
-                    <span className={`font-semibold ${balanceClass(statement.openingBalance)}`}>
-                      {formatPula(statement.openingBalance)}
-                    </span>
-                  </p>
-                ) : null}
-                {statement?.carryIn?.hasHistory ? (
-                  <p className="mt-1 text-sm text-ink-300">
-                    Opening balance
-                    {statement.carryIn.asOfDate ? (
-                      <span className="text-ink-500">
-                        {' '}
-                        (as of {statement.carryIn.asOfDate})
-                      </span>
-                    ) : null}
-                    :{' '}
-                    <span
-                      className={`font-semibold ${balanceClass(statement.carryIn.originalAmount)}`}
-                    >
-                      {formatPula(statement.carryIn.originalAmount)}
-                    </span>
-                  </p>
-                ) : null}
-                <p className="mt-1 text-sm text-ink-300">
-                  Closing balance:{' '}
-                  <span className={`font-semibold ${balanceClass(statement.closingBalance)}`}>
-                    {formatPula(statement.closingBalance)}
-                  </span>
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-nowrap items-start justify-between gap-3">
+              <h2 className="min-w-0 flex-1 break-words text-lg font-semibold leading-snug text-white">
+                {selectedClient?.name || statement.client?.name}
+              </h2>
+              <div className="flex shrink-0 items-center gap-2">
                 {hasInactive ? (
                   <button
                     type="button"
@@ -1236,6 +1189,23 @@ export default function ClientsPage() {
                 ) : null}
               </div>
             </div>
+            {txFrom || txTo ? (
+              <p className="text-xs text-ink-500">
+                Period:{' '}
+                <span className="text-ink-300">
+                  {txFrom || '…'} → {txTo || '…'}
+                </span>
+              </p>
+            ) : null}
+            <div className="space-y-2">
+            <p className="text-sm text-ink-300">
+              Opening balance
+              {txFrom ? <span className="text-ink-500"> (as of {txFrom})</span> : null}
+              :{' '}
+              <span className={`font-semibold ${balanceClass(statement.openingBalance)}`}>
+                {formatPula(statement.openingBalance)}
+              </span>
+            </p>
 
             <div className={`${adminTableShellSmClass} bg-ink-950/30`}>
               <table className={adminTableClass}>
@@ -1369,6 +1339,13 @@ export default function ClientsPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+            <p className="text-sm text-ink-300">
+              Closing balance:{' '}
+              <span className={`font-semibold ${balanceClass(statement.closingBalance)}`}>
+                {formatPula(statement.closingBalance)}
+              </span>
+            </p>
             </div>
             <ListPagination list={txPage} />
           </div>
