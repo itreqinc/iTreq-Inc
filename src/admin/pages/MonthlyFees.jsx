@@ -43,10 +43,19 @@ export default function MonthlyFeesPage() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [skippedIds, setSkippedIds] = useState(() => new Set())
 
-  const createRows = useMemo(
+  const readyRows = useMemo(
     () => (preview?.rows || []).filter((r) => r.action === 'create'),
     [preview],
+  )
+  const createRows = useMemo(
+    () => readyRows.filter((r) => !skippedIds.has(r.client_id)),
+    [readyRows, skippedIds],
+  )
+  const markedSkipRows = useMemo(
+    () => readyRows.filter((r) => skippedIds.has(r.client_id)),
+    [readyRows, skippedIds],
   )
   const skipRows = useMemo(
     () => (preview?.rows || []).filter((r) => r.action !== 'create'),
@@ -72,8 +81,14 @@ export default function MonthlyFeesPage() {
       title: `Generate fee drafts for ${formatPeriodLabel(billingPeriod)}?`,
       message:
         createRows.length > 0
-          ? `This will create ${createRows.length} draft invoice(s) by copying monthly fee lines from the previous month (product unchanged; description copied with the new month in brackets). Review them on Invoices, then issue when ready.`
-          : 'Run generate for this month? Clients already billed or without a previous fee invoice will be skipped.',
+          ? `This will create ${createRows.length} draft invoice(s) by copying monthly fee lines from the previous month (product unchanged; description copied with the new month in brackets).${
+              markedSkipRows.length
+                ? ` ${markedSkipRows.length} marked Skip will be left out this month.`
+                : ''
+            } Review them on Invoices, then issue when ready.`
+          : markedSkipRows.length
+            ? `${markedSkipRows.length} client(s) are marked Skip. No drafts will be created.`
+            : 'Run generate for this month? Clients already billed or without a previous fee invoice will be skipped.',
       confirmLabel: 'Create drafts',
     })
     if (!ok) return
@@ -96,6 +111,7 @@ export default function MonthlyFeesPage() {
     try {
       const { data, error } = await opsApi.generateMonthlyFeeInvoices({
         billing_period: billingPeriod,
+        skip_client_ids: markedSkipRows.map((row) => row.client_id),
       })
       if (error) {
         showError(error.message)
@@ -122,7 +138,8 @@ export default function MonthlyFeesPage() {
           Create draft invoices for the selected month by copying monthly fee lines only: the product
           stays as it is on the products table, and the description is copied as-is except for the month
           in brackets. Review drafts on Invoices before issuing. Usage and hardware are not copied —
-          add those manually when they occur. Clients without a previous fee invoice are skipped.
+          add those manually when they occur. Tick Skip to leave a client out of this month.
+          Clients without a previous fee invoice are skipped.
         </p>
       </div>
 
@@ -140,6 +157,7 @@ export default function MonthlyFeesPage() {
               setBillingPeriod(ym ? `${ym}-01` : monthStartIso())
               setPreview(null)
               setResult(null)
+              setSkippedIds(new Set())
             }}
           />
         </label>
@@ -177,8 +195,14 @@ export default function MonthlyFeesPage() {
             </p>
             <p>
               Will create:{' '}
-              <span className="font-semibold text-brand-300">{preview.would_create}</span>
+              <span className="font-semibold text-brand-300">{createRows.length}</span>
             </p>
+            {markedSkipRows.length ? (
+              <p>
+                Marked to skip:{' '}
+                <span className="text-white">{markedSkipRows.length}</span>
+              </p>
+            ) : null}
             <p>
               Already billed: <span className="text-white">{preview.skip_already_billed}</span>
             </p>
@@ -187,7 +211,7 @@ export default function MonthlyFeesPage() {
             </p>
           </div>
 
-          {createRows.length ? (
+          {readyRows.length ? (
             <div className={adminTableShellClass}>
               <table className={adminTableClass}>
                 <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
@@ -196,21 +220,51 @@ export default function MonthlyFeesPage() {
                     <th className={`px-4 py-3 ${adminColSecondary}`}>Source invoice</th>
                     <th className={`px-4 py-3 ${adminColSecondary}`}>Fee lines</th>
                     <th className="px-4 py-3">Action</th>
+                    <th className="px-4 py-3 text-right">Skip</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {createRows.map((row) => (
-                    <tr key={row.client_id} className="bg-emerald-500/10">
-                      <td className="min-w-0 break-words px-4 py-3 text-white">{row.client_name}</td>
-                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
-                        {row.source_number || '—'}
-                      </td>
-                      <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
-                        {row.fee_line_count}
-                      </td>
-                      <td className="px-4 py-3 text-ink-200">{actionLabel(row.action)}</td>
-                    </tr>
-                  ))}
+                  {readyRows.map((row) => {
+                    const skipped = skippedIds.has(row.client_id)
+                    return (
+                      <tr
+                        key={row.client_id}
+                        className={skipped ? 'bg-ink-950/40' : 'bg-emerald-500/10'}
+                      >
+                        <td
+                          className={`min-w-0 break-words px-4 py-3 ${skipped ? 'text-ink-400' : 'text-white'}`}
+                        >
+                          {row.client_name}
+                        </td>
+                        <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                          {row.source_number || '—'}
+                        </td>
+                        <td className={`px-4 py-3 text-ink-300 ${adminColSecondary}`}>
+                          {row.fee_line_count}
+                        </td>
+                        <td className="px-4 py-3 text-ink-200">
+                          {skipped ? 'Will skip' : actionLabel(row.action)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-white/30 bg-ink-950 text-brand-500 focus:ring-brand-500/40"
+                            checked={skipped}
+                            aria-label={`Skip ${row.client_name} this month`}
+                            onChange={(e) => {
+                              const on = e.target.checked
+                              setSkippedIds((current) => {
+                                const next = new Set(current)
+                                if (on) next.add(row.client_id)
+                                else next.delete(row.client_id)
+                                return next
+                              })
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

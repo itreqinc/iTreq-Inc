@@ -2141,14 +2141,14 @@ const directOpsApi = {
     return { data, error: null }
   },
 
-  async generateMonthlyFeeInvoices({ billing_period }) {
+  async generateMonthlyFeeInvoices({ billing_period, skip_client_ids = [] }) {
     if (!supabase) return dbUnavailable()
     if (!billing_period) {
       return { data: null, error: { message: 'Choose a billing month.' } }
     }
-    const { data, error } = await supabase.rpc('generate_monthly_fee_invoices', {
-      p_billing_period: billing_period,
-    })
+    const rpcArgs = { p_billing_period: billing_period }
+    if (skip_client_ids.length) rpcArgs.p_skip_client_ids = skip_client_ids
+    const { data, error } = await supabase.rpc('generate_monthly_fee_invoices', rpcArgs)
     if (error) return mapError(error)
     return { data, error: null }
   },

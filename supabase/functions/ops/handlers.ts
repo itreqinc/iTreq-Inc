@@ -2707,11 +2707,19 @@ handlers.preview_monthly_fee_run = async ({ sb }, args) => {
 }
 
 handlers.generate_monthly_fee_invoices = async ({ sb }, args) => {
-  const { billing_period } = (args[0] || {}) as { billing_period?: string }
+  const { billing_period, skip_client_ids } = (args[0] || {}) as {
+    billing_period?: string
+    skip_client_ids?: string[]
+  }
   if (!billing_period) throw new OpsError('Choose a billing month.')
-  const { data, error } = await sb.rpc('generate_monthly_fee_invoices', {
+  const skipIds = (Array.isArray(skip_client_ids) ? skip_client_ids : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)
+  const rpcArgs: { p_billing_period: string; p_skip_client_ids?: string[] } = {
     p_billing_period: billing_period,
-  })
+  }
+  if (skipIds.length) rpcArgs.p_skip_client_ids = skipIds
+  const { data, error } = await sb.rpc('generate_monthly_fee_invoices', rpcArgs)
   if (error) throw mapDbError(error)
   return data
 }
