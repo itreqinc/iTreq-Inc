@@ -486,29 +486,35 @@ export const PRINT_STYLES = `
   .foot-row {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 0;
     margin-top: 14px;
   }
   .bank-box {
     border: 1px solid #000;
-    padding: 10px 12px;
+    padding: 16px 14px;
     font-size: 9pt;
-    line-height: 1.5;
+    line-height: 1.55;
     flex: 1;
     max-width: 55%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
   .totals-box {
     border: 1px solid #000;
     min-width: 260px;
-    font-size: 10pt;
+    font-size: 9.5pt;
+    display: flex;
+    flex-direction: column;
   }
   .totals-box table {
     width: 100%;
+    height: 100%;
     border-collapse: collapse;
   }
   .totals-box td {
-    padding: 6px 12px;
+    padding: 3px 10px;
     border-bottom: 1px solid #000;
   }
   .totals-box td:last-child {
@@ -517,10 +523,10 @@ export const PRINT_STYLES = `
   }
   .totals-box tr:last-child td {
     border-bottom: none;
-    font-size: 18pt;
+    font-size: 14pt;
     font-weight: 700;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    padding-top: 5px;
+    padding-bottom: 5px;
   }
 
   .doc-footer {
@@ -629,7 +635,7 @@ export const PRINT_STYLES = `
       page-break-inside: avoid;
     }
     .totals-box tr:last-child td {
-      font-size: 14pt;
+      font-size: 13pt;
     }
     .doc-footer {
       margin-top: 10px;
