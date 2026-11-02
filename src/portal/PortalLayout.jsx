@@ -28,6 +28,13 @@ function PortalShell() {
   }, [linkedClientId, user])
 
   useEffect(() => {
+    // The full client list is staff-only. A signed-in client already has their account.
+    if (!(AUTH_BYPASS || authBypass)) {
+      setLoadingClients(false)
+      setClients([])
+      return
+    }
+
     let cancelled = false
     setLoadingClients(true)
     opsApi.listClients().then(({ data, error }) => {
@@ -44,8 +51,6 @@ function PortalShell() {
         setClientId(linkedClientId)
         return
       }
-
-      if (!(AUTH_BYPASS || authBypass)) return
 
       const stored = getPortalClientId(user)
       if (stored && list.some((c) => c.id === stored)) {
