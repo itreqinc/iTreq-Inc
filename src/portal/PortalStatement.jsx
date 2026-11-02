@@ -204,28 +204,15 @@ export default function PortalStatement() {
       </div>
 
       {statement ? (
-        <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-ink-900/90 p-4">
-              <p className="text-xs uppercase tracking-wider text-ink-400">Opening</p>
-              <p className={`mt-1 text-lg font-semibold ${balanceClass(statement.openingBalance)}`}>
-                {formatPula(statement.openingBalance)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-ink-900/90 p-4">
-              <p className="text-xs uppercase tracking-wider text-ink-400">Closing</p>
-              <p className={`mt-1 text-lg font-semibold ${balanceClass(statement.closingBalance)}`}>
-                {formatPula(statement.closingBalance)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-ink-900/90 p-4">
-              <p className="text-xs uppercase tracking-wider text-ink-400">Period</p>
-              <p className="mt-1 text-sm text-ink-200">
-                Charges {formatPula(statement.periodCharges)} · Credits{' '}
-                {formatPula(statement.periodCredits)}
-              </p>
-            </div>
-          </div>
+        <div className="space-y-2">
+          <p className="text-sm text-ink-300">
+            Opening balance
+            {from ? <span className="text-ink-500"> (as of {from})</span> : null}
+            :{' '}
+            <span className={`font-semibold ${balanceClass(statement.openingBalance)}`}>
+              {formatPula(statement.openingBalance)}
+            </span>
+          </p>
 
           <div className={`${adminTableShellClass} bg-ink-900/90`}>
             <table className={adminTableClass}>
@@ -298,9 +285,15 @@ export default function PortalStatement() {
                 )}
               </tbody>
             </table>
-            <ListPagination list={statementPage} />
           </div>
-        </>
+          <p className="text-sm text-ink-300">
+            Closing balance:{' '}
+            <span className={`font-semibold ${balanceClass(statement.closingBalance)}`}>
+              {formatPula(statement.closingBalance)}
+            </span>
+          </p>
+          <ListPagination list={statementPage} />
+        </div>
       ) : loading ? (
         <p className="text-sm text-ink-400">Loading statement…</p>
       ) : null}
