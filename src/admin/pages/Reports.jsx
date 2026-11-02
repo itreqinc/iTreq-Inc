@@ -12,7 +12,13 @@ import {
   COLLAPSE_BODY_CLASS,
   useCollapseIntoView,
 } from '../../lib/collapseIntoView'
-import { paymentMethodLabel, statementLineLabel, statementLineMethodSuffix } from '../../lib/payments'
+import {
+  paymentMethodLabel,
+  statementLineLabel,
+  statementLineMethodSuffix,
+  statementLineShowsDebit,
+  statementLineShowsCredit,
+} from '../../lib/payments'
 import {
   openStatementDocumentPrintWindow,
   closeStatementDocumentPrintWindow,
@@ -1053,21 +1059,25 @@ export default function ReportsPage() {
                           {statementLineLabel(line)}
                           {statementLineMethodSuffix(line)}
                           <span className="mt-0.5 block text-xs text-black/55 sm:hidden">
-                            {line.debit
-                              ? `Debit ${formatPula(line.debit)}`
-                              : line.credit
-                                ? `Credit ${formatPula(line.credit)}`
+                            {statementLineShowsDebit(line)
+                              ? `Debit ${formatPula(line.debit || 0)}`
+                              : statementLineShowsCredit(line)
+                                ? `Credit ${formatPula(line.credit || 0)}`
                                 : null}
                           </span>
                         </td>
                         <td className={`${adminColSecondary} py-2 pr-2 text-right`}>
-                          {line.debit ? formatPula(line.debit) : '—'}
+                          {statementLineShowsDebit(line)
+                            ? formatPula(line.debit || 0)
+                            : '—'}
                         </td>
                         <td className={`${adminColSecondary} py-2 pr-2 text-right`}>
-                          {line.credit ? formatPula(line.credit) : '—'}
+                          {statementLineShowsCredit(line)
+                            ? formatPula(line.credit || 0)
+                            : '—'}
                         </td>
                         <td className="whitespace-nowrap py-2 text-right">
-                          {formatPula(line.balance)}
+                          {formatPula(line.balance ?? 0)}
                         </td>
                       </tr>
                     ))

@@ -6,7 +6,13 @@ import { useNavigate,
   useOutletContext } from 'react-router-dom'
 import { YearMonthDaySelect } from '../components/YearMonthDaySelect'
 import { opsApi } from '../lib/opsApi'
-import { invoiceBalanceDue, statementLineLabel, statementLineMethodSuffix } from '../lib/payments'
+import {
+  invoiceBalanceDue,
+  statementLineLabel,
+  statementLineMethodSuffix,
+  statementLineShowsDebit,
+  statementLineShowsCredit,
+} from '../lib/payments'
 import {
   openStatementDocumentPrintWindow,
   closeStatementDocumentPrintWindow,
@@ -261,23 +267,27 @@ export default function PortalStatement() {
                         )}
                         {statementLineMethodSuffix(line)}
                         <span className="mt-0.5 block text-xs text-ink-500 sm:hidden">
-                          {line.debit
-                            ? `Debit ${formatPula(line.debit)}`
-                            : line.credit
-                              ? `Credit ${formatPula(line.credit)}`
+                          {statementLineShowsDebit(line)
+                            ? `Debit ${formatPula(line.debit || 0)}`
+                            : statementLineShowsCredit(line)
+                              ? `Credit ${formatPula(line.credit || 0)}`
                               : null}
                         </span>
                       </td>
                       <td className={`px-4 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
-                        {line.debit ? formatPula(line.debit) : '—'}
+                        {statementLineShowsDebit(line)
+                          ? formatPula(line.debit || 0)
+                          : '—'}
                       </td>
                       <td className={`px-4 py-2 text-right tabular-nums text-ink-300 ${adminColSecondary}`}>
-                        {line.credit ? formatPula(line.credit) : '—'}
+                        {statementLineShowsCredit(line)
+                          ? formatPula(line.credit || 0)
+                          : '—'}
                       </td>
                       <td
                         className={`px-4 py-2 text-right tabular-nums font-medium ${balanceClass(line.balance)}`}
                       >
-                        {formatPula(line.balance)}
+                        {formatPula(line.balance ?? 0)}
                       </td>
                     </tr>
                     )

@@ -1,6 +1,11 @@
 import { COMPANY } from '../data/site'
 import { documentLetterheadFromSettings } from './companyDocumentSettings'
-import { statementLineLabel, statementLineMethodSuffix } from './payments'
+import {
+  statementLineLabel,
+  statementLineMethodSuffix,
+  statementLineShowsDebit,
+  statementLineShowsCredit,
+} from './payments'
 import {
   formatDocMoney,
   getBillingDocumentLogoUrl,
@@ -37,9 +42,12 @@ export function buildStatementDocumentModel({ statement, settings }) {
       date: line.sortDate || '',
       dateFormatted: formatDocDate(line.sortDate),
       description: `${statementLineLabel(line)}${statementLineMethodSuffix(line)}`,
-      debit: line.debit || 0,
-      credit: line.credit || 0,
-      balance: line.balance,
+      type: line.type || '',
+      debit: Number(line.debit) || 0,
+      credit: Number(line.credit) || 0,
+      balance: line.balance ?? 0,
+      showDebit: statementLineShowsDebit(line),
+      showCredit: statementLineShowsCredit(line),
     }
   })
 
@@ -310,9 +318,9 @@ export const PRINT_STYLES = `
   }
 `
 
-function moneyOrDash(amount, currency) {
+function moneyOrDash(amount, currency, { showZero = false } = {}) {
   const n = Number(amount) || 0
-  if (n === 0) return '—'
+  if (n === 0 && !showZero) return '—'
   return escapeHtml(formatDocMoney(n, currency))
 }
 
@@ -337,9 +345,9 @@ export function renderStatementBody(model) {
     <tr>
       <td>${escapeHtml(line.dateFormatted)}</td>
       <td>${escapeHtml(line.description)}</td>
-      <td class="num">${moneyOrDash(line.debit, model.currency)}</td>
-      <td class="num">${moneyOrDash(line.credit, model.currency)}</td>
-      <td class="num">${escapeHtml(formatDocMoney(line.balance, model.currency))}</td>
+      <td class="num">${moneyOrDash(line.debit, model.currency, { showZero: line.showDebit })}</td>
+      <td class="num">${moneyOrDash(line.credit, model.currency, { showZero: line.showCredit })}</td>
+      <td class="num">${escapeHtml(formatDocMoney(line.balance ?? 0, model.currency))}</td>
     </tr>`,
           )
           .join('')

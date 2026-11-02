@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { opsApi } from '../lib/opsApi'
-import { statementLineLabel, statementLineMethodSuffix, summarizeReceivables } from '../lib/payments'
+import {
+  statementLineLabel,
+  statementLineMethodSuffix,
+  statementLineShowsDebit,
+  statementLineShowsCredit,
+  summarizeReceivables,
+} from '../lib/payments'
 import { useOpsAlert } from '../admin/OpsAlertContext'
 import {
   activateRowKey,
@@ -241,24 +247,24 @@ export default function PortalHome() {
                         </span>
                       ) : null}
                       <span className="mt-0.5 block tabular-nums text-xs text-ink-400 sm:hidden">
-                        {line.debit
-                          ? formatPula(line.debit)
-                          : line.credit
-                            ? `−${formatPula(line.credit)}`
+                        {statementLineShowsDebit(line)
+                          ? formatPula(line.debit || 0)
+                          : statementLineShowsCredit(line)
+                            ? `−${formatPula(line.credit || 0)}`
                             : null}
                       </span>
                     </td>
                     <td className={`${adminColSecondary} px-3 py-2 text-right tabular-nums text-ink-300 sm:px-4`}>
-                      {line.debit
-                        ? formatPula(line.debit)
-                        : line.credit
-                          ? `−${formatPula(line.credit)}`
+                      {statementLineShowsDebit(line)
+                        ? formatPula(line.debit || 0)
+                        : statementLineShowsCredit(line)
+                          ? `−${formatPula(line.credit || 0)}`
                           : '—'}
                     </td>
                     <td
                       className={`whitespace-nowrap px-3 py-2 text-right tabular-nums font-medium sm:px-4 ${balanceClass(line.balance)}`}
                     >
-                      {formatPula(line.balance)}
+                      {formatPula(line.balance ?? 0)}
                     </td>
                   </tr>
                 )

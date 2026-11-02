@@ -33,6 +33,28 @@ export function statementLineMethodSuffix(line) {
   return ` (${paymentMethodLabel(line.method)})`
 }
 
+/**
+ * Debit cell for a statement line. Invoices (and quotations) keep a real amount
+ * even when the total is 0 after a discount — show P0.00, not an empty dash.
+ * Payments leave the debit column empty.
+ */
+export function statementLineShowsDebit(line) {
+  const n = Number(line?.debit) || 0
+  if (n !== 0) return true
+  const type = line?.type
+  return type === 'invoice' || type === 'quotation'
+}
+
+/**
+ * Credit cell for a statement line. Payments keep a real amount (including 0);
+ * invoices leave the credit column empty.
+ */
+export function statementLineShowsCredit(line) {
+  const n = Number(line?.credit) || 0
+  if (n !== 0) return true
+  return line?.type === 'payment'
+}
+
 export const OPENING_BALANCE_ALLOC_ID = '__opening_balance__'
 
 /**
