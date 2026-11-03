@@ -600,8 +600,14 @@ export const PRINT_STYLES = `
       min-height: 0;
       height: auto;
       position: relative;
-      z-index: 1;
+      z-index: auto;
       background: transparent;
+    }
+    .doc-top,
+    .lines-stage,
+    .doc-summary {
+      position: relative;
+      z-index: 1;
     }
     .paid-stamp {
       position: fixed;
@@ -610,12 +616,32 @@ export const PRINT_STYLES = `
       opacity: 0.65;
       z-index: 5;
     }
-    /* Source mark is cloned once per page by layoutPrintDocument(). */
+    /* Fallback: one centred mark (JS replaces this with one mark per page). */
     .lines-watermark {
+      display: block !important;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      right: auto;
+      bottom: auto;
+      height: 110mm;
+      width: auto;
+      max-width: 65%;
+      max-height: 110mm;
+      transform: translate(-50%, -50%);
+      object-fit: contain;
+      /* No mix-blend in print — screen/multiply often vanish on white paper. */
+      opacity: 0.14;
+      mix-blend-mode: normal;
+      z-index: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .lines-watermark.is-print-cloned {
       display: none !important;
     }
     .print-watermark-layer {
-      display: block;
+      display: block !important;
       position: absolute;
       left: 0;
       top: 0;
@@ -626,6 +652,8 @@ export const PRINT_STYLES = `
       z-index: 0;
     }
     .print-page-watermark {
+      display: block !important;
+      visibility: visible !important;
       position: absolute;
       left: 50%;
       width: auto;
@@ -634,8 +662,8 @@ export const PRINT_STYLES = `
       max-height: 110mm;
       transform: translate(-50%, -50%);
       object-fit: contain;
-      opacity: 0.16;
-      mix-blend-mode: screen;
+      opacity: 0.14;
+      mix-blend-mode: normal;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -777,16 +805,20 @@ export function billingDocumentPrintLayoutScript() {
     var layer = document.createElement('div');
     layer.className = 'print-watermark-layer';
     layer.setAttribute('aria-hidden', 'true');
-    document.body.insertBefore(layer, document.body.firstChild);
+    // Inside .doc so marks share the document height and sit under transparent cells.
+    docEl.insertBefore(layer, docEl.firstChild);
 
+    var srcUrl = src.getAttribute('src');
     for (var i = 0; i < pages; i++) {
-      var img = src.cloneNode(true);
-      img.removeAttribute('id');
+      var img = document.createElement('img');
       img.className = 'print-page-watermark';
+      img.src = srcUrl;
       img.alt = '';
+      img.decoding = 'sync';
       img.style.top = (i * pageH + pageH / 2) + 'px';
       layer.appendChild(img);
     }
+    src.classList.add('is-print-cloned');
   }
 
   function run() {
