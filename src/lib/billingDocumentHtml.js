@@ -223,6 +223,10 @@ export const PRINT_STYLES = `
     z-index: 0;
     user-select: none;
   }
+  .print-watermark-layer,
+  .print-page-watermark {
+    display: none;
+  }
   .toolbar {
     max-width: 186mm;
     margin: 0 auto;
@@ -591,10 +595,13 @@ export const PRINT_STYLES = `
       padding: 0;
       max-width: none;
       width: 100%;
-      min-height: 277mm;
+      /* Block flow: flex + min-height pins totals onto page 1 over the lines. */
+      display: block;
+      min-height: 0;
+      height: auto;
       position: relative;
-      display: flex;
-      flex-direction: column;
+      z-index: 1;
+      background: transparent;
     }
     .paid-stamp {
       position: fixed;
@@ -603,40 +610,53 @@ export const PRINT_STYLES = `
       opacity: 0.65;
       z-index: 5;
     }
-    /* One full logo centred on every printed page (not stretched across the doc). */
+    /* Source mark is cloned once per page by layoutPrintDocument(). */
     .lines-watermark {
-      position: fixed;
-      top: 50%;
+      display: none !important;
+    }
+    .print-watermark-layer {
+      display: block;
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 0;
+      overflow: visible;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .print-page-watermark {
+      position: absolute;
       left: 50%;
-      bottom: auto;
-      right: auto;
-      height: 120mm;
       width: auto;
-      max-width: 68%;
-      max-height: 120mm;
+      height: 110mm;
+      max-width: 65%;
+      max-height: 110mm;
       transform: translate(-50%, -50%);
       object-fit: contain;
-      object-position: center center;
       opacity: 0.16;
-      z-index: 0;
+      mix-blend-mode: screen;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .lines-stage,
     .lines-stage-inner {
-      flex: 1 1 auto;
       display: block;
+      flex: none;
       min-height: 0;
       height: auto;
       position: relative;
       z-index: 1;
     }
     table.grid.lines-table {
-      height: auto;
-      min-height: 0;
+      height: auto !important;
+      min-height: 0 !important;
+      flex: none;
       break-inside: auto;
       page-break-inside: auto;
       border-collapse: collapse;
-      /* Outer edge so fragments still read as a closed box at page breaks. */
       border: 1px solid #000;
+      background: transparent;
     }
     table.grid.lines-table thead {
       display: table-header-group;
@@ -646,7 +666,6 @@ export const PRINT_STYLES = `
     }
     table.grid.lines-table thead th {
       border: 1px solid #000;
-      border-bottom: 1px solid #000;
       background: #fff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -658,18 +677,17 @@ export const PRINT_STYLES = `
       border-right: 1px solid #000;
       box-decoration-break: clone;
       -webkit-box-decoration-break: clone;
+      background: transparent;
     }
     table.grid.lines-table tfoot.lines-foot td {
       border: 1px solid #000;
-      border-top: 1px solid #000;
       padding: 0;
       height: 0;
       line-height: 0;
       font-size: 0;
     }
-    /* Filler is for on-screen short invoices only; in print it causes page-1 overlap. */
     table.grid.lines-table tbody tr.lines-filler {
-      display: none;
+      display: none !important;
     }
     .head {
       break-inside: avoid;
@@ -690,10 +708,11 @@ export const PRINT_STYLES = `
       min-height: 0;
     }
     .doc-summary {
-      break-before: auto;
+      display: block;
       break-inside: avoid-page;
       page-break-inside: avoid;
-      margin-top: auto;
+      page-break-before: auto;
+      margin-top: 10px;
       background: #fff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -722,6 +741,71 @@ export const PRINT_STYLES = `
     }
   }
 `
+
+/** Places one centred watermark on each printed page; Chrome will not reliably
+ *  repeat a single fixed <img> nested inside the document flow. */
+export function billingDocumentPrintLayoutScript() {
+  return `<script>
+(function () {
+  function pageContentHeightPx() {
+    var probe = document.createElement('div');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText = 'position:absolute;left:0;top:0;height:277mm;width:0;visibility:hidden;pointer-events:none;';
+    document.body.appendChild(probe);
+    var h = probe.offsetHeight || Math.round(277 * 96 / 25.4);
+    probe.remove();
+    return Math.max(1, h);
+  }
+
+  function layoutPrintDocument() {
+    var src = document.querySelector('.lines-watermark');
+    if (!src || !src.getAttribute('src')) return;
+
+    document.querySelectorAll('.print-watermark-layer').forEach(function (node) {
+      node.remove();
+    });
+
+    var pageH = pageContentHeightPx();
+    var docEl = document.querySelector('.doc') || document.body;
+    var docH = Math.max(
+      docEl.scrollHeight || 0,
+      document.body.scrollHeight || 0,
+      document.documentElement.scrollHeight || 0,
+    );
+    var pages = Math.max(1, Math.ceil(docH / pageH));
+
+    var layer = document.createElement('div');
+    layer.className = 'print-watermark-layer';
+    layer.setAttribute('aria-hidden', 'true');
+    document.body.insertBefore(layer, document.body.firstChild);
+
+    for (var i = 0; i < pages; i++) {
+      var img = src.cloneNode(true);
+      img.removeAttribute('id');
+      img.className = 'print-page-watermark';
+      img.alt = '';
+      img.style.top = (i * pageH + pageH / 2) + 'px';
+      layer.appendChild(img);
+    }
+  }
+
+  function run() {
+    try { layoutPrintDocument(); } catch (e) {}
+  }
+
+  window.addEventListener('beforeprint', run);
+  if (window.matchMedia) {
+    var mql = window.matchMedia('print');
+    if (mql.addEventListener) mql.addEventListener('change', function (e) { if (e.matches) run(); });
+    else if (mql.addListener) mql.addListener(function (e) { if (e.matches) run(); });
+  }
+  // Print preview often paints before beforeprint; lay out after images load too.
+  function runSoon() { window.setTimeout(run, 50); }
+  if (document.readyState === 'complete') runSoon();
+  else window.addEventListener('load', runSoon);
+})();
+</script>`
+}
 
 /** Cosmetic path so the print tab (and PDF footer) is not "about:blank". */
 export function getBillingDocumentPrintPath(model) {
@@ -996,6 +1080,7 @@ export function buildBillingDocumentPrintPage(model, { editUrl } = {}) {
       'Sized for <strong>A4</strong>; long documents continue on further pages. In the print dialog, turn off <strong>Headers and footers</strong> for a clean PDF.',
   })}
   ${body}
+  ${billingDocumentPrintLayoutScript()}
 </body>
 </html>`
 }
