@@ -223,10 +223,6 @@ export const PRINT_STYLES = `
     z-index: 0;
     user-select: none;
   }
-  .doc-summary {
-    flex-shrink: 0;
-    margin-top: auto;
-  }
   .toolbar {
     max-width: 186mm;
     margin: 0 auto;
@@ -450,6 +446,10 @@ export const PRINT_STYLES = `
   table.grid.lines-table thead {
     display: table-header-group;
   }
+  /* Print-only: repeats a closing edge on each page fragment. */
+  table.grid.lines-table tfoot.lines-foot {
+    display: none;
+  }
   table.grid.lines-table tbody.lines-body {
     height: 100%;
   }
@@ -560,6 +560,9 @@ export const PRINT_STYLES = `
     page-break-inside: avoid;
     flex-shrink: 0;
     margin-top: auto;
+    position: relative;
+    z-index: 1;
+    background: #fff;
   }
 
   @media print {
@@ -590,16 +593,83 @@ export const PRINT_STYLES = `
       width: 100%;
       min-height: 277mm;
       position: relative;
+      display: flex;
+      flex-direction: column;
     }
     .paid-stamp {
+      position: fixed;
+      top: 48%;
+      left: 50%;
       opacity: 0.65;
+      z-index: 5;
     }
-    .lines-stage {
+    /* One full logo centred on every printed page (not stretched across the doc). */
+    .lines-watermark {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      bottom: auto;
+      right: auto;
+      height: 120mm;
+      width: auto;
+      max-width: 68%;
+      max-height: 120mm;
+      transform: translate(-50%, -50%);
+      object-fit: contain;
+      object-position: center center;
+      opacity: 0.16;
+      z-index: 0;
+    }
+    .lines-stage,
+    .lines-stage-inner {
       flex: 1 1 auto;
+      display: block;
       min-height: 0;
+      height: auto;
+      position: relative;
+      z-index: 1;
     }
-    table.grid.lines-table tbody tr.lines-filler td {
+    table.grid.lines-table {
+      height: auto;
       min-height: 0;
+      break-inside: auto;
+      page-break-inside: auto;
+      border-collapse: collapse;
+      /* Outer edge so fragments still read as a closed box at page breaks. */
+      border: 1px solid #000;
+    }
+    table.grid.lines-table thead {
+      display: table-header-group;
+    }
+    table.grid.lines-table tfoot.lines-foot {
+      display: table-footer-group;
+    }
+    table.grid.lines-table thead th {
+      border: 1px solid #000;
+      border-bottom: 1px solid #000;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    table.grid.lines-table tbody tr.line-item td {
+      border-top: none;
+      border-bottom: none;
+      border-left: 1px solid #000;
+      border-right: 1px solid #000;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+    table.grid.lines-table tfoot.lines-foot td {
+      border: 1px solid #000;
+      border-top: 1px solid #000;
+      padding: 0;
+      height: 0;
+      line-height: 0;
+      font-size: 0;
+    }
+    /* Filler is for on-screen short invoices only; in print it causes page-1 overlap. */
+    table.grid.lines-table tbody tr.lines-filler {
+      display: none;
     }
     .head {
       break-inside: avoid;
@@ -608,13 +678,6 @@ export const PRINT_STYLES = `
     .party-row {
       break-inside: avoid;
       page-break-inside: avoid;
-    }
-    table.grid.lines-table {
-      break-inside: auto;
-      page-break-inside: auto;
-    }
-    table.grid.lines-table thead {
-      display: table-header-group;
     }
     .doc-type {
       font-size: 28pt;
@@ -627,21 +690,35 @@ export const PRINT_STYLES = `
       min-height: 0;
     }
     .doc-summary {
+      break-before: auto;
       break-inside: avoid-page;
       page-break-inside: avoid;
+      margin-top: auto;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .vat-block {
+      margin-top: 0;
+      background: #fff;
     }
     .foot-row {
       break-inside: avoid;
       page-break-inside: avoid;
+      margin-top: 8px;
+      background: #fff;
+    }
+    .bank-box,
+    .totals-box {
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .totals-box tr:last-child td {
       font-size: 13pt;
     }
     .doc-footer {
       margin-top: 10px;
-    }
-    .foot-row {
-      margin-top: 8px;
     }
   }
 `
@@ -802,6 +879,14 @@ export function renderDocumentBody(model) {
         <tbody class="lines-body">
           ${linesBody}
         </tbody>
+        <tfoot class="lines-foot" aria-hidden="true">
+          <tr>
+            <td class="desc-col"></td>
+            <td class="qty-col"></td>
+            <td class="rate-col"></td>
+            <td class="total-col"></td>
+          </tr>
+        </tfoot>
       </table>
       </div>
       </div>
