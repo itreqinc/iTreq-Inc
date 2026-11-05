@@ -674,13 +674,13 @@ async function attachContactEmails(
   }))
 }
 
+const MAX_INDIVIDUAL_EXTRA_EMAILS = 1
+
 function communicationRecipients(client: Record<string, unknown>) {
   const login = normEmail(client.email)
-  const extras = client.is_company
-    ? ((client.contact_emails as Record<string, unknown>[]) || [])
-        .filter((row) => row?.receives_communication !== false)
-        .map((row) => normEmail(row.email))
-    : []
+  const extras = ((client.contact_emails as Record<string, unknown>[]) || [])
+    .filter((row) => row?.receives_communication !== false)
+    .map((row) => normEmail(row.email))
   const seen = new Set<string>()
   const out: string[] = []
   for (const email of [login, ...extras]) {
@@ -726,9 +726,9 @@ async function assertUniqueLoginEmail(
 }
 
 function contactEmailRows(form: Record<string, unknown>, loginEmail: string) {
-  if (!form.is_company) return []
   const seen = new Set<string>()
   const rows: { email: string; receives_communication: boolean }[] = []
+  const maxExtra = form.is_company ? Number.POSITIVE_INFINITY : MAX_INDIVIDUAL_EXTRA_EMAILS
   const raw = Array.isArray(form.contact_emails) ? form.contact_emails : []
   for (const item of raw) {
     const row = (item || {}) as Record<string, unknown>
@@ -742,6 +742,13 @@ function contactEmailRows(form: Record<string, unknown>, loginEmail: string) {
     }
     if (seen.has(email)) {
       throw new OpsError(`${email} is listed more than once on this account.`)
+    }
+    if (rows.length >= maxExtra) {
+      throw new OpsError(
+        form.is_company
+          ? 'Too many extra emails on this account.'
+          : 'Individuals can have one login email and one extra email.',
+      )
     }
     seen.add(email)
     rows.push({
@@ -758,7 +765,6 @@ async function saveContactEmails(
   form: Record<string, unknown>,
   loginEmail: string,
 ) {
-  if (!form.is_company) return
   const rows = contactEmailRows(form, loginEmail)
   const { error: delErr } = await sb
     .from('client_contact_emails')

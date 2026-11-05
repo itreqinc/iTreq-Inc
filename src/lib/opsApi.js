@@ -170,7 +170,7 @@ async function assertUniqueLoginEmailLocal(email, clientId) {
 }
 
 async function saveContactEmailsLocal(clientId, form) {
-  if (!form?.is_company || !supabase) return { error: null }
+  if (!supabase) return { error: null }
   const normalized = normalizeContactEmails(form)
   if (!normalized.ok) return { data: null, error: { message: normalized.message } }
   const { error: delErr } = await supabase
