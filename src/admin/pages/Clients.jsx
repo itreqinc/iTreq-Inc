@@ -63,6 +63,7 @@ import {
 import { ActionsMenu } from '../ActionsMenu'
 import { AdminIconAction } from '../AdminIconAction'
 import { useOpeningBalanceActions } from '../components/OpeningBalanceActions'
+import { useBalanceAdjustmentActions } from '../components/BalanceAdjustmentActions'
 import { useOpsAlert } from '../OpsAlertContext'
 import { useEmailClientDocuments } from '../useEmailClientDocuments'
 import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
@@ -291,6 +292,11 @@ export default function ClientsPage() {
 
   const { menuItemsFor: openingBalanceMenuItems, dialogs: openingBalanceDialogs } =
     useOpeningBalanceActions({ onDone: onOpeningBalanceDone })
+
+  const {
+    menuItemsFor: balanceAdjustmentMenuItems,
+    dialogs: balanceAdjustmentDialogs,
+  } = useBalanceAdjustmentActions({ onDone: onOpeningBalanceDone })
 
   useEffect(() => {
     load()
@@ -657,6 +663,7 @@ export default function ClientsPage() {
         onClick: () => resetPassword(client),
       },
       ...openingBalanceMenuItems(bfClient),
+      ...balanceAdjustmentMenuItems(client),
       { label: 'New invoice', icon: 'invoice', onClick: actions.onInvoice },
       { label: 'Record payment', icon: 'payment', onClick: actions.onPayment },
       {
@@ -993,6 +1000,23 @@ export default function ClientsPage() {
         },
       ]
     }
+    if (line.type === 'balance_adjustment' && line.id) {
+      const canReverse =
+        admin &&
+        line.direction === 'credit' &&
+        line.status !== 'reversed' &&
+        !line.reversesId &&
+        !invoiceActionBusy
+      return [
+        {
+          label: 'Reverse adjustment',
+          icon: 'ban',
+          tone: 'danger',
+          disabled: !canReverse,
+          onClick: () => reverseAccountAdjustment(line),
+        },
+      ]
+    }
     if (line.type === 'quotation' && line.id) {
       return [
         {
@@ -1002,6 +1026,29 @@ export default function ClientsPage() {
       ]
     }
     return []
+  }
+
+  async function reverseAccountAdjustment(line) {
+    if (!line?.id || invoiceActionBusy) return
+    if (!admin) {
+      showWarning('Only admins can reverse balance adjustments.')
+      return
+    }
+    const ok = await confirm({
+      title: 'Reverse this adjustment?',
+      message: `This posts an opposite entry for ${formatPula(line.credit || line.debit || 0)} and releases any invoice allocations from the original write-off.`,
+      confirmLabel: 'Reverse adjustment',
+    })
+    if (!ok) return
+    setInvoiceActionBusy(true)
+    const { error } = await opsApi.reverseBalanceAdjustment(line.id)
+    setInvoiceActionBusy(false)
+    if (error) {
+      showError(error.message)
+      return
+    }
+    showSuccess('Balance adjustment reversed.')
+    await onOpeningBalanceDone()
   }
 
   async function handleSubmit(e) {
@@ -1268,7 +1315,10 @@ export default function ClientsPage() {
                     </tr>
                   ) : (
                     txPage.rows.map((line, i) => {
-                      const openable = Boolean(line.id) && line.type !== 'opening_balance'
+                      const openable =
+                        Boolean(line.id) &&
+                        line.type !== 'opening_balance' &&
+                        line.type !== 'balance_adjustment'
                       const open = () => openTransaction(line)
                       const label = statementLineLabel(line)
                       const methodSuffix = statementLineMethodSuffix(line)
@@ -1293,8 +1343,10 @@ export default function ClientsPage() {
                               label
                             )}
                             {methodSuffix}
-                            {line.inactive &&
-                            (line.type === 'quotation' || line.status) ? (
+                            {(line.inactive &&
+                              (line.type === 'quotation' || line.status)) ||
+                            (line.type === 'balance_adjustment' &&
+                              line.status === 'reversed') ? (
                               <span className="ml-1 text-xs text-red-300">
                                 (
                                 {line.type === 'quotation'
@@ -1936,6 +1988,7 @@ export default function ClientsPage() {
       )}
 
       {openingBalanceDialogs}
+      {balanceAdjustmentDialogs}
 
       {stmtModalClient ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">

@@ -21,6 +21,9 @@ export function statementLineLabel(line) {
   if (line?.type === 'invoice') return `Invoice ${line.label}`
   if (line?.type === 'quotation') return `Quotation ${line.label}`
   if (line?.type === 'opening_balance') return line.label || 'Opening balance'
+  if (line?.type === 'balance_adjustment') {
+    return line.label || 'Balance adjustment'
+  }
   if (line?.method === 'adjustment' || line?.label === 'Opening credit applied') {
     return line.label || 'Opening credit applied'
   }
@@ -30,6 +33,7 @@ export function statementLineLabel(line) {
 /** Method suffix for statement lines; omit for adjustments (already in the label). */
 export function statementLineMethodSuffix(line) {
   if (!line?.method || line.method === 'adjustment') return ''
+  if (line?.type === 'balance_adjustment') return ''
   return ` (${paymentMethodLabel(line.method)})`
 }
 
@@ -42,6 +46,7 @@ export function statementLineShowsDebit(line) {
   const n = Number(line?.debit) || 0
   if (n !== 0) return true
   const type = line?.type
+  if (type === 'balance_adjustment' && line?.direction === 'debit') return true
   return type === 'invoice' || type === 'quotation'
 }
 
@@ -52,7 +57,32 @@ export function statementLineShowsDebit(line) {
 export function statementLineShowsCredit(line) {
   const n = Number(line?.credit) || 0
   if (n !== 0) return true
+  if (line?.type === 'balance_adjustment') return line?.direction !== 'debit'
   return line?.type === 'payment'
+}
+
+/**
+ * How much of a balance adjustment reduces the non-B/F credit bucket
+ * (mirrors paymentStatementCredit). Debit reversals return a negative credit.
+ */
+export function balanceAdjustmentListCredit(adjustment) {
+  const amount = Math.round((Number(adjustment?.amount) || 0) * 100) / 100
+  const delta = Number(adjustment?.opening_balance_delta) || 0
+  if (adjustment?.direction === 'debit') {
+    const openingRestored = Math.max(0, delta)
+    return -Math.round((amount - openingRestored) * 100) / 100
+  }
+  const openingApplied = Math.max(0, -delta)
+  return Math.round((amount - openingApplied) * 100) / 100
+}
+
+/** Statement debit/credit cells for a balance adjustment row. */
+export function balanceAdjustmentTimelineAmounts(adjustment) {
+  const amount = Math.round((Number(adjustment?.amount) || 0) * 100) / 100
+  if (adjustment?.direction === 'debit') {
+    return { debit: amount, credit: 0 }
+  }
+  return { debit: 0, credit: amount }
 }
 
 export const OPENING_BALANCE_ALLOC_ID = '__opening_balance__'
@@ -142,7 +172,7 @@ export function openingBalanceRemainingMap(clients, payments = []) {
   return map
 }
 
-/** Totals from payment rows that touched brought-forward balance. */
+/** Totals from payment/adjustment rows that touched brought-forward balance. */
 export function openingBalanceAppliedFromPayments(payments = []) {
   let paidTowardOpening = 0
   let creditAppliedToInvoices = 0
@@ -155,6 +185,25 @@ export function openingBalanceAppliedFromPayments(payments = []) {
     paidTowardOpening: Math.round(paidTowardOpening * 100) / 100,
     creditAppliedToInvoices: Math.round(creditAppliedToInvoices * 100) / 100,
   }
+}
+
+/** Merge payment + balance-adjustment delta rows for B/F remaining maps. */
+export function openingDeltaRows(...lists) {
+  const rows = []
+  for (const list of lists) {
+    for (const row of list || []) {
+      if (!row?.client_id) continue
+      rows.push({
+        client_id: row.client_id,
+        opening_balance_delta: Number(row.opening_balance_delta) || 0,
+        source_date: row.source_date || row.adjustment_date || null,
+        payment_date: row.payment_date || row.adjustment_date || null,
+        is_adjustment: row.is_adjustment,
+        amount: row.amount,
+      })
+    }
+  }
+  return rows
 }
 
 /**

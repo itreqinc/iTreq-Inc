@@ -130,6 +130,43 @@ function paymentTimelineCredit(payment: Record<string, unknown>) {
   return Math.round((Number(payment?.amount) || 0) * 100) / 100
 }
 
+function balanceAdjustmentListCredit(adjustment: Record<string, unknown>) {
+  const amount = Math.round((Number(adjustment?.amount) || 0) * 100) / 100
+  const delta = Number(adjustment?.opening_balance_delta) || 0
+  if (adjustment?.direction === 'debit') {
+    const openingRestored = Math.max(0, delta)
+    return -Math.round((amount - openingRestored) * 100) / 100
+  }
+  const openingApplied = Math.max(0, -delta)
+  return Math.round((amount - openingApplied) * 100) / 100
+}
+
+function balanceAdjustmentTimelineAmounts(adjustment: Record<string, unknown>) {
+  const amount = Math.round((Number(adjustment?.amount) || 0) * 100) / 100
+  if (adjustment?.direction === 'debit') {
+    return { debit: amount, credit: 0 }
+  }
+  return { debit: 0, credit: amount }
+}
+
+function openingDeltaRows(...lists: Array<Record<string, unknown>[] | null | undefined>) {
+  const rows: Record<string, unknown>[] = []
+  for (const list of lists) {
+    for (const row of list || []) {
+      if (!row?.client_id) continue
+      rows.push({
+        client_id: row.client_id,
+        opening_balance_delta: Number(row.opening_balance_delta) || 0,
+        source_date: row.source_date || row.adjustment_date || null,
+        payment_date: row.payment_date || row.adjustment_date || null,
+        is_adjustment: row.is_adjustment,
+        amount: row.amount,
+      })
+    }
+  }
+  return rows
+}
+
 function openingBalanceAppliedFromPayments(payments: Record<string, unknown>[] = []) {
   let paidTowardOpening = 0
   let creditAppliedToInvoices = 0
@@ -1434,12 +1471,14 @@ handlers.list_clients_with_balances = async ({ sb }, args) => {
     sb,
     await listClientsInternal(sb, opts),
   )
-  const [invRes, payRes] = await Promise.all([
+  const [invRes, payRes, adjRes] = await Promise.all([
     sb.from('invoices').select('client_id, total, status').in('status', [...BALANCE_INVOICE_STATUSES]),
     sb.from('payments').select('client_id, amount, opening_balance_delta'),
+    sb.from('balance_adjustments').select('client_id, amount, direction, opening_balance_delta'),
   ])
   if (invRes.error) throw mapDbError(invRes.error)
   if (payRes.error) throw mapDbError(payRes.error)
+  if (adjRes.error) throw mapDbError(adjRes.error)
 
   const charges: Record<string, number> = {}
   for (const inv of invRes.data || []) {
@@ -1452,9 +1491,17 @@ handlers.list_clients_with_balances = async ({ sb }, args) => {
     const id = String(pay.client_id)
     credits[id] = (credits[id] || 0) + paymentStatementCredit(pay as Record<string, unknown>)
   }
+  for (const adj of adjRes.data || []) {
+    const id = String(adj.client_id)
+    credits[id] =
+      (credits[id] || 0) + balanceAdjustmentListCredit(adj as Record<string, unknown>)
+  }
   const remainingById = openingBalanceRemainingMap(
     clients as Record<string, unknown>[],
-    (payRes.data || []) as Record<string, unknown>[],
+    openingDeltaRows(
+      (payRes.data || []) as Record<string, unknown>[],
+      (adjRes.data || []) as Record<string, unknown>[],
+    ),
   )
 
   return clients.map((c) => {
@@ -2940,6 +2987,80 @@ handlers.record_payment = async ({ user, sb }, args) => {
   return { id: data }
 }
 
+handlers.get_client_balance_as_of = async ({ user, sb }, args) => {
+  const first = args[0]
+  const clientId =
+    typeof first === 'object' && first
+      ? String((first as { client_id?: string }).client_id || '')
+      : String(first || '')
+  const asOf =
+    typeof first === 'object' && first
+      ? String((first as { as_of?: string }).as_of || '').slice(0, 10)
+      : String(args[1] || '').slice(0, 10)
+  if (!clientId) throw new OpsError('Please select a client.')
+  assertNotOwnClient(user, clientId)
+  assertAdminUser(user)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
+    throw new OpsError('Choose a valid adjustment date.')
+  }
+  const { data, error } = await sb.rpc('client_balance_as_of', {
+    p_client_id: clientId,
+    p_as_of: asOf,
+  })
+  if (error) throw mapDbError(error)
+  return { balance: Math.round((Number(data) || 0) * 100) / 100 }
+}
+
+handlers.create_balance_adjustment = async ({ user, sb }, args) => {
+  assertAdminUser(user)
+  const {
+    client_id,
+    amount,
+    adjustment_date,
+    reason,
+    notes,
+    allocations,
+    opening_amount,
+  } = (args[0] || {}) as Record<string, unknown>
+  if (!client_id) throw new OpsError('Please select a client.')
+  assertNotOwnClient(user, String(client_id))
+  const payload = ((allocations || []) as Record<string, unknown>[])
+    .filter((a) => Number(a.amount) > 0)
+    .map((a) => ({ invoice_id: a.invoice_id, amount: Number(a.amount) }))
+  const { data, error } = await sb.rpc('create_balance_adjustment', {
+    p_client_id: client_id,
+    p_amount: Number(amount),
+    p_adjustment_date: adjustment_date || null,
+    p_reason: reason || null,
+    p_notes: notes || null,
+    p_allocations: payload,
+    p_opening_amount: Math.max(0, Number(opening_amount) || 0),
+    p_created_by: user.id || null,
+  })
+  if (error) throw mapDbError(error)
+  return { id: data }
+}
+
+handlers.reverse_balance_adjustment = async ({ user, sb }, args) => {
+  assertAdminUser(user)
+  const id = String((args[0] as { id?: string })?.id || args[0] || '')
+  if (!id) throw new OpsError('Adjustment id is required.')
+  const { data: existing, error: existingErr } = await sb
+    .from('balance_adjustments')
+    .select('id, client_id')
+    .eq('id', id)
+    .maybeSingle()
+  if (existingErr) throw mapDbError(existingErr)
+  if (!existing) throw new OpsError('Balance adjustment not found.')
+  assertNotOwnClient(user, String(existing.client_id))
+  const { data, error } = await sb.rpc('reverse_balance_adjustment', {
+    p_adjustment_id: id,
+    p_created_by: user.id || null,
+  })
+  if (error) throw mapDbError(error)
+  return { id: data }
+}
+
 handlers.update_payment = async ({ user, sb }, args) => {
   const {
     id,
@@ -3010,7 +3131,7 @@ handlers.list_client_credit_balances = async ({ sb }, args) => {
 
 /** Unallocated payment leftovers + clients with unpaid invoices or unsettled B/F (list UI hints). */
 handlers.get_payment_list_credit_hints = async ({ sb }) => {
-  const [paymentsRes, allocsRes, invoicesRes, clientsRes] = await Promise.all([
+  const [paymentsRes, allocsRes, invoicesRes, clientsRes, adjRes] = await Promise.all([
     sb.from('payments').select('id, client_id, amount, opening_balance_delta'),
     sb.from('payment_allocations').select('payment_id, amount'),
     sb
@@ -3018,11 +3139,16 @@ handlers.get_payment_list_credit_hints = async ({ sb }) => {
       .select('client_id, total, amount_paid, status')
       .in('status', ['issued', 'partial']),
     sb.from('clients').select('id, opening_balance'),
+    sb
+      .from('balance_adjustments')
+      .select('client_id, opening_balance_delta')
+      .neq('opening_balance_delta', 0),
   ])
   if (paymentsRes.error) throw mapDbError(paymentsRes.error)
   if (allocsRes.error) throw mapDbError(allocsRes.error)
   if (invoicesRes.error) throw mapDbError(invoicesRes.error)
   if (clientsRes.error) throw mapDbError(clientsRes.error)
+  if (adjRes.error) throw mapDbError(adjRes.error)
 
   const allocByPayment: Record<string, number> = {}
   for (const row of allocsRes.data || []) {
@@ -3064,7 +3190,10 @@ handlers.get_payment_list_credit_hints = async ({ sb }) => {
 
   const remainingById = openingBalanceRemainingMap(
     (clientsRes.data || []) as Record<string, unknown>[],
-    (paymentsRes.data || []) as Record<string, unknown>[],
+    openingDeltaRows(
+      (paymentsRes.data || []) as Record<string, unknown>[],
+      (adjRes.data || []) as Record<string, unknown>[],
+    ),
   )
   const clientIdsWithUnsettledOpening = Object.entries(remainingById)
     .filter(([, remaining]) => Number(remaining) > 0.001)
@@ -3098,15 +3227,23 @@ handlers.list_opening_balance_clients = async ({ user, sb }, args) => {
     .select('id, name, email, phone, cellphone, opening_balance, opening_balance_date, is_active')
     .order('name', { ascending: true })
   if (activeOnly) q = q.eq('is_active', true)
-  const [clientRes, payRes] = await Promise.all([
+  const [clientRes, payRes, adjRes] = await Promise.all([
     q,
     sb.from('payments').select('client_id, opening_balance_delta').neq('opening_balance_delta', 0),
+    sb
+      .from('balance_adjustments')
+      .select('client_id, opening_balance_delta')
+      .neq('opening_balance_delta', 0),
   ])
   if (clientRes.error) throw mapDbError(clientRes.error)
   if (payRes.error) throw mapDbError(payRes.error)
+  if (adjRes.error) throw mapDbError(adjRes.error)
   const remainingById = openingBalanceRemainingMap(
     (clientRes.data || []) as Record<string, unknown>[],
-    (payRes.data || []) as Record<string, unknown>[],
+    openingDeltaRows(
+      (payRes.data || []) as Record<string, unknown>[],
+      (adjRes.data || []) as Record<string, unknown>[],
+    ),
   )
   const ownId = portalClientId(user)
   const clients = (clientRes.data || [])
@@ -3202,15 +3339,23 @@ handlers.get_client_opening_balance_applied = async ({ user, sb }, args) => {
   const clientId = String(args[0] || '')
   if (!clientId) return { paidTowardOpening: 0, creditAppliedToInvoices: 0 }
   assertNotOwnClient(user, clientId)
-  const { data, error } = await sb
-    .from('payments')
-    .select('opening_balance_delta')
-    .eq('client_id', clientId)
-    .neq('opening_balance_delta', 0)
-  if (error) throw mapDbError(error)
+  const [payRes, adjRes] = await Promise.all([
+    sb
+      .from('payments')
+      .select('opening_balance_delta')
+      .eq('client_id', clientId)
+      .neq('opening_balance_delta', 0),
+    sb
+      .from('balance_adjustments')
+      .select('opening_balance_delta')
+      .eq('client_id', clientId)
+      .neq('opening_balance_delta', 0),
+  ])
+  if (payRes.error) throw mapDbError(payRes.error)
+  if (adjRes.error) throw mapDbError(adjRes.error)
   let paidTowardOpening = 0
   let creditAppliedToInvoices = 0
-  for (const row of data || []) {
+  for (const row of [...(payRes.data || []), ...(adjRes.data || [])]) {
     const delta = Number(row.opening_balance_delta) || 0
     if (delta < 0) paidTowardOpening += -delta
     else if (delta > 0) creditAppliedToInvoices += delta
@@ -3375,6 +3520,15 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     .order('payment_date', { ascending: true })
   if (payErr) throw mapDbError(payErr)
 
+  const { data: allAdj, error: adjErr } = await sb
+    .from('balance_adjustments')
+    .select(
+      'id, adjustment_date, amount, direction, reason, status, reverses_id, opening_balance_delta',
+    )
+    .eq('client_id', scopedId)
+    .order('adjustment_date', { ascending: true })
+  if (adjErr) throw mapDbError(adjErr)
+
   const { data: allQuotes, error: quoteErr } = await sb
     .from('quotations')
     .select('id, number, issue_date, status, total, created_at, source')
@@ -3389,7 +3543,10 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
 
   const carryIn = openingBalanceCarryIn(
     client as Record<string, unknown>,
-    (allPay || []) as Record<string, unknown>[],
+    openingDeltaRows(
+      (allPay || []) as Record<string, unknown>[],
+      (allAdj || []) as Record<string, unknown>[],
+    ),
   )
 
   if (Number(capYears) > 0) {
@@ -3407,6 +3564,9 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     for (const pay of allPay || []) {
       if (pay.is_adjustment) continue
       consider(String(pay.payment_date || ''))
+    }
+    for (const adj of allAdj || []) {
+      consider(String(adj.adjustment_date || ''))
     }
     consider(String(carryIn.asOfDate || ''))
     fromDate = remindStatementFrom(earliest, toDate)
@@ -3437,6 +3597,12 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
     if (pay.is_adjustment) continue
     const d = pay.payment_date ? String(pay.payment_date) : ''
     if (d && d < fromDate) opening -= paymentTimelineCredit(pay as Record<string, unknown>)
+  }
+  for (const adj of allAdj || []) {
+    const d = adj.adjustment_date ? String(adj.adjustment_date) : ''
+    if (!d || d >= fromDate) continue
+    const parts = balanceAdjustmentTimelineAmounts(adj as Record<string, unknown>)
+    opening += parts.debit - parts.credit
   }
 
   if (openingAmt !== 0 && openingDate && openingDate < fromDate) {
@@ -3487,6 +3653,28 @@ handlers.get_client_statement = async ({ user, sb }, args) => {
       affectsBalance: credit > 0.001,
       debit: 0,
       credit,
+    })
+  }
+  for (const adj of allAdj || []) {
+    if (!inRange(String(adj.adjustment_date || ''))) continue
+    const parts = balanceAdjustmentTimelineAmounts(adj as Record<string, unknown>)
+    const isReversal = adj.direction === 'debit' || Boolean(adj.reverses_id)
+    const label = isReversal
+      ? adj.reason || 'Balance adjustment reversal'
+      : `Balance adjustment — ${adj.reason || 'Adjustment'}`
+    lines.push({
+      id: adj.id,
+      sortDate: adj.adjustment_date,
+      type: 'balance_adjustment',
+      label,
+      reason: adj.reason,
+      status: adj.status === 'reversed' ? 'reversed' : null,
+      direction: adj.direction,
+      reversesId: adj.reverses_id || null,
+      inactive: false,
+      affectsBalance: true,
+      debit: parts.debit,
+      credit: parts.credit,
     })
   }
   for (const q of allQuotes || []) {
@@ -4081,8 +4269,16 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
   const today = localTodayIso()
   const monthStart = `${today.slice(0, 7)}-01`
 
-  const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes, clientsRes, deltaRes] =
-    await Promise.all([
+  const [
+    notifRes,
+    disputeRes,
+    quoteRes,
+    invoiceRes,
+    paymentRes,
+    clientsRes,
+    deltaRes,
+    adjDeltaRes,
+  ] = await Promise.all([
     sb
       .from('payment_notifications')
       .select('*, clients(id, name), invoices(id, number)')
@@ -4108,6 +4304,10 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
     sb.from('payments').select('amount, payment_date').eq('is_adjustment', false).gte('payment_date', monthStart),
     sb.from('clients').select('id, opening_balance'),
     sb.from('payments').select('client_id, opening_balance_delta').neq('opening_balance_delta', 0),
+    sb
+      .from('balance_adjustments')
+      .select('client_id, opening_balance_delta')
+      .neq('opening_balance_delta', 0),
   ])
 
   if (notifRes.error) throw mapDbError(notifRes.error)
@@ -4117,12 +4317,16 @@ handlers.get_ops_dashboard_summary = async ({ sb }) => {
   if (paymentRes.error) throw mapDbError(paymentRes.error)
   if (clientsRes.error) throw mapDbError(clientsRes.error)
   if (deltaRes.error) throw mapDbError(deltaRes.error)
+  if (adjDeltaRes.error) throw mapDbError(adjDeltaRes.error)
 
   const invoices = (invoiceRes.data || []) as Record<string, unknown>[]
   const receivables = summarizeReceivables(invoices, today) as Record<string, number | string>
   const remainingById = openingBalanceRemainingMap(
     (clientsRes.data || []) as Record<string, unknown>[],
-    (deltaRes.data || []) as Record<string, unknown>[],
+    openingDeltaRows(
+      (deltaRes.data || []) as Record<string, unknown>[],
+      (adjDeltaRes.data || []) as Record<string, unknown>[],
+    ),
   )
   const broughtForward =
     Math.round(

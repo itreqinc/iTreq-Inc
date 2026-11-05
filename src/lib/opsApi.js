@@ -10,6 +10,8 @@ import { prepareBillingDocumentBundle } from './billingDocument'
 import { preparePaymentDocumentBundle } from './paymentDocument'
 import {
   BALANCE_INVOICE_STATUSES,
+  balanceAdjustmentListCredit,
+  balanceAdjustmentTimelineAmounts,
   dueDateFromIssueDate,
   invoiceAffectsClientBalance,
   invoiceEffectiveDueDate,
@@ -19,6 +21,7 @@ import {
   PAYMENT_METHODS,
   openingBalanceCarryIn,
   openingBalanceRemainingMap,
+  openingDeltaRows,
   summarizeReceivables,
 } from './payments'
 import { disputeUnreadCount } from './invoiceDisputes'
@@ -414,15 +417,19 @@ const directOpsApi = {
     const clientsRes = await this.listClients({ activeOnly })
     if (clientsRes.error) return clientsRes
 
-    const [invRes, payRes] = await Promise.all([
+    const [invRes, payRes, adjRes] = await Promise.all([
       supabase
         .from('invoices')
         .select('client_id, total, status')
         .in('status', BALANCE_INVOICE_STATUSES),
       supabase.from('payments').select('client_id, amount, opening_balance_delta'),
+      supabase
+        .from('balance_adjustments')
+        .select('client_id, amount, direction, opening_balance_delta'),
     ])
     if (invRes.error) return mapError(invRes.error)
     if (payRes.error) return mapError(payRes.error)
+    if (adjRes.error) return mapError(adjRes.error)
 
     const charges = {}
     for (const inv of invRes.data || []) {
@@ -435,7 +442,14 @@ const directOpsApi = {
       const id = pay.client_id
       credits[id] = (credits[id] || 0) + paymentStatementCredit(pay)
     }
-    const remainingById = openingBalanceRemainingMap(clientsRes.data || [], payRes.data || [])
+    for (const adj of adjRes.data || []) {
+      const id = adj.client_id
+      credits[id] = (credits[id] || 0) + balanceAdjustmentListCredit(adj)
+    }
+    const remainingById = openingBalanceRemainingMap(
+      clientsRes.data || [],
+      openingDeltaRows(payRes.data, adjRes.data),
+    )
 
     const data = (clientsRes.data || []).map((c) => {
       const remaining = remainingById[c.id] || 0
@@ -2458,6 +2472,69 @@ const directOpsApi = {
     return { data: { id: data }, error: null }
   },
 
+  async getClientBalanceAsOf(clientId, asOfDate) {
+    if (!supabase) return dbUnavailable()
+    if (!clientId) {
+      return { data: null, error: { message: 'Please select a client.' } }
+    }
+    const day = String(asOfDate || '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return { data: null, error: { message: 'Choose a valid adjustment date.' } }
+    }
+    const { data, error } = await supabase.rpc('client_balance_as_of', {
+      p_client_id: clientId,
+      p_as_of: day,
+    })
+    if (error) return mapError(error)
+    return { data: { balance: Math.round((Number(data) || 0) * 100) / 100 }, error: null }
+  },
+
+  async createBalanceAdjustment({
+    client_id,
+    amount,
+    adjustment_date,
+    reason,
+    notes,
+    allocations,
+    opening_amount = 0,
+  }) {
+    if (!supabase) return dbUnavailable()
+    if (!client_id) {
+      return { data: null, error: { message: 'Please select a client.' } }
+    }
+    const payload = (allocations || [])
+      .filter((a) => Number(a.amount) > 0)
+      .map((a) => ({
+        invoice_id: a.invoice_id,
+        amount: Number(a.amount),
+      }))
+    const { data, error } = await supabase.rpc('create_balance_adjustment', {
+      p_client_id: client_id,
+      p_amount: Number(amount),
+      p_adjustment_date: adjustment_date || null,
+      p_reason: reason || null,
+      p_notes: notes || null,
+      p_allocations: payload,
+      p_opening_amount: Math.max(0, Number(opening_amount) || 0),
+      p_created_by: null,
+    })
+    if (error) return mapError(error)
+    return { data: { id: data }, error: null }
+  },
+
+  async reverseBalanceAdjustment(id) {
+    if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Adjustment id is required.' } }
+    }
+    const { data, error } = await supabase.rpc('reverse_balance_adjustment', {
+      p_adjustment_id: id,
+      p_created_by: null,
+    })
+    if (error) return mapError(error)
+    return { data: { id: data }, error: null }
+  },
+
   async updatePayment({
     id,
     amount,
@@ -2527,7 +2604,7 @@ const directOpsApi = {
   /** Per-payment unallocated amounts and clients with unpaid invoices or unsettled B/F (list hints). */
   async getPaymentListCreditHints() {
     if (!supabase) return dbUnavailable()
-    const [paymentsRes, allocsRes, invoicesRes, clientsRes] = await Promise.all([
+    const [paymentsRes, allocsRes, invoicesRes, clientsRes, adjRes] = await Promise.all([
       supabase.from('payments').select('id, client_id, amount, opening_balance_delta'),
       supabase.from('payment_allocations').select('payment_id, amount'),
       supabase
@@ -2535,11 +2612,16 @@ const directOpsApi = {
         .select('client_id, total, amount_paid, status')
         .in('status', ['issued', 'partial']),
       supabase.from('clients').select('id, opening_balance'),
+      supabase
+        .from('balance_adjustments')
+        .select('client_id, opening_balance_delta')
+        .neq('opening_balance_delta', 0),
     ])
     if (paymentsRes.error) return mapError(paymentsRes.error)
     if (allocsRes.error) return mapError(allocsRes.error)
     if (invoicesRes.error) return mapError(invoicesRes.error)
     if (clientsRes.error) return mapError(clientsRes.error)
+    if (adjRes.error) return mapError(adjRes.error)
 
     const allocByPayment = {}
     for (const row of allocsRes.data || []) {
@@ -2571,7 +2653,7 @@ const directOpsApi = {
 
     const remainingById = openingBalanceRemainingMap(
       clientsRes.data || [],
-      paymentsRes.data || [],
+      openingDeltaRows(paymentsRes.data, adjRes.data),
     )
     const clientIdsWithUnsettledOpening = Object.entries(remainingById)
       .filter(([, remaining]) => Number(remaining) > 0.001)
@@ -2604,13 +2686,21 @@ const directOpsApi = {
       .select('id, name, email, phone, cellphone, opening_balance, opening_balance_date, is_active')
       .order('name', { ascending: true })
     if (activeOnly) q = q.eq('is_active', true)
-    const [clientRes, payRes] = await Promise.all([
+    const [clientRes, payRes, adjRes] = await Promise.all([
       q,
       supabase.from('payments').select('client_id, opening_balance_delta').neq('opening_balance_delta', 0),
+      supabase
+        .from('balance_adjustments')
+        .select('client_id, opening_balance_delta')
+        .neq('opening_balance_delta', 0),
     ])
     if (clientRes.error) return mapError(clientRes.error)
     if (payRes.error) return mapError(payRes.error)
-    const remainingById = openingBalanceRemainingMap(clientRes.data || [], payRes.data || [])
+    if (adjRes.error) return mapError(adjRes.error)
+    const remainingById = openingBalanceRemainingMap(
+      clientRes.data || [],
+      openingDeltaRows(payRes.data, adjRes.data),
+    )
     const clients = (clientRes.data || [])
       .map((c) => ({
         ...c,
@@ -2711,15 +2801,23 @@ const directOpsApi = {
     if (!clientId) {
       return { data: { paidTowardOpening: 0, creditAppliedToInvoices: 0 }, error: null }
     }
-    const { data, error } = await supabase
-      .from('payments')
-      .select('opening_balance_delta')
-      .eq('client_id', clientId)
-      .neq('opening_balance_delta', 0)
-    if (error) return mapError(error)
+    const [payRes, adjRes] = await Promise.all([
+      supabase
+        .from('payments')
+        .select('opening_balance_delta')
+        .eq('client_id', clientId)
+        .neq('opening_balance_delta', 0),
+      supabase
+        .from('balance_adjustments')
+        .select('opening_balance_delta')
+        .eq('client_id', clientId)
+        .neq('opening_balance_delta', 0),
+    ])
+    if (payRes.error) return mapError(payRes.error)
+    if (adjRes.error) return mapError(adjRes.error)
     let paidTowardOpening = 0
     let creditAppliedToInvoices = 0
-    for (const row of data || []) {
+    for (const row of [...(payRes.data || []), ...(adjRes.data || [])]) {
       const delta = Number(row.opening_balance_delta) || 0
       if (delta < 0) paidTowardOpening += -delta
       else if (delta > 0) creditAppliedToInvoices += delta
@@ -3038,6 +3136,15 @@ const directOpsApi = {
       .order('payment_date', { ascending: true })
     if (payErr) return mapError(payErr)
 
+    const { data: allAdj, error: adjErr } = await supabase
+      .from('balance_adjustments')
+      .select(
+        'id, adjustment_date, amount, direction, reason, status, reverses_id, opening_balance_delta',
+      )
+      .eq('client_id', client_id)
+      .order('adjustment_date', { ascending: true })
+    if (adjErr) return mapError(adjErr)
+
     const { data: allQuotes, error: quoteErr } = await supabase
       .from('quotations')
       .select('id, number, issue_date, status, total, created_at')
@@ -3050,7 +3157,10 @@ const directOpsApi = {
     let rangeFrom = from || null
     let rangeTo = to || null
 
-    const carryIn = openingBalanceCarryIn(clientRes.data, allPay || [])
+    const carryIn = openingBalanceCarryIn(
+      clientRes.data,
+      openingDeltaRows(allPay || [], allAdj || []),
+    )
 
     if (Number(capYears) > 0) {
       toDate = to || localTodayIso()
@@ -3067,6 +3177,9 @@ const directOpsApi = {
       for (const pay of allPay || []) {
         if (pay.is_adjustment) continue
         consider(pay.payment_date)
+      }
+      for (const adj of allAdj || []) {
+        consider(adj.adjustment_date)
       }
       consider(carryIn.asOfDate)
       fromDate = remindStatementFrom(earliest, toDate)
@@ -3104,6 +3217,12 @@ const directOpsApi = {
       if (d && d < fromDate) {
         opening -= paymentTimelineCredit(pay)
       }
+    }
+    for (const adj of allAdj || []) {
+      const d = adj.adjustment_date || ''
+      if (!d || d >= fromDate) continue
+      const parts = balanceAdjustmentTimelineAmounts(adj)
+      opening += parts.debit - parts.credit
     }
 
     if (openingAmt !== 0 && openingDate && openingDate < fromDate) {
@@ -3155,6 +3274,28 @@ const directOpsApi = {
         affectsBalance: credit > 0.001,
         debit: 0,
         credit,
+      })
+    }
+    for (const adj of allAdj || []) {
+      if (!inRange(adj.adjustment_date)) continue
+      const parts = balanceAdjustmentTimelineAmounts(adj)
+      const isReversal = adj.direction === 'debit' || Boolean(adj.reverses_id)
+      const label = isReversal
+        ? adj.reason || 'Balance adjustment reversal'
+        : `Balance adjustment — ${adj.reason || 'Adjustment'}`
+      lines.push({
+        id: adj.id,
+        sortDate: adj.adjustment_date,
+        type: 'balance_adjustment',
+        label,
+        reason: adj.reason,
+        status: adj.status === 'reversed' ? 'reversed' : null,
+        direction: adj.direction,
+        reversesId: adj.reverses_id || null,
+        inactive: false,
+        affectsBalance: true,
+        debit: parts.debit,
+        credit: parts.credit,
       })
     }
     for (const q of allQuotes || []) {
@@ -3771,8 +3912,16 @@ const directOpsApi = {
     const today = localTodayIso()
     const monthStart = `${today.slice(0, 7)}-01`
 
-    const [notifRes, disputeRes, quoteRes, invoiceRes, paymentRes, clientsRes, deltaRes] =
-      await Promise.all([
+    const [
+      notifRes,
+      disputeRes,
+      quoteRes,
+      invoiceRes,
+      paymentRes,
+      clientsRes,
+      deltaRes,
+      adjDeltaRes,
+    ] = await Promise.all([
       supabase
         .from('payment_notifications')
         .select('*, clients(id, name), invoices(id, number)')
@@ -3796,6 +3945,10 @@ const directOpsApi = {
       supabase.from('payments').select('amount, payment_date').eq('is_adjustment', false).gte('payment_date', monthStart),
       supabase.from('clients').select('id, opening_balance'),
       supabase.from('payments').select('client_id, opening_balance_delta').neq('opening_balance_delta', 0),
+      supabase
+        .from('balance_adjustments')
+        .select('client_id, opening_balance_delta')
+        .neq('opening_balance_delta', 0),
     ])
 
     if (notifRes.error) return mapError(notifRes.error)
@@ -3805,10 +3958,14 @@ const directOpsApi = {
     if (paymentRes.error) return mapError(paymentRes.error)
     if (clientsRes.error) return mapError(clientsRes.error)
     if (deltaRes.error) return mapError(deltaRes.error)
+    if (adjDeltaRes.error) return mapError(adjDeltaRes.error)
 
     const invoices = invoiceRes.data || []
     const receivables = summarizeReceivables(invoices, today)
-    const remainingById = openingBalanceRemainingMap(clientsRes.data || [], deltaRes.data || [])
+    const remainingById = openingBalanceRemainingMap(
+      clientsRes.data || [],
+      openingDeltaRows(deltaRes.data, adjDeltaRes.data),
+    )
     const broughtForward =
       Math.round(
         (clientsRes.data || []).reduce((sum, c) => {
