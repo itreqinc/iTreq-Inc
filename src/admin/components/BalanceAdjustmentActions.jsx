@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { useAuth } from '../../contexts/AuthContext'
 import { isAdmin } from '../../lib/authConfig'
+import { clientOpeningBalanceDate } from '../../lib/clientRegistration'
 import { opsApi } from '../../lib/opsApi'
 import {
   OPENING_BALANCE_ALLOC_ID,
@@ -18,9 +19,14 @@ import {
   formatPula,
 } from '../ui'
 
+function invoiceSortDate(inv) {
+  return String(inv?.issue_date || inv?.created_at || '').slice(0, 10)
+}
+
 /**
  * Admin-only write-off: amount to subtract or target balance (mutually exclusive),
- * manual invoice / B/F selection like Record payment.
+ * manual invoice / B/F selection like Record payment. Full allocation required;
+ * only invoices/B/F as of the adjustment date can be settled.
  */
 export function useBalanceAdjustmentActions({ onDone } = {}) {
   const { user } = useAuth()
@@ -37,9 +43,25 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
   const [asOfBalance, setAsOfBalance] = useState(null)
   const [loadingBalance, setLoadingBalance] = useState(false)
 
-  const [openInvoices, setOpenInvoices] = useState([])
-  const [openingDue, setOpeningDue] = useState(0)
+  const [allOpenInvoices, setAllOpenInvoices] = useState([])
+  const [openingRemaining, setOpeningRemaining] = useState(0)
   const [selectedIds, setSelectedIds] = useState([])
+
+  const openInvoices = useMemo(
+    () =>
+      (allOpenInvoices || []).filter((inv) => {
+        const day = invoiceSortDate(inv)
+        return day && day <= adjustmentDate
+      }),
+    [allOpenInvoices, adjustmentDate],
+  )
+
+  const openingDue = useMemo(() => {
+    if (openingRemaining <= 0.001 || !target) return 0
+    const openingDate = clientOpeningBalanceDate(target)
+    if (!openingDate || openingDate > adjustmentDate) return 0
+    return openingRemaining
+  }, [openingRemaining, target, adjustmentDate])
 
   const creditAmount = useMemo(() => {
     const asOf = Math.round((Number(asOfBalance) || 0) * 100) / 100
@@ -64,6 +86,17 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
     for (const inv of openInvoices) targets.push(inv)
     return targets
   }, [openingDue, openInvoices])
+
+  const allocatableCap = useMemo(
+    () =>
+      Math.round(
+        allocationTargets.reduce(
+          (sum, row) => sum + (Number(row._allocatable ?? invoiceBalanceDue(row)) || 0),
+          0,
+        ) * 100,
+      ) / 100,
+    [allocationTargets],
+  )
 
   const { allocations, remaining } = useMemo(
     () => autoAllocatePayment(Math.max(0, creditAmount), allocationTargets, selectedIds),
@@ -118,6 +151,18 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
         return 'Target balance must be less than the balance as of the chosen date.'
       }
     }
+    if (allocationTargets.length === 0) {
+      return 'Nothing to settle as of this date. Pick a later date, or settle open invoices/B/F first.'
+    }
+    if (selectedIds.length === 0) {
+      return 'Select the invoices (and/or brought forward) this write-off should settle.'
+    }
+    if (creditAmount > allocatableCap + 0.001) {
+      return `Selected targets as of ${adjustmentDate} can only take ${formatPula(allocatableCap)}.`
+    }
+    if (Math.abs(allocationTotal - creditAmount) > 0.001 || remaining > 0.001) {
+      return `Allocate the full ${formatPula(creditAmount)} — currently ${formatPula(allocationTotal)}.`
+    }
     return ''
   }, [
     target,
@@ -128,6 +173,11 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
     activeField,
     adjustmentDate,
     targetBalance,
+    allocationTargets.length,
+    selectedIds.length,
+    allocatableCap,
+    allocationTotal,
+    remaining,
   ])
 
   async function finish() {
@@ -164,8 +214,8 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
     setActiveField(null)
     setReason('')
     setSelectedIds([])
-    setOpenInvoices([])
-    setOpeningDue(0)
+    setAllOpenInvoices([])
+    setOpeningRemaining(0)
     setAsOfBalance(null)
 
     const [invRes, balRes] = await Promise.all([
@@ -184,11 +234,11 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
     }
 
     const open = (invRes.data || []).filter((inv) => invoiceBalanceDue(inv) > 0.001)
-    setOpenInvoices(open)
+    setAllOpenInvoices(open)
     setAsOfBalance(Math.round((Number(balRes.data?.balance) || 0) * 100) / 100)
 
-    const remaining = clientOpeningRemaining(client)
-    setOpeningDue(remaining > 0.001 ? remaining : 0)
+    const remainingBf = clientOpeningRemaining(client)
+    setOpeningRemaining(remainingBf > 0.001 ? remainingBf : 0)
   }
 
   useEffect(() => {
@@ -196,6 +246,14 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
     refreshAsOfBalance(target.id, adjustmentDate)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when date/client change
   }, [target?.id, adjustmentDate])
+
+  useEffect(() => {
+    const allowed = new Set(allocationTargets.map((t) => t.id))
+    setSelectedIds((prev) => {
+      const next = prev.filter((id) => allowed.has(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [allocationTargets])
 
   function onSubtractChange(value) {
     setActiveField(value.trim() ? 'subtract' : null)
@@ -331,7 +389,8 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
         </div>
         <p className="text-xs text-ink-500">
           Fill only one field. With target balance, invoices are settled by the difference
-          (current as-of balance minus target), not the target figure itself.
+          (as-of balance minus target), not the target figure itself. The full credit must be
+          allocated to invoices/B/F dated on or before the adjustment date.
         </p>
 
         <label className="block">
@@ -349,7 +408,7 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
 
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs uppercase tracking-wider text-ink-400">
-            Apply to (optional)
+            Apply to *
           </p>
           {allocationTargets.length ? (
             <button
@@ -363,8 +422,7 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
         </div>
         {allocationTargets.length === 0 ? (
           <p className="text-sm text-ink-400">
-            No open invoices or brought-forward balance to settle. The credit still reduces
-            the account balance.
+            No open invoices or brought-forward balance dated on or before {adjustmentDate}.
           </p>
         ) : (
           <ul className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-white/10 p-2">
@@ -402,11 +460,13 @@ export function useBalanceAdjustmentActions({ onDone } = {}) {
             <span className="font-semibold tabular-nums text-white">
               {formatPula(allocationTotal)}
             </span>
+            {' / '}
+            <span className="tabular-nums text-ink-200">{formatPula(creditAmount)}</span>
             {remaining > 0.001 ? (
               <>
                 {' '}
-                · unallocated{' '}
-                <span className="tabular-nums text-ink-200">{formatPula(remaining)}</span>
+                · still need{' '}
+                <span className="tabular-nums text-amber-200">{formatPula(remaining)}</span>
               </>
             ) : null}
           </p>

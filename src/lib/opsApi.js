@@ -188,7 +188,7 @@ async function saveContactEmailsLocal(clientId, form) {
 
 async function clientHasFinancialRecordsLocal(clientId) {
   if (!supabase) return false
-  const tables = ['invoices', 'quotations', 'payments']
+  const tables = ['invoices', 'quotations', 'payments', 'balance_adjustments']
   for (const table of tables) {
     const { count, error } = await supabase
       .from(table)
@@ -207,7 +207,7 @@ async function clientHasFinancialRecordsLocal(clientId) {
 async function enrichClientsFinancialFlagsLocal(clients) {
   if (!supabase || !clients.length) return clients
   const withRecords = new Set()
-  for (const table of ['invoices', 'quotations', 'payments']) {
+  for (const table of ['invoices', 'quotations', 'payments', 'balance_adjustments']) {
     const { data, error } = await supabase.from(table).select('client_id')
     if (error) {
       const msg = String(error.message || '').toLowerCase()

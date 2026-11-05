@@ -1007,6 +1007,7 @@ export default function ClientsPage() {
         line.status !== 'reversed' &&
         !line.reversesId &&
         !invoiceActionBusy
+      if (!admin) return []
       return [
         {
           label: 'Reverse adjustment',

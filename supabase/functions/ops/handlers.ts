@@ -612,7 +612,7 @@ async function listClientsInternal(sb: SupabaseClient, { activeOnly = false } = 
 }
 
 async function clientHasFinancialRecords(sb: SupabaseClient, clientId: string) {
-  const tables = ['invoices', 'quotations', 'payments']
+  const tables = ['invoices', 'quotations', 'payments', 'balance_adjustments']
   for (const table of tables) {
     const { count, error } = await sb
       .from(table)
@@ -630,7 +630,7 @@ async function enrichClientsFinancialFlags(
 ) {
   if (!clients.length) return clients
   const withRecords = new Set<string>()
-  for (const table of ['invoices', 'quotations', 'payments']) {
+  for (const table of ['invoices', 'quotations', 'payments', 'balance_adjustments']) {
     const { data, error } = await sb.from(table).select('client_id')
     if (error) throw mapDbError(error)
     for (const row of data || []) {
