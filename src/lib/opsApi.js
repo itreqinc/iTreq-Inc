@@ -2186,16 +2186,29 @@ const directOpsApi = {
 
     let paidDate = null
     if (type === 'invoice' && docRes.data.status === 'paid') {
-      const { data: allocs, error: allocErr } = await supabase
-        .from('payment_allocations')
-        .select('amount, payments(payment_date, source_date)')
-        .eq('invoice_id', id)
-      if (allocErr) return mapError(allocErr)
-      for (const row of allocs || []) {
+      const [payAllocRes, adjAllocRes] = await Promise.all([
+        supabase
+          .from('payment_allocations')
+          .select('amount, payments(payment_date, source_date)')
+          .eq('invoice_id', id),
+        supabase
+          .from('balance_adjustment_allocations')
+          .select('amount, balance_adjustments(adjustment_date)')
+          .eq('invoice_id', id),
+      ])
+      if (payAllocRes.error) return mapError(payAllocRes.error)
+      if (adjAllocRes.error) return mapError(adjAllocRes.error)
+      for (const row of payAllocRes.data || []) {
         const pay = row.payments
         const p = Array.isArray(pay) ? pay[0] : pay
         // Stamp shows original economic date (e.g. B/F as-of); timeline uses payment_date.
         const d = p?.source_date || p?.payment_date
+        if (d && (!paidDate || d > paidDate)) paidDate = d
+      }
+      for (const row of adjAllocRes.data || []) {
+        const adj = row.balance_adjustments
+        const a = Array.isArray(adj) ? adj[0] : adj
+        const d = a?.adjustment_date
         if (d && (!paidDate || d > paidDate)) paidDate = d
       }
     }

@@ -1265,12 +1265,19 @@ async function getBillingDocumentBundleInternal(
 
   let paidDate: string | null = null
   if (type === 'invoice' && doc.status === 'paid') {
-    const { data: allocs, error: allocErr } = await sb
-      .from('payment_allocations')
-      .select('amount, payments(payment_date, source_date)')
-      .eq('invoice_id', id)
-    if (allocErr) throw mapDbError(allocErr)
-    for (const row of allocs || []) {
+    const [payAllocRes, adjAllocRes] = await Promise.all([
+      sb
+        .from('payment_allocations')
+        .select('amount, payments(payment_date, source_date)')
+        .eq('invoice_id', id),
+      sb
+        .from('balance_adjustment_allocations')
+        .select('amount, balance_adjustments(adjustment_date)')
+        .eq('invoice_id', id),
+    ])
+    if (payAllocRes.error) throw mapDbError(payAllocRes.error)
+    if (adjAllocRes.error) throw mapDbError(adjAllocRes.error)
+    for (const row of payAllocRes.data || []) {
       const pay = relName(row as Record<string, unknown>, 'payments')
       // Stamp shows original economic date (e.g. B/F as-of); timeline uses payment_date.
       const d = pay?.source_date
@@ -1278,6 +1285,11 @@ async function getBillingDocumentBundleInternal(
         : pay?.payment_date
           ? String(pay.payment_date)
           : ''
+      if (d && (!paidDate || d > paidDate)) paidDate = d
+    }
+    for (const row of adjAllocRes.data || []) {
+      const adj = relName(row as Record<string, unknown>, 'balance_adjustments')
+      const d = adj?.adjustment_date ? String(adj.adjustment_date) : ''
       if (d && (!paidDate || d > paidDate)) paidDate = d
     }
   }
