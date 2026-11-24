@@ -3424,6 +3424,20 @@ const directOpsApi = {
     if (!id) {
       return { data: null, error: { message: 'Category id is required.' } }
     }
+    const { data: cat, error: catErr } = await supabase
+      .from('expense_categories')
+      .select('id, system_key')
+      .eq('id', id)
+      .maybeSingle()
+    if (catErr) return mapError(catErr)
+    if (cat?.system_key) {
+      return {
+        data: null,
+        error: {
+          message: 'Payroll system categories cannot be deleted. Deactivate them instead.',
+        },
+      }
+    }
     const { count, error: countErr } = await supabase
       .from('expenses')
       .select('id', { count: 'exact', head: true })
@@ -3447,7 +3461,7 @@ const directOpsApi = {
     if (!supabase) return dbUnavailable()
     let q = supabase
       .from('expenses')
-      .select('*, expense_categories(id, name)')
+      .select('*, expense_categories(id, name, system_key)')
       .order('expense_date', { ascending: false })
       .order('created_at', { ascending: false })
     if (from) q = q.gte('expense_date', from)
@@ -3462,7 +3476,7 @@ const directOpsApi = {
     if (!supabase) return dbUnavailable()
     const { data, error } = await supabase
       .from('expenses')
-      .select('*, expense_categories(id, name)')
+      .select('*, expense_categories(id, name, system_key)')
       .eq('id', id)
       .single()
     if (error) return mapError(error)
@@ -3478,6 +3492,7 @@ const directOpsApi = {
     method,
     reference,
     notes,
+    staff_user_id,
   }) {
     if (!supabase) return dbUnavailable()
     if (!category_id) {
@@ -3490,6 +3505,50 @@ const directOpsApi = {
     if (!expense_date) {
       return { data: null, error: { message: 'Choose an expense date.' } }
     }
+
+    const { data: cat, error: catErr } = await supabase
+      .from('expense_categories')
+      .select('id, name, system_key')
+      .eq('id', category_id)
+      .maybeSingle()
+    if (catErr) return mapError(catErr)
+    if (!cat) {
+      return { data: null, error: { message: 'Category not found.' } }
+    }
+    if (cat.system_key === 'salary') {
+      return {
+        data: null,
+        error: {
+          message:
+            'Salary expenses are created automatically when payroll is posted. Choose another category.',
+        },
+      }
+    }
+    const needsStaff =
+      cat.system_key === 'staff_rem_benefits' || cat.system_key === 'salary_advance'
+    const staffId = staff_user_id ? String(staff_user_id).trim() : ''
+    if (needsStaff && !staffId) {
+      return { data: null, error: { message: 'Select the linked staff member.' } }
+    }
+
+    if (id) {
+      const { data: existing, error: exErr } = await supabase
+        .from('expenses')
+        .select('id, pay_run_id')
+        .eq('id', id)
+        .maybeSingle()
+      if (exErr) return mapError(exErr)
+      if (existing?.pay_run_id) {
+        return {
+          data: null,
+          error: {
+            message:
+              'This salary expense is locked to a pay run. Reverse the pay run to remove it.',
+          },
+        }
+      }
+    }
+
     const row = {
       expense_date,
       amount: amt,
@@ -3498,6 +3557,7 @@ const directOpsApi = {
       method: method || 'cash',
       reference: reference?.trim() || null,
       notes: notes?.trim() || null,
+      staff_user_id: needsStaff ? staffId : null,
       updated_at: new Date().toISOString(),
     }
     if (id) {
@@ -3505,7 +3565,7 @@ const directOpsApi = {
         .from('expenses')
         .update(row)
         .eq('id', id)
-        .select('*, expense_categories(id, name)')
+        .select('*, expense_categories(id, name, system_key)')
         .single()
       if (error) return mapError(error)
       return { data, error: null }
@@ -3513,7 +3573,7 @@ const directOpsApi = {
     const { data, error } = await supabase
       .from('expenses')
       .insert(row)
-      .select('*, expense_categories(id, name)')
+      .select('*, expense_categories(id, name, system_key)')
       .single()
     if (error) return mapError(error)
     return { data, error: null }
@@ -3521,9 +3581,56 @@ const directOpsApi = {
 
   async deleteExpense(id) {
     if (!supabase) return dbUnavailable()
+    if (!id) {
+      return { data: null, error: { message: 'Expense id is required.' } }
+    }
+    const { data: existing, error: exErr } = await supabase
+      .from('expenses')
+      .select('id, pay_run_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (exErr) return mapError(exErr)
+    if (existing?.pay_run_id) {
+      return {
+        data: null,
+        error: {
+          message:
+            'This salary expense is locked to a pay run. Reverse the pay run to remove it.',
+        },
+      }
+    }
+    const { data: adv } = await supabase
+      .from('salary_advances')
+      .select('id, remaining')
+      .eq('expense_id', id)
+      .maybeSingle()
+    if (adv?.id) {
+      if (!(Number(adv.remaining) > 0)) {
+        return {
+          data: null,
+          error: {
+            message: 'Fully recovered advances cannot be deleted from Expenses.',
+          },
+        }
+      }
+      const { error: aErr } = await supabase.from('salary_advances').delete().eq('id', adv.id)
+      if (aErr) return mapError(aErr)
+    }
     const { error } = await supabase.from('expenses').delete().eq('id', id)
     if (error) return mapError(error)
     return { data: true, error: null }
+  },
+
+  async getAdvanceForExpense(expenseId) {
+    if (!supabase) return dbUnavailable()
+    if (!expenseId) return { data: null, error: null }
+    const { data, error } = await supabase
+      .from('salary_advances')
+      .select('*')
+      .eq('expense_id', expenseId)
+      .maybeSingle()
+    if (error) return mapError(error)
+    return { data, error: null }
   },
 
   // --- Client proof uploads (private Storage bucket) ---

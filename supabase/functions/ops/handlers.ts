@@ -3798,6 +3798,15 @@ handlers.delete_expense_category = async ({ user, sb }, args) => {
   assertAdminUser(user)
   const id = String(args[0] || '')
   if (!id) throw new OpsError('Category id is required.')
+  const { data: cat, error: catErr } = await sb
+    .from('expense_categories')
+    .select('id, system_key')
+    .eq('id', id)
+    .maybeSingle()
+  if (catErr) throw mapDbError(catErr)
+  if (cat?.system_key) {
+    throw new OpsError('Payroll system categories cannot be deleted. Deactivate them instead.')
+  }
   const { count, error: countErr } = await sb
     .from('expenses')
     .select('id', { count: 'exact', head: true })
@@ -3821,7 +3830,7 @@ handlers.list_expenses = async ({ sb }, args) => {
   }
   let q = sb
     .from('expenses')
-    .select('*, expense_categories(id, name)')
+    .select('*, expense_categories(id, name, system_key)')
     .order('expense_date', { ascending: false })
     .order('created_at', { ascending: false })
   if (from) q = q.gte('expense_date', from)
@@ -3836,7 +3845,7 @@ handlers.get_expense = async ({ sb }, args) => {
   const id = String(args[0] || '')
   const { data, error } = await sb
     .from('expenses')
-    .select('*, expense_categories(id, name)')
+    .select('*, expense_categories(id, name, system_key)')
     .eq('id', id)
     .single()
   if (error) throw mapDbError(error)
@@ -3853,11 +3862,44 @@ handlers.save_expense = async ({ sb }, args) => {
     method,
     reference,
     notes,
+    staff_user_id,
   } = (args[0] || {}) as Record<string, unknown>
   if (!category_id) throw new OpsError('Please select a category.')
   const amt = Number(amount)
   if (!(amt > 0)) throw new OpsError('Enter an amount greater than zero.')
   if (!expense_date) throw new OpsError('Choose an expense date.')
+
+  const { data: cat, error: catErr } = await sb
+    .from('expense_categories')
+    .select('id, name, system_key')
+    .eq('id', String(category_id))
+    .maybeSingle()
+  if (catErr) throw mapDbError(catErr)
+  if (!cat) throw new OpsError('Category not found.')
+  if (cat.system_key === 'salary') {
+    throw new OpsError(
+      'Salary expenses are created automatically when payroll is posted. Choose another category.',
+    )
+  }
+  const needsStaff =
+    cat.system_key === 'staff_rem_benefits' || cat.system_key === 'salary_advance'
+  const staffId = staff_user_id ? String(staff_user_id).trim() : ''
+  if (needsStaff && !staffId) throw new OpsError('Select the linked staff member.')
+
+  if (id) {
+    const { data: existing, error: exErr } = await sb
+      .from('expenses')
+      .select('id, pay_run_id')
+      .eq('id', String(id))
+      .maybeSingle()
+    if (exErr) throw mapDbError(exErr)
+    if (existing?.pay_run_id) {
+      throw new OpsError(
+        'This salary expense is locked to a pay run. Reverse the pay run to remove it.',
+      )
+    }
+  }
+
   const row = {
     expense_date,
     amount: amt,
@@ -3866,6 +3908,7 @@ handlers.save_expense = async ({ sb }, args) => {
     method: method || 'cash',
     reference: reference ? String(reference).trim() : null,
     notes: notes ? String(notes).trim() : null,
+    staff_user_id: needsStaff ? staffId : null,
     updated_at: nowIso(),
   }
   if (id) {
@@ -3873,7 +3916,7 @@ handlers.save_expense = async ({ sb }, args) => {
       .from('expenses')
       .update(row)
       .eq('id', id)
-      .select('*, expense_categories(id, name)')
+      .select('*, expense_categories(id, name, system_key)')
       .single()
     if (error) throw mapDbError(error)
     return data
@@ -3881,7 +3924,7 @@ handlers.save_expense = async ({ sb }, args) => {
   const { data, error } = await sb
     .from('expenses')
     .insert(row)
-    .select('*, expense_categories(id, name)')
+    .select('*, expense_categories(id, name, system_key)')
     .single()
   if (error) throw mapDbError(error)
   return data
@@ -3889,6 +3932,26 @@ handlers.save_expense = async ({ sb }, args) => {
 
 handlers.delete_expense = async ({ sb }, args) => {
   const id = String(args[0] || '')
+  const { data: existing, error: exErr } = await sb
+    .from('expenses')
+    .select('id, pay_run_id')
+    .eq('id', id)
+    .maybeSingle()
+  if (exErr) throw mapDbError(exErr)
+  if (existing?.pay_run_id) {
+    throw new OpsError(
+      'This salary expense is locked to a pay run. Reverse the pay run to remove it.',
+    )
+  }
+  const { data: adv } = await sb
+    .from('salary_advances')
+    .select('id')
+    .eq('expense_id', id)
+    .maybeSingle()
+  if (adv?.id) {
+    const { error: aErr } = await sb.from('salary_advances').delete().eq('id', adv.id)
+    if (aErr) throw mapDbError(aErr)
+  }
   const { error } = await sb.from('expenses').delete().eq('id', id)
   if (error) throw mapDbError(error)
   return true

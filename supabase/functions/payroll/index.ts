@@ -223,6 +223,191 @@ async function loadSettings(supabase: ReturnType<typeof adminClient>) {
   return data || {}
 }
 
+type ExpenseCategoryRow = { id: string; name: string; system_key: string | null }
+
+async function loadExpenseCategoryByKey(
+  supabase: ReturnType<typeof adminClient>,
+  systemKey: string,
+): Promise<ExpenseCategoryRow | null> {
+  const { data, error } = await supabase
+    .from('expense_categories')
+    .select('id, name, system_key')
+    .eq('system_key', systemKey)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+async function loadUserDisplayName(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, first_name, surname, email')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+function displayFirstName(user: { first_name?: string | null; name?: string | null } | null) {
+  const first = String(user?.first_name || '').trim()
+  if (first) return first
+  const full = String(user?.name || '').trim()
+  if (!full) return 'there'
+  return full.split(/\s+/)[0] || 'there'
+}
+
+function formatPaydayDdMmYyyy(ymd: string) {
+  const [y, m, d] = String(ymd).slice(0, 10).split('-')
+  if (!y || !m || !d) return ymd
+  return `${d}-${m}-${y}`
+}
+
+function formatMonthYear(year: number, month: number) {
+  const dt = new Date(Date.UTC(year, month - 1, 1))
+  return new Intl.DateTimeFormat('en-GB', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(dt)
+}
+
+function formatMoney(amount: number, currency = 'BWP') {
+  const n = Number(amount) || 0
+  try {
+    return new Intl.NumberFormat('en-BW', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(n)
+  } catch {
+    return `${currency} ${n.toFixed(2)}`
+  }
+}
+
+function simpleEmailHtml(title: string, body: string) {
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#333"><h2>${esc(title)}</h2><pre style="white-space:pre-wrap;font-family:inherit">${esc(body)}</pre></body></html>`
+}
+
+async function sendViaResend(opts: {
+  to: string | string[]
+  subject: string
+  text: string
+  html?: string
+}) {
+  const apiKey = Deno.env.get('RESEND_API_KEY')
+  if (!apiKey) {
+    console.warn('RESEND_API_KEY missing — payroll email skipped')
+    return { sent: false, reason: 'missing_resend_key' as const }
+  }
+  const from =
+    Deno.env.get('RESEND_FROM')?.trim() || 'iTreq Inc <no-reply@itreqinc.com>'
+  const recipients = (Array.isArray(opts.to) ? opts.to : [opts.to])
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+  if (!recipients.length) return { sent: false, reason: 'no_recipients' as const }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: recipients,
+      subject: opts.subject,
+      html: opts.html || simpleEmailHtml(opts.subject, opts.text),
+      text: opts.text,
+    }),
+  })
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('Resend error:', errText)
+    return { sent: false, reason: 'resend_error' as const }
+  }
+  return { sent: true as const }
+}
+
+async function listAdminRecipients(supabase: ReturnType<typeof adminClient>) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, first_name, email')
+    .eq('role', 'admin')
+    .eq('is_active', true)
+  if (error) throw error
+  return (data || []).filter((u) => String(u.email || '').trim())
+}
+
+function periodBounds(year: number, month: number) {
+  const from = `${year}-${String(month).padStart(2, '0')}-01`
+  const last = daysInMonth(year, month)
+  const to = `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`
+  return { from, to }
+}
+
+/** Auth for scheduled jobs: PAYROLL_CRON_SECRET (or CRON_SECRET) in body.cron_secret. */
+async function requireCronOrAdmin(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const expected =
+    Deno.env.get('PAYROLL_CRON_SECRET')?.trim() || Deno.env.get('CRON_SECRET')?.trim() || ''
+  const provided = String(body.cron_secret || '').trim()
+  if (expected && provided && provided === expected) {
+    return { user: null as null, viaCron: true }
+  }
+  const gate = await requireAdmin(supabase, req, body)
+  if (gate.error) return { error: gate.error, viaCron: false }
+  return { user: gate.user!, viaCron: false }
+}
+
+async function upsertAdvanceExpense(
+  supabase: ReturnType<typeof adminClient>,
+  opts: {
+    expenseId?: string | null
+    userId: string
+    staffName: string
+    amount: number
+    advanceDate: string
+    notes?: string | null
+    method?: string | null
+    reference?: string | null
+  },
+) {
+  const cat = await loadExpenseCategoryByKey(supabase, 'salary_advance')
+  if (!cat) throw new Error('Salary advance expense category is missing. Apply migrations.')
+  const vendor = `Advance - ${opts.staffName}`
+  const row = {
+    expense_date: opts.advanceDate,
+    amount: opts.amount,
+    category_id: cat.id,
+    vendor,
+    method: opts.method || 'eft',
+    reference: opts.reference || null,
+    notes: opts.notes || null,
+    staff_user_id: opts.userId,
+    updated_at: new Date().toISOString(),
+  }
+  if (opts.expenseId) {
+    const { data, error } = await supabase
+      .from('expenses')
+      .update(row)
+      .eq('id', opts.expenseId)
+      .select('*')
+      .single()
+    if (error) throw error
+    return data
+  }
+  const { data, error } = await supabase.from('expenses').insert(row).select('*').single()
+  if (error) throw error
+  return data
+}
+
 async function handleNextPayday(
   supabase: ReturnType<typeof adminClient>,
   req: Request,
@@ -672,9 +857,25 @@ async function handleCreateAdvance(
   const amount = Number(body.amount)
   const advanceDate = String(body.advance_date || ymdInTz()).slice(0, 10)
   const notes = String(body.notes || '').trim() || null
+  const method = String(body.method || 'eft').trim() || 'eft'
+  const reference = String(body.reference || '').trim() || null
   if (!userId || !(amount > 0)) {
     return json(400, { success: false, message: 'user_id and positive amount required' })
   }
+  const staff = await loadUserDisplayName(supabase, userId)
+  if (!staff) return json(404, { success: false, message: 'Staff member not found' })
+  const staffName = String(staff.name || 'Staff').trim() || 'Staff'
+
+  const expense = await upsertAdvanceExpense(supabase, {
+    userId,
+    staffName,
+    amount,
+    advanceDate,
+    notes,
+    method,
+    reference,
+  })
+
   const { data, error } = await supabase
     .from('salary_advances')
     .insert({
@@ -684,11 +885,15 @@ async function handleCreateAdvance(
       advance_date: advanceDate,
       notes,
       created_by: gate.user!.id,
+      expense_id: expense.id,
     })
     .select('*')
     .single()
-  if (error) throw error
-  return json(200, { success: true, advance: data })
+  if (error) {
+    await supabase.from('expenses').delete().eq('id', expense.id)
+    throw error
+  }
+  return json(200, { success: true, advance: data, expense })
 }
 
 async function handleUpdateAdvance(
@@ -705,6 +910,12 @@ async function handleUpdateAdvance(
     : undefined
   const notes =
     body.notes === undefined ? undefined : String(body.notes || '').trim() || null
+  const method =
+    body.method === undefined ? undefined : String(body.method || 'eft').trim() || 'eft'
+  const reference =
+    body.reference === undefined
+      ? undefined
+      : String(body.reference || '').trim() || null
   if (!advanceId) return json(400, { success: false, message: 'advance_id required' })
   if (!(amount > 0)) {
     return json(400, { success: false, message: 'Advance amount must be greater than zero' })
@@ -751,7 +962,35 @@ async function handleUpdateAdvance(
     .select('*')
     .single()
   if (error) throw error
-  return json(200, { success: true, advance: data })
+
+  const staff = await loadUserDisplayName(supabase, String(existing.user_id))
+  const staffName = String(staff?.name || 'Staff').trim() || 'Staff'
+  const nextDate = advanceDate || String(existing.advance_date).slice(0, 10)
+  const nextNotes = notes !== undefined ? notes : existing.notes
+  let expense = null
+  try {
+    expense = await upsertAdvanceExpense(supabase, {
+      expenseId: existing.expense_id || null,
+      userId: String(existing.user_id),
+      staffName,
+      amount,
+      advanceDate: nextDate,
+      notes: nextNotes,
+      method: method || 'eft',
+      reference: reference === undefined ? null : reference,
+    })
+    if (!existing.expense_id && expense?.id) {
+      await supabase
+        .from('salary_advances')
+        .update({ expense_id: expense.id, updated_at: new Date().toISOString() })
+        .eq('id', advanceId)
+      data.expense_id = expense.id
+    }
+  } catch (err) {
+    console.error('advance expense sync failed on update:', err)
+  }
+
+  return json(200, { success: true, advance: data, expense })
 }
 
 async function handleDeleteAdvance(
@@ -766,7 +1005,7 @@ async function handleDeleteAdvance(
 
   const { data: existing, error: eErr } = await supabase
     .from('salary_advances')
-    .select('id, remaining, amount')
+    .select('id, remaining, amount, expense_id')
     .eq('id', advanceId)
     .maybeSingle()
   if (eErr) throw eErr
@@ -778,9 +1017,14 @@ async function handleDeleteAdvance(
     })
   }
 
+  const expenseId = existing.expense_id ? String(existing.expense_id) : null
   const { error } = await supabase.from('salary_advances').delete().eq('id', advanceId)
   if (error) throw error
-  return json(200, { success: true, deleted_id: advanceId })
+  if (expenseId) {
+    const { error: xErr } = await supabase.from('expenses').delete().eq('id', expenseId)
+    if (xErr) console.error('failed deleting linked advance expense:', xErr)
+  }
+  return json(200, { success: true, deleted_id: advanceId, deleted_expense_id: expenseId })
 }
 
 async function handleListAdvances(
@@ -803,7 +1047,7 @@ async function handlePostPayRun(
   req: Request,
   body: Record<string, unknown>,
 ) {
-  const gate = await requireAdmin(supabase, req, body)
+  const gate = await requireCronOrAdmin(supabase, req, body)
   if (gate.error) return gate.error
 
   const settings = await loadSettings(supabase)
@@ -811,6 +1055,7 @@ async function handlePostPayRun(
   const periodYear = Number(body.period_year) || Number(payday.slice(0, 4))
   const periodMonth = Number(body.period_month) || Number(payday.slice(5, 7))
   const notes = String(body.notes || '').trim() || null
+  const createdBy = gate.user?.id || null
 
   const { data: existing } = await supabase
     .from('pay_runs')
@@ -832,7 +1077,7 @@ async function handlePostPayRun(
         payday,
         status: 'draft',
         notes,
-        created_by: gate.user!.id,
+        created_by: createdBy,
       })
       .select('*')
       .single()
@@ -858,7 +1103,21 @@ async function handlePostPayRun(
     currency: String(settings.currency || 'BWP'),
   }
 
+  const remCat = await loadExpenseCategoryByKey(supabase, 'staff_rem_benefits')
+  const salaryCat = await loadExpenseCategoryByKey(supabase, 'salary')
+  if (!salaryCat) {
+    return json(500, {
+      success: false,
+      message: 'Salary expense category is missing. Apply migrations.',
+    })
+  }
+  const { from: periodFrom, to: periodTo } = periodBounds(periodYear, periodMonth)
+
+  // Clear prior salary expense lines if re-posting a draft / after reverse recreate
+  await supabase.from('expenses').delete().eq('pay_run_id', runId)
+
   const slips = []
+  let totalNet = 0
   for (const staff of staffUsers || []) {
     const { data: emp } = await supabase
       .from('staff_employment')
@@ -880,7 +1139,39 @@ async function handlePostPayRun(
       amount: Number(b.amount) || 0,
     }))
     const benefitsTotal = benefitLines.reduce((s, l) => s + l.amount, 0)
-    const gross = base + benefitsTotal
+
+    // Mid-month rem/benefit expenses already paid → earning + matching deduction
+    const linkedExpenseLines: {
+      id: string
+      name: string
+      amount: number
+      date: string
+    }[] = []
+    let linkedExpensesTotal = 0
+    if (remCat) {
+      const { data: linkedRows, error: lErr } = await supabase
+        .from('expenses')
+        .select('id, amount, expense_date, vendor, notes')
+        .eq('staff_user_id', staff.id)
+        .eq('category_id', remCat.id)
+        .is('pay_run_id', null)
+        .gte('expense_date', periodFrom)
+        .lte('expense_date', periodTo)
+      if (lErr) throw lErr
+      for (const row of linkedRows || []) {
+        const amt = Number(row.amount) || 0
+        if (!(amt > 0)) continue
+        linkedExpensesTotal += amt
+        linkedExpenseLines.push({
+          id: row.id,
+          name: String(row.vendor || row.notes || 'Staff remuneration / benefits').trim(),
+          amount: amt,
+          date: String(row.expense_date).slice(0, 10),
+        })
+      }
+    }
+
+    const gross = base + benefitsTotal + linkedExpensesTotal
 
     const { data: advances } = await supabase
       .from('salary_advances')
@@ -905,11 +1196,14 @@ async function handlePostPayRun(
         .eq('id', adv.id)
     }
 
-    const net = Math.max(0, gross - advancesRecovered)
+    const deductionsTotal = advancesRecovered + linkedExpensesTotal
+    const net = Math.max(0, gross - deductionsTotal)
+    totalNet += net
+    const staffName = String(staff.name || 'Staff').trim() || 'Staff'
     const snapshot = {
       company_name: company.name,
       currency: company.currency,
-      staff_name: staff.name,
+      staff_name: staffName,
       email: staff.email,
       phone: staff.phone || null,
       employee_ref: String(staff.id).slice(0, 8).toUpperCase(),
@@ -923,9 +1217,12 @@ async function handlePostPayRun(
       payday,
       base_salary: base,
       benefits: benefitLines,
+      linked_expenses: linkedExpenseLines,
+      linked_expenses_total: linkedExpensesTotal,
       advances: advanceLines,
       benefits_total: benefitsTotal,
       advances_recovered: advancesRecovered,
+      deductions_total: deductionsTotal,
       gross,
       net,
     }
@@ -938,8 +1235,8 @@ async function handlePostPayRun(
         user_id: staff.id,
         job_title: emp.job_title,
         base_salary: base,
-        benefits_total: benefitsTotal,
-        advances_recovered: advancesRecovered,
+        benefits_total: benefitsTotal + linkedExpensesTotal,
+        advances_recovered: deductionsTotal,
         gross,
         net,
         snapshot,
@@ -948,6 +1245,22 @@ async function handlePostPayRun(
       .single()
     if (slipErr) throw slipErr
     slips.push(slip)
+
+    // Payday net → Expenses as Salary - {Name}
+    if (net > 0) {
+      const { error: salErr } = await supabase.from('expenses').insert({
+        expense_date: payday,
+        amount: net,
+        category_id: salaryCat.id,
+        vendor: `Salary - ${staffName}`,
+        method: 'eft',
+        reference: null,
+        notes: `Pay run ${periodYear}-${String(periodMonth).padStart(2, '0')}`,
+        staff_user_id: staff.id,
+        pay_run_id: runId,
+      })
+      if (salErr) throw salErr
+    }
   }
 
   const { data: run, error: postErr } = await supabase
@@ -962,7 +1275,13 @@ async function handlePostPayRun(
     .single()
   if (postErr) throw postErr
 
-  return json(200, { success: true, pay_run: run, payslips: slips })
+  return json(200, {
+    success: true,
+    pay_run: run,
+    payslips: slips,
+    staff_paid: slips.length,
+    total_net: totalNet,
+  })
 }
 
 async function handleLatestPayRun(
@@ -1055,6 +1374,18 @@ async function handleReverseLatestPayRun(
     }
   }
 
+  // Remove payday Salary - Name expense lines; keep mid-month rem/benefit + Advance expenses.
+  const { data: salaryExpenses, error: seErr } = await supabase
+    .from('expenses')
+    .select('id')
+    .eq('pay_run_id', run.id)
+  if (seErr) throw seErr
+  const salaryExpenseCount = (salaryExpenses || []).length
+  if (salaryExpenseCount > 0) {
+    const { error: delExpErr } = await supabase.from('expenses').delete().eq('pay_run_id', run.id)
+    if (delExpErr) throw delExpErr
+  }
+
   const { error: dErr } = await supabase.from('pay_runs').delete().eq('id', run.id)
   if (dErr) throw dErr
 
@@ -1068,6 +1399,7 @@ async function handleReverseLatestPayRun(
     },
     payslips_removed: (slips || []).length,
     advances_restored: advancesRestored,
+    salary_expenses_removed: salaryExpenseCount,
   })
 }
 
@@ -1161,6 +1493,209 @@ async function handleUpdatePaydaySettings(
   })
 }
 
+async function handlePaydayMorningReminder(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireCronOrAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+
+  const settings = await loadSettings(supabase)
+  const today = ymdInTz()
+  const payday = nextPayrollDate(settings, today)
+  if (payday !== today) {
+    return json(200, { success: true, skipped: true, reason: 'not_payday', today, next_payday: payday })
+  }
+
+  const periodYear = Number(payday.slice(0, 4))
+  const periodMonth = Number(payday.slice(5, 7))
+  const { data: existing } = await supabase
+    .from('pay_runs')
+    .select('id, status')
+    .eq('period_year', periodYear)
+    .eq('period_month', periodMonth)
+    .maybeSingle()
+  if (existing?.status === 'posted') {
+    return json(200, { success: true, skipped: true, reason: 'already_posted' })
+  }
+
+  const already = settings.payroll_reminder_sent_for
+    ? String(settings.payroll_reminder_sent_for).slice(0, 10)
+    : ''
+  if (already === today) {
+    return json(200, { success: true, skipped: true, reason: 'reminder_already_sent' })
+  }
+
+  const monthYear = formatMonthYear(periodYear, periodMonth)
+  const paydayLabel = formatPaydayDdMmYyyy(payday)
+  const admins = await listAdminRecipients(supabase)
+  let sent = 0
+  for (const admin of admins) {
+    const name = displayFirstName(admin)
+    const text = [
+      `Good morning ${name},`,
+      '',
+      `Today is the scheduled payroll date for ${monthYear} (payday ${paydayLabel}).`,
+      '',
+      'Please review and update all relevant records before end of business today so the run stays accurate and organised:',
+      '',
+      'Staff salaries and benefits',
+      'Salary advances',
+      'Staff-linked remuneration / benefit expenses already paid',
+      "Any other adjustments that should appear on this month's payslips",
+      '',
+      'You can post payroll manually at any time before the automatic run. Once posted, the automatic run for this period will be skipped.',
+      '',
+      'Kind regards,',
+      'iTreq Inc Payroll',
+    ].join('\n')
+    const result = await sendViaResend({
+      to: String(admin.email),
+      subject: 'Reminder: Payroll will run today — please finalise staff records',
+      text,
+    })
+    if (result.sent) sent += 1
+  }
+
+  await supabase
+    .from('company_settings')
+    .update({ payroll_reminder_sent_for: today })
+    .eq('id', 1)
+
+  return json(200, {
+    success: true,
+    payday,
+    emails_sent: sent,
+    recipients: admins.length,
+  })
+}
+
+async function handleAutoPostPayRunIfDue(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireCronOrAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+
+  const settings = await loadSettings(supabase)
+  const today = ymdInTz()
+  const payday = nextPayrollDate(settings, today)
+  if (payday !== today) {
+    return json(200, { success: true, skipped: true, reason: 'not_payday', today, next_payday: payday })
+  }
+
+  const periodYear = Number(payday.slice(0, 4))
+  const periodMonth = Number(payday.slice(5, 7))
+  const monthYear = formatMonthYear(periodYear, periodMonth)
+  const paydayLabel = formatPaydayDdMmYyyy(payday)
+  const currency = String(settings.currency || 'BWP')
+
+  const { data: existing } = await supabase
+    .from('pay_runs')
+    .select('id, status')
+    .eq('period_year', periodYear)
+    .eq('period_month', periodMonth)
+    .maybeSingle()
+  if (existing?.status === 'posted') {
+    return json(200, { success: true, skipped: true, reason: 'already_posted' })
+  }
+
+  const admins = await listAdminRecipients(supabase)
+
+  try {
+    const postRes = await handlePostPayRun(supabase, req, {
+      ...body,
+      payday,
+      period_year: periodYear,
+      period_month: periodMonth,
+      notes: body.notes || 'Automatic end-of-day payroll run',
+    })
+    const postBody = await postRes.json() as {
+      success?: boolean
+      message?: string
+      staff_paid?: number
+      total_net?: number
+      payslips?: unknown[]
+    }
+    if (!postRes.ok || postBody.success === false) {
+      const errMsg = postBody.message || `HTTP ${postRes.status}`
+      for (const admin of admins) {
+        const text = [
+          `Hello ${displayFirstName(admin)},`,
+          '',
+          `The automatic payroll run for ${monthYear} (payday ${paydayLabel}) did not complete successfully.`,
+          '',
+          `Error: ${errMsg}`,
+          '',
+          'Please review staff and payroll records, then post payroll manually from Staff / Payroll. If the problem continues, check server logs for the payroll function.',
+          '',
+          'Kind regards,',
+          'iTreq Inc Payroll',
+        ].join('\n')
+        await sendViaResend({
+          to: String(admin.email),
+          subject: `Payroll auto-run failed — ${monthYear}`,
+          text,
+        })
+      }
+      return json(postRes.status, { ...postBody, emails_notified: admins.length })
+    }
+
+    const staffPaid = Number(postBody.staff_paid ?? postBody.payslips?.length) || 0
+    const totalNet = Number(postBody.total_net) || 0
+    for (const admin of admins) {
+      const text = [
+        `Hello ${displayFirstName(admin)},`,
+        '',
+        `Payroll for ${monthYear} (payday ${paydayLabel}) has been posted successfully.`,
+        '',
+        `Staff paid: ${staffPaid}`,
+        `Total net pay recorded: ${formatMoney(totalNet, currency)}`,
+        '',
+        "Each person's net pay is listed under Expenses. You can review the run and payslips in Staff / Payroll.",
+        '',
+        'Kind regards,',
+        'iTreq Inc Payroll',
+      ].join('\n')
+      await sendViaResend({
+        to: String(admin.email),
+        subject: `Payroll completed — ${monthYear}`,
+        text,
+      })
+    }
+
+    return json(200, {
+      ...postBody,
+      auto: true,
+      emails_notified: admins.length,
+    })
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unexpected error'
+    for (const admin of admins) {
+      const text = [
+        `Hello ${displayFirstName(admin)},`,
+        '',
+        `The automatic payroll run for ${monthYear} (payday ${paydayLabel}) did not complete successfully.`,
+        '',
+        `Error: ${errMsg}`,
+        '',
+        'Please review staff and payroll records, then post payroll manually from Staff / Payroll. If the problem continues, check server logs for the payroll function.',
+        '',
+        'Kind regards,',
+        'iTreq Inc Payroll',
+      ].join('\n')
+      await sendViaResend({
+        to: String(admin.email),
+        subject: `Payroll auto-run failed — ${monthYear}`,
+        text,
+      })
+    }
+    throw err
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -1214,6 +1749,10 @@ serve(async (req) => {
         return await handleGetPayslip(supabase, req, body)
       case 'update_payday_settings':
         return await handleUpdatePaydaySettings(supabase, req, body)
+      case 'payday_morning_reminder':
+        return await handlePaydayMorningReminder(supabase, req, body)
+      case 'auto_post_pay_run_if_due':
+        return await handleAutoPostPayRunIfDue(supabase, req, body)
       default:
         return json(400, { success: false, message: `Unknown action: ${action}` })
     }

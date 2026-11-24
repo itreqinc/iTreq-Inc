@@ -93,6 +93,7 @@ export default function StaffPage() {
   const [benefitAmount, setBenefitAmount] = useState('')
   const [editingBenefitId, setEditingBenefitId] = useState(null)
   const [advanceAmount, setAdvanceAmount] = useState('')
+  const [advanceDate, setAdvanceDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [advanceNotes, setAdvanceNotes] = useState('')
   const [editingAdvanceId, setEditingAdvanceId] = useState(null)
   const [payBusy, setPayBusy] = useState(false)
@@ -177,6 +178,7 @@ export default function StaffPage() {
       setEditingAdvanceId(null)
       setBenefitAmount('')
       setAdvanceAmount('')
+      setAdvanceDate(new Date().toISOString().slice(0, 10))
       setAdvanceNotes('')
     },
     [showError],
@@ -431,6 +433,9 @@ export default function StaffPage() {
   function startEditAdvance(advance) {
     setEditingAdvanceId(advance.id)
     setAdvanceAmount(String(advance.amount ?? advance.remaining ?? ''))
+    setAdvanceDate(
+      String(advance.advance_date || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+    )
     setAdvanceNotes(advance.notes || '')
     setEditingBenefitId(null)
   }
@@ -438,6 +443,7 @@ export default function StaffPage() {
   function cancelEditAdvance() {
     setEditingAdvanceId(null)
     setAdvanceAmount('')
+    setAdvanceDate(new Date().toISOString().slice(0, 10))
     setAdvanceNotes('')
   }
 
@@ -521,27 +527,30 @@ export default function StaffPage() {
       const { data, error } = await payrollApi.updateAdvance({
         advance_id: editingAdvance.id,
         amount,
+        advance_date: advanceDate,
         notes: advanceNotes || null,
       })
       if (error || data?.success === false) {
         showError(error?.message || data?.message || 'Could not update advance')
         return
       }
-      showSuccess('Salary advance updated.')
+      showSuccess('Salary advance updated (expense synced).')
     } else {
       const { data, error } = await payrollApi.createAdvance({
         user_id: selectedId,
         amount,
+        advance_date: advanceDate,
         notes: advanceNotes || null,
       })
       if (error || data?.success === false) {
         showError(error?.message || data?.message || 'Could not record advance')
         return
       }
-      showSuccess('Salary advance recorded.')
+      showSuccess('Salary advance recorded (expense synced).')
     }
     setEditingAdvanceId(null)
     setAdvanceAmount('')
+    setAdvanceDate(new Date().toISOString().slice(0, 10))
     setAdvanceNotes('')
     await loadDetail(selectedId)
   }
@@ -1198,6 +1207,12 @@ export default function StaffPage() {
                                     <span className="text-ink-200">{editingAdvance.advance_date}</span>
                                   </p>
                                 ) : null}
+                                <YearMonthDaySelect
+                                  label="Advance date"
+                                  required
+                                  value={advanceDate}
+                                  onChange={setAdvanceDate}
+                                />
                                 <input
                                   type="number"
                                   min="0.01"

@@ -86,4 +86,8 @@ export const payrollApi = {
     payrollAction('list_payslips', userId ? { user_id: userId } : {}),
   getPayslip: (payslipId) => payrollAction('get_payslip', { payslip_id: payslipId }),
   updatePaydaySettings: (payload) => payrollAction('update_payday_settings', payload),
+  paydayMorningReminder: (payload = {}) =>
+    payrollAction('payday_morning_reminder', payload),
+  autoPostPayRunIfDue: (payload = {}) =>
+    payrollAction('auto_post_pay_run_if_due', payload),
 }

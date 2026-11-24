@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
+import { payrollApi } from '../../lib/payrollApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
 import { useOpsAlert } from '../OpsAlertContext'
@@ -53,6 +54,7 @@ function emptyExpenseForm() {
     expense_date: readLastExpenseDate(),
     amount: '',
     category_id: '',
+    staff_user_id: '',
     vendor: '',
     method: 'cash',
     reference: '',
@@ -60,11 +62,17 @@ function emptyExpenseForm() {
   }
 }
 
+function categorySystemKey(categories, categoryId) {
+  const cat = (categories || []).find((c) => String(c.id) === String(categoryId))
+  return cat?.system_key || null
+}
+
 function snapshotExpenseForm(form) {
   return JSON.stringify({
     expense_date: form.expense_date || '',
     amount: String(form.amount ?? ''),
     category_id: form.category_id || '',
+    staff_user_id: form.staff_user_id || '',
     vendor: String(form.vendor || '').trim(),
     method: form.method || 'cash',
     reference: String(form.reference || '').trim(),
@@ -122,6 +130,8 @@ export default function ExpensesPage() {
     useScrollAndHighlight()
   const [rows, setRows] = useState([])
   const [categories, setCategories] = useState([])
+  const [staffOptions, setStaffOptions] = useState([])
+  const [linkedAdvanceId, setLinkedAdvanceId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -139,9 +149,10 @@ export default function ExpensesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [e, c] = await Promise.all([
+    const [e, c, s] = await Promise.all([
       opsApi.listExpenses(),
       opsApi.listExpenseCategories({ activeOnly: false }),
+      payrollApi.listStaffHr(),
     ])
     setLoading(false)
     if (e.error) {
@@ -151,6 +162,18 @@ export default function ExpensesPage() {
     if (c.error) showError(c.error.message)
     setRows(e.data || [])
     setCategories(c.data || [])
+    if (!s.error && s.data?.success !== false) {
+      const people = s.data?.staff || s.data?.users || []
+      setStaffOptions(
+        (people || [])
+          .filter((p) => p.is_active !== false)
+          .map((p) => ({
+            value: p.id || p.user_id,
+            label: p.name || [p.first_name, p.surname].filter(Boolean).join(' ') || 'Staff',
+          }))
+          .filter((o) => o.value),
+      )
+    }
   }, [showError])
 
   useEffect(() => {
@@ -158,9 +181,21 @@ export default function ExpensesPage() {
   }, [load])
 
   const activeCategories = useMemo(
-    () => (categories || []).filter((c) => c.active || c.id === form.category_id),
+    () =>
+      (categories || []).filter((c) => {
+        // Payday Salary lines are system-generated — hide from the picker.
+        if (c.system_key === 'salary' && c.id !== form.category_id) return false
+        return c.active || c.id === form.category_id
+      }),
     [categories, form.category_id],
   )
+
+  const selectedSystemKey = useMemo(
+    () => categorySystemKey(categories, form.category_id),
+    [categories, form.category_id],
+  )
+  const needsStaffLink =
+    selectedSystemKey === 'staff_rem_benefits' || selectedSystemKey === 'salary_advance'
 
   /** Distinct vendors previously used for the selected category (case-insensitive). */
   const vendorsForCategory = useMemo(() => {
@@ -211,11 +246,12 @@ export default function ExpensesPage() {
     [editingId, form, baseline],
   )
 
-  const applyExpenseToForm = useCallback((data) => {
+  const applyExpenseToForm = useCallback(async (data) => {
     const nextForm = {
       expense_date: data.expense_date || todayIso(),
       amount: String(data.amount ?? ''),
       category_id: data.category_id || '',
+      staff_user_id: data.staff_user_id || '',
       vendor: data.vendor || '',
       method: data.method || 'cash',
       reference: data.reference || '',
@@ -225,6 +261,9 @@ export default function ExpensesPage() {
     setForm(nextForm)
     setBaseline(snapshotExpenseForm(nextForm))
     setShowForm(true)
+    setLinkedAdvanceId(null)
+    const { data: adv } = await opsApi.getAdvanceForExpense(data.id)
+    if (adv?.id) setLinkedAdvanceId(adv.id)
   }, [])
 
   const openRow = useCallback(
@@ -259,6 +298,7 @@ export default function ExpensesPage() {
   const openNewForm = useCallback(() => {
     clearExpenseEditId()
     setEditingId(null)
+    setLinkedAdvanceId(null)
     setBaseline('')
     setForm(emptyExpenseForm())
     setShowForm(true)
@@ -334,6 +374,7 @@ export default function ExpensesPage() {
   function closeForm() {
     setShowForm(false)
     setEditingId(null)
+    setLinkedAdvanceId(null)
     setBaseline('')
     setForm(emptyExpenseForm())
     clearExpenseEditId()
@@ -347,10 +388,13 @@ export default function ExpensesPage() {
   }
 
   function onCategoryChange(categoryId) {
+    const key = categorySystemKey(categories, categoryId)
     setForm((f) => ({
       ...f,
       category_id: categoryId,
-      vendor: '',
+      vendor: key === 'salary_advance' || key === 'staff_rem_benefits' ? f.vendor : '',
+      staff_user_id:
+        key === 'salary_advance' || key === 'staff_rem_benefits' ? f.staff_user_id : '',
     }))
   }
 
@@ -396,20 +440,6 @@ export default function ExpensesPage() {
           />
           <label className="block">
             <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Amount (P) *
-            </span>
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              required
-              className={adminFieldClass}
-              value={form.amount}
-              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
               Category *
             </span>
             <SearchableSelect
@@ -420,6 +450,36 @@ export default function ExpensesPage() {
               placeholder="Type to find a category…"
               emptyMessage="No matching categories"
               clearAriaLabel="Clear category"
+            />
+          </label>
+          {needsStaffLink ? (
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Linked staff *
+              </span>
+              <SearchableSelect
+                required
+                options={staffOptions}
+                value={form.staff_user_id}
+                onChange={(staff_user_id) => setForm((f) => ({ ...f, staff_user_id }))}
+                placeholder="Type to find a staff member…"
+                emptyMessage="No matching staff"
+                clearAriaLabel="Clear staff"
+              />
+            </label>
+          ) : null}
+          <label className="block">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              Amount (P) *
+            </span>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              required
+              className={adminFieldClass}
+              value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
             />
           </label>
           <label className="block">
@@ -438,27 +498,29 @@ export default function ExpensesPage() {
               ))}
             </select>
           </label>
-          <label className="block sm:col-span-2">
-            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-              Who was paid (optional)
-            </span>
-            <SearchableSelect
-              allowCustom
-              disabled={!form.category_id}
-              options={vendorOptions}
-              value={form.vendor}
-              onChange={(vendor) => setForm((f) => ({ ...f, vendor }))}
-              placeholder={
-                form.category_id
-                  ? vendorsForCategory.length
-                    ? 'Type to find or add a supplier…'
-                    : 'Type a supplier name…'
-                  : 'Select a category first'
-              }
-              emptyMessage="No matching suppliers — keep typing to add new"
-              clearAriaLabel="Clear supplier"
-            />
-          </label>
+          {selectedSystemKey === 'salary_advance' ? null : (
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Who was paid (optional)
+              </span>
+              <SearchableSelect
+                allowCustom
+                disabled={!form.category_id}
+                options={vendorOptions}
+                value={form.vendor}
+                onChange={(vendor) => setForm((f) => ({ ...f, vendor }))}
+                placeholder={
+                  form.category_id
+                    ? vendorsForCategory.length
+                      ? 'Type to find or add a supplier…'
+                      : 'Type a supplier name…'
+                    : 'Select a category first'
+                }
+                emptyMessage="No matching suppliers — keep typing to add new"
+                clearAriaLabel="Clear supplier"
+              />
+            </label>
+          )}
           <label className="block sm:col-span-2">
             <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
               Reference (optional)
@@ -567,30 +629,106 @@ export default function ExpensesPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (needsStaffLink && !form.staff_user_id) {
+      showError('Select the linked staff member.')
+      return
+    }
+    const isAdvance = selectedSystemKey === 'salary_advance'
     const ok = await confirm({
       title: editingId ? 'Save expense changes?' : 'Record this expense?',
       message: editingId
         ? 'Your updates to this expense will be saved.'
-        : `Record ${formatPula(form.amount)} as an expense?`,
+        : isAdvance
+          ? `Record a salary advance of ${formatPula(form.amount)}? This also creates an Advances row.`
+          : `Record ${formatPula(form.amount)} as an expense?`,
       confirmLabel: editingId ? 'Save' : 'Record',
     })
     if (!ok) return
 
     setSaving(true)
-    const { data: saved, error } = await opsApi.saveExpense({
-      id: editingId,
-      ...form,
-    })
+    let saved = null
+    let error = null
+
+    if (isAdvance) {
+      if (editingId && linkedAdvanceId) {
+        const res = await payrollApi.updateAdvance({
+          advance_id: linkedAdvanceId,
+          amount: Number(form.amount),
+          advance_date: form.expense_date,
+          notes: form.notes || null,
+          method: form.method || 'eft',
+          reference: form.reference || null,
+        })
+        error = res.error || (res.data?.success === false ? { message: res.data.message } : null)
+        saved = res.data?.expense || null
+        if (!saved && !error && editingId) {
+          const again = await opsApi.getExpense(editingId)
+          saved = again.data
+          error = again.error
+        }
+      } else if (editingId && !linkedAdvanceId) {
+        // Legacy advance expense without link — save expense then create advance pair is awkward;
+        // create advance which writes a new expense, then delete old row.
+        const res = await payrollApi.createAdvance({
+          user_id: form.staff_user_id,
+          amount: Number(form.amount),
+          advance_date: form.expense_date,
+          notes: form.notes || null,
+          method: form.method || 'eft',
+          reference: form.reference || null,
+        })
+        error = res.error || (res.data?.success === false ? { message: res.data.message } : null)
+        if (!error) {
+          await opsApi.deleteExpense(editingId)
+          saved = res.data?.expense || null
+        }
+      } else {
+        const res = await payrollApi.createAdvance({
+          user_id: form.staff_user_id,
+          amount: Number(form.amount),
+          advance_date: form.expense_date,
+          notes: form.notes || null,
+          method: form.method || 'eft',
+          reference: form.reference || null,
+        })
+        error = res.error || (res.data?.success === false ? { message: res.data.message } : null)
+        saved = res.data?.expense || null
+      }
+      if (saved && !saved.expense_categories) {
+        const again = await opsApi.getExpense(saved.id)
+        if (again.data) saved = again.data
+      }
+    } else {
+      const res = await opsApi.saveExpense({
+        id: editingId,
+        ...form,
+        staff_user_id: needsStaffLink ? form.staff_user_id : null,
+      })
+      saved = res.data
+      error = res.error
+    }
+
     setSaving(false)
     if (error) {
       showError(error.message)
       return
     }
+    if (!saved) {
+      showError('Could not save expense.')
+      return
+    }
+    // Refresh list so advance-linked rows appear with joins.
+    await load()
     rememberLastExpenseDate(form.expense_date || saved?.expense_date)
     closeForm()
-    // Solid highlight while the success modal is open; fade starts after OK.
     placeSavedRow(saved, { hold: true })
-    await showSuccess(editingId ? 'Expense updated.' : 'Expense recorded.')
+    await showSuccess(
+      editingId
+        ? 'Expense updated.'
+        : isAdvance
+          ? 'Salary advance recorded (expense + advances).'
+          : 'Expense recorded.',
+    )
     releaseHighlight()
   }
 
@@ -602,7 +740,15 @@ export default function ExpensesPage() {
     })
     if (!ok) return
     setSaving(true)
-    const { error } = await opsApi.deleteExpense(row.id)
+    const { data: adv } = await opsApi.getAdvanceForExpense(row.id)
+    let error = null
+    if (adv?.id) {
+      const res = await payrollApi.deleteAdvance(adv.id)
+      error = res.error || (res.data?.success === false ? { message: res.data.message } : null)
+    } else {
+      const res = await opsApi.deleteExpense(row.id)
+      error = res.error
+    }
     setSaving(false)
     if (error) {
       showError(error.message)

@@ -1,0 +1,68 @@
+# Daily payroll timers (Africa/Gaborone = UTC+2, no DST).
+# Only acts on payday; other days the function returns skipped: true.
+#
+# Required GitHub repo secrets:
+#   SUPABASE_URL              e.g. https://gtsjiqbohbgzwqfqkgyr.supabase.co
+#   SUPABASE_ANON_KEY         Project Settings → API → anon public
+#   PAYROLL_CRON_SECRET       same value as Supabase Edge secret PAYROLL_CRON_SECRET
+
+name: Payroll cron
+
+on:
+  schedule:
+    # 07:00 Gaborone → morning reminder
+    - cron: '0 5 * * *'
+    # 23:59 Gaborone → auto-post payroll
+    - cron: '59 21 * * *'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Which payroll action to run'
+        required: true
+        default: 'payday_morning_reminder'
+        type: choice
+        options:
+          - payday_morning_reminder
+          - auto_post_pay_run_if_due
+
+jobs:
+  call-payroll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve action
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 5 * * *" ]; then
+            echo "action=payday_morning_reminder" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=auto_post_pay_run_if_due" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: POST payroll function
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PAYROLL_CRON_SECRET: ${{ secrets.PAYROLL_CRON_SECRET }}
+          ACTION: ${{ steps.pick.outputs.action }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ] || [ -z "${PAYROLL_CRON_SECRET:-}" ]; then
+            echo "Missing GitHub secrets: SUPABASE_URL, SUPABASE_ANON_KEY, and/or PAYROLL_CRON_SECRET"
+            exit 1
+          fi
+          BODY=$(jq -nc --arg a "$ACTION" --arg s "$PAYROLL_CRON_SECRET" '{action:$a, cron_secret:$s}')
+          echo "Calling action=$ACTION"
+          RESP=$(curl -sS -w "\n%{http_code}" -X POST "${SUPABASE_URL}/functions/v1/payroll" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+          CODE=$(echo "$RESP" | tail -n1)
+          JSON=$(echo "$RESP" | sed '$d')
+          echo "$JSON" | jq . || echo "$JSON"
+          if [ "$CODE" -lt 200 ] || [ "$CODE" -ge 300 ]; then
+            echo "HTTP $CODE"
+            exit 1
+          fi

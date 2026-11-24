@@ -84,20 +84,31 @@ export function buildPayslipHtml(payslip, settings = null) {
     .filter(Boolean)
     .join('<br/>')
 
+  const linkedExpenses = Array.isArray(snap.linked_expenses) ? snap.linked_expenses : []
+
   const earningRows = [
     `<tr><td>Basic salary</td><td class="amt">${money(base)}</td></tr>`,
     ...benefits.map(
       (b) => `<tr><td>${esc(b.name)}</td><td class="amt">${money(b.amount)}</td></tr>`,
     ),
+    ...linkedExpenses.map(
+      (e) =>
+        `<tr><td>${esc(e.name || 'Already paid')}${e.date ? ` <span class="sub">(${esc(String(e.date).slice(0, 10))})</span>` : ''} <span class="sub">(already paid)</span></td><td class="amt">${money(e.amount)}</td></tr>`,
+    ),
   ].join('')
 
-  const deductionRows = advances.length
-    ? advances
-        .map(
-          (a) =>
-            `<tr><td>Salary advance recovery${a.date ? ` <span class="sub">(${esc(String(a.date).slice(0, 10))})</span>` : ''}</td><td class="amt">${money(a.amount)}</td></tr>`,
-        )
-        .join('')
+  const deductionParts = [
+    ...advances.map(
+      (a) =>
+        `<tr><td>Salary advance recovery${a.date ? ` <span class="sub">(${esc(String(a.date).slice(0, 10))})</span>` : ''}</td><td class="amt">${money(a.amount)}</td></tr>`,
+    ),
+    ...linkedExpenses.map(
+      (e) =>
+        `<tr><td>Already paid${e.date ? ` <span class="sub">(${esc(String(e.date).slice(0, 10))})</span>` : ''}</td><td class="amt">${money(e.amount)}</td></tr>`,
+    ),
+  ]
+  const deductionRows = deductionParts.length
+    ? deductionParts.join('')
     : `<tr><td class="empty">No deductions this period</td><td class="amt">${money(0)}</td></tr>`
 
   return `<!doctype html>
