@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { countries } from '../lib/phoneCountry'
+import { AdminSelectChevron } from '../admin/AdminSelectChevron'
 import {
   adminComboboxOptionActiveClass,
   adminComboboxOptionMetaClass,
   adminComboboxSurfaceClass,
   adminFieldClass,
+  adminSelectChevronPadClass,
 } from '../admin/ui'
 
 const RECENT_KEY = 'itreq_recent_countries'
@@ -138,12 +140,12 @@ export function CountryPhoneInput({
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className={`${adminFieldClass} flex h-[42px] items-center justify-between text-left ${
+          className={`${adminFieldClass} ${adminSelectChevronPadClass} relative flex h-[42px] items-center text-left ${
             errorCountry ? 'border-red-500/60' : ''
           }`}
         >
           {selectedCountry ? (
-            <span className="flex items-center gap-2 truncate">
+            <span className="flex min-w-0 items-center gap-2 truncate">
               <img
                 src={selectedCountry.flag}
                 alt=""
@@ -154,7 +156,7 @@ export function CountryPhoneInput({
           ) : (
             <span className="text-ink-500">Select country</span>
           )}
-          <span className="text-ink-500">▾</span>
+          <AdminSelectChevron />
         </button>
 
         {open ? (

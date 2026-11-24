@@ -60,6 +60,21 @@
     color: #fff;
   }
 
+  /*
+   * Shared dropdown caret (matches AdminSelectChevron on searchable fields).
+   * Skip aria-hidden validation stubs used by comboboxes.
+   */
+  select:not([aria-hidden='true']) {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%239aabbe'%3E%3Cpath d='M4.22 6.03a.75.75 0 0 1 1.06 0L8 8.75l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.09a.75.75 0 0 1 0-1.06z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+    background-size: 0.875rem 0.875rem;
+    /* Beat utility px-* so the shared caret has room */
+    padding-right: 2rem !important;
+  }
+
   #root {
     max-width: 100%;
     overflow-x: clip;

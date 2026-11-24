@@ -1,12 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { buildRecipientKey } from '../lib/quoteRecipient'
+import { AdminSelectChevron } from './AdminSelectChevron'
 import {
-  adminComboboxChevronClass,
   adminComboboxOptionActiveClass,
   adminComboboxOptionClass,
   adminComboboxOptionMetaClass,
   adminComboboxPanelClass,
   adminFieldClass,
+  adminSelectChevronPadClass,
 } from './ui'
 
 /**
@@ -139,7 +140,7 @@ export function QuoteRecipientSelect({
           aria-autocomplete="list"
           disabled={disabled}
           autoComplete="off"
-          className={`${adminFieldClass} ${value && !disabled ? 'pr-16' : 'pr-8'}`}
+          className={`${adminFieldClass} ${value && !disabled ? 'pr-16' : adminSelectChevronPadClass}`}
           placeholder={placeholder}
           value={open ? query : selected?.name || query}
           onChange={(e) => {
@@ -163,7 +164,7 @@ export function QuoteRecipientSelect({
             ×
           </button>
         ) : null}
-        {!disabled ? <span className={adminComboboxChevronClass} aria-hidden>▾</span> : null}
+        {!disabled ? <AdminSelectChevron /> : null}
       </div>
 
       {open && !disabled ? (

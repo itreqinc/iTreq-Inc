@@ -25,9 +25,8 @@ export const adminComboboxOptionActiveClass =
 /** Secondary line under an option (email, etc.) — inherits row colour. */
 export const adminComboboxOptionMetaClass = 'text-xs opacity-70'
 
-/** Native-select-style chevron on searchable fields. */
-export const adminComboboxChevronClass =
-  'pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] leading-none text-ink-400'
+/** Extra right padding so text clears the shared select chevron. */
+export const adminSelectChevronPadClass = 'pr-8'
 
 export const adminBtnPrimary =
   'inline-flex items-center justify-center rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brand-400 disabled:opacity-50'
