@@ -29,6 +29,7 @@ import {
   formatPula,
 } from '../ui'
 import { AdminIconAction } from '../AdminIconAction'
+import { SearchableSelect } from '../SearchableSelect'
 
 function sortExpenseRows(list, dateSort) {
   const dir = dateSort === 'asc' ? 1 : -1
@@ -109,8 +110,6 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState(null)
   const [baseline, setBaseline] = useState('')
   const [form, setForm] = useState(emptyExpenseForm)
-  /** True when the vendor dropdown is on “New supplier…” (free-text entry). */
-  const [vendorNewMode, setVendorNewMode] = useState(false)
   /** List date order: newest first by default. */
   const [dateSort, setDateSort] = useState('desc')
   /**
@@ -161,6 +160,20 @@ export default function ExpensesPage() {
     )
   }, [rows, form.category_id])
 
+  const categoryOptions = useMemo(
+    () =>
+      activeCategories.map((c) => ({
+        value: c.id,
+        label: c.active ? c.name : `${c.name} (inactive)`,
+      })),
+    [activeCategories],
+  )
+
+  const vendorOptions = useMemo(
+    () => vendorsForCategory.map((name) => ({ value: name, label: name })),
+    [vendorsForCategory],
+  )
+
   const visibleRows = useMemo(() => {
     const filtered = filterByDateRange(rows, dateFrom, dateTo, (row) => row.expense_date)
     return sortExpenseRows(filtered, dateSort)
@@ -199,7 +212,6 @@ export default function ExpensesPage() {
       setEditingId(data.id)
       setForm(nextForm)
       setBaseline(snapshotExpenseForm(nextForm))
-      setVendorNewMode(false)
       setShowForm(true)
     },
     [showError],
@@ -218,7 +230,6 @@ export default function ExpensesPage() {
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
-    setVendorNewMode(false)
     setForm(emptyExpenseForm())
   }
 
@@ -228,10 +239,17 @@ export default function ExpensesPage() {
     if (firstActive) next.category_id = firstActive.id
     setEditingId(null)
     setBaseline('')
-    setVendorNewMode(false)
     setForm(next)
     setShowForm(true)
     scrollToForm()
+  }
+
+  function onCategoryChange(categoryId) {
+    setForm((f) => ({
+      ...f,
+      category_id: categoryId,
+      vendor: '',
+    }))
   }
 
   function goToSavedPeek() {
@@ -401,33 +419,15 @@ export default function ExpensesPage() {
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
                 Category *
               </span>
-              <select
+              <SearchableSelect
                 required
-                className={adminFieldClass}
+                options={categoryOptions}
                 value={form.category_id}
-                onChange={(e) => {
-                  const categoryId = e.target.value
-                  const hasPrior = (rows || []).some(
-                    (row) =>
-                      String(row.category_id) === String(categoryId) &&
-                      String(row.vendor || '').trim(),
-                  )
-                  setVendorNewMode(Boolean(categoryId) && !hasPrior)
-                  setForm((f) => ({
-                    ...f,
-                    category_id: categoryId,
-                    vendor: '',
-                  }))
-                }}
-              >
-                <option value="">Select…</option>
-                {activeCategories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {!c.active ? ' (inactive)' : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={onCategoryChange}
+                placeholder="Type to find a category…"
+                emptyMessage="No matching categories"
+                clearAriaLabel="Clear category"
+              />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
@@ -445,62 +445,27 @@ export default function ExpensesPage() {
                 ))}
               </select>
             </label>
-            <div className="space-y-2 sm:col-span-2">
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                  Who was paid (optional)
-                </span>
-                <select
-                  className={adminFieldClass}
-                  disabled={!form.category_id}
-                  value={
-                    !form.category_id
-                      ? ''
-                      : vendorNewMode
-                        ? '__new__'
-                        : String(form.vendor || '').trim()
-                  }
-                  onChange={(e) => {
-                    const next = e.target.value
-                    if (next === '__new__') {
-                      setVendorNewMode(true)
-                      setForm((f) => ({ ...f, vendor: '' }))
-                      return
-                    }
-                    setVendorNewMode(false)
-                    setForm((f) => ({ ...f, vendor: next }))
-                  }}
-                >
-                  <option value="">
-                    {form.category_id
-                      ? vendorsForCategory.length
-                        ? 'Select supplier…'
-                        : 'No prior suppliers for this category'
-                      : 'Select a category first'}
-                  </option>
-                  {vendorsForCategory.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                  <option value="__new__">New supplier…</option>
-                </select>
-              </label>
-              {form.category_id && vendorNewMode ? (
-                <label className="block">
-                  <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                    New supplier name
-                  </span>
-                  <input
-                    className={adminFieldClass}
-                    value={form.vendor}
-                    onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))}
-                    placeholder="Who was paid"
-                    autoFocus
-                  />
-                </label>
-              ) : null}
-            </div>
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                Who was paid (optional)
+              </span>
+              <SearchableSelect
+                allowCustom
+                disabled={!form.category_id}
+                options={vendorOptions}
+                value={form.vendor}
+                onChange={(vendor) => setForm((f) => ({ ...f, vendor }))}
+                placeholder={
+                  form.category_id
+                    ? vendorsForCategory.length
+                      ? 'Type to find or add a supplier…'
+                      : 'Type a supplier name…'
+                    : 'Select a category first'
+                }
+                emptyMessage="No matching suppliers — keep typing to add new"
+                clearAriaLabel="Clear supplier"
+              />
+            </label>
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
                 Reference (optional)
