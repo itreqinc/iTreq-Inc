@@ -70,6 +70,8 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState(null)
   const [baseline, setBaseline] = useState('')
   const [form, setForm] = useState(emptyExpenseForm)
+  /** True when the vendor dropdown is on “New supplier…” (free-text entry). */
+  const [vendorNewMode, setVendorNewMode] = useState(false)
   const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.expenses')
 
   const load = useCallback(async () => {
@@ -96,6 +98,22 @@ export default function ExpensesPage() {
     () => (categories || []).filter((c) => c.active || c.id === form.category_id),
     [categories, form.category_id],
   )
+
+  /** Distinct vendors previously used for the selected category (case-insensitive). */
+  const vendorsForCategory = useMemo(() => {
+    if (!form.category_id) return []
+    const seen = new Map()
+    for (const row of rows || []) {
+      if (String(row.category_id) !== String(form.category_id)) continue
+      const name = String(row.vendor || '').trim()
+      if (!name) continue
+      const key = name.toLowerCase()
+      if (!seen.has(key)) seen.set(key, name)
+    }
+    return [...seen.values()].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' }),
+    )
+  }, [rows, form.category_id])
 
   const visibleRows = useMemo(
     () => filterByDateRange(rows, dateFrom, dateTo, (row) => row.expense_date),
@@ -131,6 +149,7 @@ export default function ExpensesPage() {
       setEditingId(data.id)
       setForm(nextForm)
       setBaseline(snapshotExpenseForm(nextForm))
+      setVendorNewMode(false)
       setShowForm(true)
     },
     [showError],
@@ -149,6 +168,7 @@ export default function ExpensesPage() {
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
+    setVendorNewMode(false)
     setForm(emptyExpenseForm())
   }
 
@@ -158,6 +178,7 @@ export default function ExpensesPage() {
     if (firstActive) next.category_id = firstActive.id
     setEditingId(null)
     setBaseline('')
+    setVendorNewMode(false)
     setForm(next)
     setShowForm(true)
   }
@@ -279,7 +300,20 @@ export default function ExpensesPage() {
                 required
                 className={adminFieldClass}
                 value={form.category_id}
-                onChange={(e) => setForm((f) => ({ ...f, category_id: e.target.value }))}
+                onChange={(e) => {
+                  const categoryId = e.target.value
+                  const hasPrior = (rows || []).some(
+                    (row) =>
+                      String(row.category_id) === String(categoryId) &&
+                      String(row.vendor || '').trim(),
+                  )
+                  setVendorNewMode(Boolean(categoryId) && !hasPrior)
+                  setForm((f) => ({
+                    ...f,
+                    category_id: categoryId,
+                    vendor: '',
+                  }))
+                }}
               >
                 <option value="">Select…</option>
                 {activeCategories.map((c) => (
@@ -306,17 +340,62 @@ export default function ExpensesPage() {
                 ))}
               </select>
             </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Vendor / supplier (optional)
-              </span>
-              <input
-                className={adminFieldClass}
-                value={form.vendor}
-                onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))}
-                placeholder="Who was paid"
-              />
-            </label>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="block">
+                <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                  Who was paid (optional)
+                </span>
+                <select
+                  className={adminFieldClass}
+                  disabled={!form.category_id}
+                  value={
+                    !form.category_id
+                      ? ''
+                      : vendorNewMode
+                        ? '__new__'
+                        : String(form.vendor || '').trim()
+                  }
+                  onChange={(e) => {
+                    const next = e.target.value
+                    if (next === '__new__') {
+                      setVendorNewMode(true)
+                      setForm((f) => ({ ...f, vendor: '' }))
+                      return
+                    }
+                    setVendorNewMode(false)
+                    setForm((f) => ({ ...f, vendor: next }))
+                  }}
+                >
+                  <option value="">
+                    {form.category_id
+                      ? vendorsForCategory.length
+                        ? 'Select supplier…'
+                        : 'No prior suppliers for this category'
+                      : 'Select a category first'}
+                  </option>
+                  {vendorsForCategory.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                  <option value="__new__">New supplier…</option>
+                </select>
+              </label>
+              {form.category_id && vendorNewMode ? (
+                <label className="block">
+                  <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+                    New supplier name
+                  </span>
+                  <input
+                    className={adminFieldClass}
+                    value={form.vendor}
+                    onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))}
+                    placeholder="Who was paid"
+                    autoFocus
+                  />
+                </label>
+              ) : null}
+            </div>
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
                 Reference (optional)
