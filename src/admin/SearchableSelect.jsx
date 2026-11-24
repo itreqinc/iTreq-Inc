@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
+  adminComboboxChevronClass,
   adminComboboxOptionActiveClass,
   adminComboboxOptionClass,
   adminComboboxOptionMetaClass,
@@ -155,7 +156,7 @@ export function SearchableSelect({
           aria-autocomplete="list"
           disabled={disabled}
           autoComplete="off"
-          className={`${adminFieldClass}${value && !disabled ? ' pr-14' : ''}`}
+          className={`${adminFieldClass} ${value && !disabled ? 'pr-16' : 'pr-8'}`}
           placeholder={placeholder}
           value={open ? query : selected?.label || query}
           onChange={(e) => {
@@ -179,17 +180,18 @@ export function SearchableSelect({
             type="button"
             aria-label={clearAriaLabel}
             onClick={clear}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-1.5 text-xs text-ink-400 hover:text-ink-200"
+            className="absolute right-7 top-1/2 -translate-y-1/2 rounded-md px-1 text-xs text-ink-400 hover:text-ink-200"
           >
-            Clear
+            ×
           </button>
         ) : null}
+        {!disabled ? <span className={adminComboboxChevronClass} aria-hidden>▾</span> : null}
       </div>
 
       {open && !disabled ? (
         <ul id={listId} role="listbox" className={adminComboboxPanelClass}>
           {listItems.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-ink-500">{emptyMessage}</li>
+            <li className="px-3 py-2 text-sm text-ink-400">{emptyMessage}</li>
           ) : (
             listItems.map((o, i) => (
               <li key={o.__custom ? `__custom:${o.value}` : String(o.value)} role="option" aria-selected={String(o.value) === String(value)}>

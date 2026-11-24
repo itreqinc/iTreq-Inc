@@ -159,7 +159,7 @@ export function CountryPhoneInput({
 
         {open ? (
           <div className={`absolute z-50 mt-1 w-full overflow-hidden ${adminComboboxSurfaceClass}`}>
-            <div className="border-b border-black/10 p-2">
+            <div className="border-b border-white/10 p-2">
               <input
                 autoFocus
                 value={search}
@@ -168,19 +168,19 @@ export function CountryPhoneInput({
                   setHighlightIndex(0)
                 }}
                 placeholder="Type country name"
-                className="w-full rounded-md border border-black/20 bg-white px-3 py-2 text-sm text-ink-950 outline-none placeholder:text-ink-500 focus:border-[#0078d4] focus:ring-1 focus:ring-[#0078d4]/40"
+                className={adminFieldClass}
               />
             </div>
             <div ref={listRef} className="max-h-60 overflow-y-auto py-0.5">
               {filteredCountries.length === 0 ? (
-                <div className="px-3 py-3 text-sm text-ink-500">No countries found</div>
+                <div className="px-3 py-3 text-sm text-ink-400">No countries found</div>
               ) : (
                 filteredCountries.map((c, i) => (
                   <button
                     key={c.code}
                     type="button"
                     onClick={() => selectCountry(c)}
-                    className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm text-ink-950 hover:bg-[#0078d4] hover:text-white ${
+                    className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm text-white hover:bg-[#0078d4] hover:text-white ${
                       i === highlightIndex ? adminComboboxOptionActiveClass : ''
                     }`}
                   >

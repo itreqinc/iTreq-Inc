@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { buildRecipientKey } from '../lib/quoteRecipient'
 import {
+  adminComboboxChevronClass,
   adminComboboxOptionActiveClass,
   adminComboboxOptionClass,
   adminComboboxOptionMetaClass,
@@ -138,7 +139,7 @@ export function QuoteRecipientSelect({
           aria-autocomplete="list"
           disabled={disabled}
           autoComplete="off"
-          className={adminFieldClass}
+          className={`${adminFieldClass} ${value && !disabled ? 'pr-16' : 'pr-8'}`}
           placeholder={placeholder}
           value={open ? query : selected?.name || query}
           onChange={(e) => {
@@ -157,17 +158,18 @@ export function QuoteRecipientSelect({
             type="button"
             aria-label="Clear recipient"
             onClick={clear}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-1.5 text-xs text-ink-400 hover:text-ink-200"
+            className="absolute right-7 top-1/2 -translate-y-1/2 rounded-md px-1 text-xs text-ink-400 hover:text-ink-200"
           >
-            Clear
+            ×
           </button>
         ) : null}
+        {!disabled ? <span className={adminComboboxChevronClass} aria-hidden>▾</span> : null}
       </div>
 
       {open && !disabled ? (
         <ul id={listId} role="listbox" className={adminComboboxPanelClass}>
           {filtered.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-ink-500">No matching clients or leads</li>
+            <li className="px-3 py-2 text-sm text-ink-400">No matching clients or leads</li>
           ) : (
             filtered.map((o, i) => (
               <li key={o.key} role="option" aria-selected={o.key === value}>
@@ -182,7 +184,7 @@ export function QuoteRecipientSelect({
                   <span className="font-medium">
                     {o.name}
                     {o.badge ? (
-                      <span className="ml-2 rounded-md bg-amber-500/25 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                      <span className="ml-2 rounded-md bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
                         {o.badge}
                       </span>
                     ) : null}

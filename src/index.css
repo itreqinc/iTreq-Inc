@@ -45,11 +45,19 @@
     scroll-behavior: smooth;
     overflow-x: clip;
     background-color: #08141f;
+    /* Native <select> menus (dates, method, etc.) use dark OS chrome. */
+    color-scheme: dark;
   }
 
   body {
     @apply overflow-x-clip text-ink-100 font-sans antialiased;
     background-color: #08141f;
+  }
+
+  select option,
+  select optgroup {
+    background-color: #1c1c1c;
+    color: #fff;
   }
 
   #root {

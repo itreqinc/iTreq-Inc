@@ -6,24 +6,28 @@ export const adminFieldReadonlyClass =
   'w-full cursor-default rounded-xl border border-transparent bg-white/[0.03] px-3 py-2 text-sm text-ink-300 outline-none'
 
 /**
- * Open list for type-to-search selects — matches native <select> option menus
- * (same look as Year / Month / Day), while the closed field stays adminFieldClass.
+ * Open list for type-to-search selects — same dark menu + blue highlight as
+ * native Year / Month / Day <select> popups (color-scheme: dark).
  */
 export const adminComboboxSurfaceClass =
-  'rounded-md border border-black/20 bg-white shadow-lg'
+  'rounded-md border border-white/10 bg-[#1c1c1c] shadow-lg'
 
 /** Absolute list panel for type-to-search selects. */
 export const adminComboboxPanelClass = `absolute z-30 mt-1 max-h-56 w-full overflow-auto py-0.5 ${adminComboboxSurfaceClass}`
 
 export const adminComboboxOptionClass =
-  'flex w-full flex-col items-start px-3 py-1.5 text-left text-sm text-ink-950 hover:bg-[#0078d4] hover:text-white'
+  'flex w-full flex-col items-start px-3 py-1.5 text-left text-sm text-white hover:bg-[#0078d4] hover:text-white'
 
-/** Highlight / keyboard focus — same accent as native Windows <select> options. */
+/** Highlight / keyboard focus — same accent as native Windows dark <select>. */
 export const adminComboboxOptionActiveClass =
   'bg-[#0078d4] text-white hover:bg-[#0078d4] hover:text-white'
 
 /** Secondary line under an option (email, etc.) — inherits row colour. */
 export const adminComboboxOptionMetaClass = 'text-xs opacity-70'
+
+/** Native-select-style chevron on searchable fields. */
+export const adminComboboxChevronClass =
+  'pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] leading-none text-ink-400'
 
 export const adminBtnPrimary =
   'inline-flex items-center justify-center rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brand-400 disabled:opacity-50'
