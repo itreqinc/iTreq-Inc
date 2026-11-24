@@ -258,14 +258,11 @@ export default function ExpensesPage() {
 
   const openNewForm = useCallback(() => {
     clearExpenseEditId()
-    const next = emptyExpenseForm()
-    const firstActive = (categories || []).find((c) => c.active)
-    if (firstActive) next.category_id = firstActive.id
     setEditingId(null)
     setBaseline('')
-    setForm(next)
+    setForm(emptyExpenseForm())
     setShowForm(true)
-  }, [categories])
+  }, [])
 
   // Legacy ?open=<id> / ?new=1 → clean paths
   useEffect(() => {
@@ -321,17 +318,10 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     if (!isNewRoute) return
-    if (showForm && !editingId) {
-      setForm((f) => {
-        if (f.category_id) return f
-        const firstActive = (categories || []).find((c) => c.active)
-        return firstActive ? { ...f, category_id: firstActive.id } : f
-      })
-      return
-    }
+    if (showForm && !editingId) return
     openNewForm()
     scrollToForm()
-  }, [isNewRoute, categories, showForm, editingId, openNewForm, scrollToForm])
+  }, [isNewRoute, showForm, editingId, openNewForm, scrollToForm])
 
   useEffect(() => {
     if (isEditRoute || isNewRoute || !showForm) return
