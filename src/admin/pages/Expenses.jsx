@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
@@ -109,8 +109,11 @@ function SavedExpensePeek({ peek, highlighted, onOpen }) {
 export default function ExpensesPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { reference: editReference } = useParams()
   const [params] = useSearchParams()
+  const editReference = useMemo(() => {
+    const match = location.pathname.match(/\/expenses\/edit\/([^/]+)\/?$/)
+    return match ? match[1] : ''
+  }, [location.pathname])
   const isNewRoute =
     /\/expenses\/new\/?$/.test(location.pathname) || params.get('new') === '1'
   const isEditRoute = Boolean(editReference)
@@ -224,7 +227,13 @@ export default function ExpensesPage() {
 
   const openRow = useCallback(
     async (rowOrId, { syncUrl = true } = {}) => {
-      const id = typeof rowOrId === 'string' ? rowOrId : rowOrId.id
+      const id = typeof rowOrId === 'string' ? rowOrId : rowOrId?.id
+      // From the list: stash id + go to /edit/:reference; the edit route loads the form.
+      if (syncUrl && rowOrId && typeof rowOrId === 'object') {
+        rememberExpenseEditId(id, rowOrId)
+        navigate(expenseEditPath(rowOrId), { replace: false })
+        return rowOrId
+      }
       const { data, error } = await opsApi.getExpense(id)
       if (error) {
         showError(error.message)
@@ -232,16 +241,13 @@ export default function ExpensesPage() {
         if (isEditRoute) navigate(expenseListPath(), { replace: true })
         return null
       }
-      rememberExpenseEditId(data.id)
+      rememberExpenseEditId(data.id, data)
       applyExpenseToForm(data)
+      const nextPath = expenseEditPath(data)
       if (syncUrl) {
-        navigate(expenseEditPath(data), { replace: true })
-      } else {
-        // Keep the visible slug aligned with reference without putting the id in the URL.
-        const nextPath = expenseEditPath(data)
-        if (location.pathname !== nextPath) {
-          navigate(nextPath, { replace: true })
-        }
+        navigate(nextPath, { replace: false })
+      } else if (location.pathname !== nextPath) {
+        navigate(nextPath, { replace: true })
       }
       return data
     },
@@ -263,7 +269,7 @@ export default function ExpensesPage() {
   useEffect(() => {
     const openId = params.get('open')
     if (openId) {
-      rememberExpenseEditId(openId)
+      rememberExpenseEditId(openId, 'record')
       const next = new URLSearchParams(params)
       next.delete('open')
       next.delete('new')
@@ -283,15 +289,33 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     if (!isEditRoute) return
-    const storedId = readExpenseEditId()
+    const storedId = readExpenseEditId(editReference)
     if (!storedId) {
+      if (loading) return
+      // Best-effort: match slug against loaded rows when session map is empty.
+      const match = (rows || []).find((row) => expenseEditPath(row).endsWith(`/edit/${editReference}`))
+      if (match?.id) {
+        rememberExpenseEditId(match.id, match)
+        void openRow(match.id, { syncUrl: false })
+        return
+      }
       showError('That expense edit link expired. Open it again from the list.')
       navigate(expenseListPath(), { replace: true })
       return
     }
     if (showForm && String(editingId) === String(storedId)) return
     void openRow(storedId, { syncUrl: false })
-  }, [isEditRoute, editReference, showForm, editingId, openRow, navigate, showError])
+  }, [
+    isEditRoute,
+    editReference,
+    showForm,
+    editingId,
+    openRow,
+    navigate,
+    showError,
+    rows,
+    loading,
+  ])
 
   useEffect(() => {
     if (!isNewRoute) return
@@ -308,9 +332,7 @@ export default function ExpensesPage() {
   }, [isNewRoute, categories, showForm, editingId, openNewForm, scrollToForm])
 
   useEffect(() => {
-    if (isEditRoute || isNewRoute) return
-    clearExpenseEditId()
-    if (!showForm) return
+    if (isEditRoute || isNewRoute || !showForm) return
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
@@ -328,7 +350,7 @@ export default function ExpensesPage() {
 
   function startNew() {
     openNewForm()
-    navigate(expenseNewPath(), { replace: true })
+    navigate(expenseNewPath(), { replace: false })
     scrollToForm()
   }
 

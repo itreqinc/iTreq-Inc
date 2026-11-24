@@ -771,7 +771,7 @@ export default function ReportsPage() {
                   ) : (
                     expensePage.rows.map((row) => {
                       const open = () => {
-                        rememberExpenseEditId(row.id)
+                        rememberExpenseEditId(row.id, row)
                         navigate(expenseEditPath(row))
                       }
                       return (

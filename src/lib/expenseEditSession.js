@@ -1,31 +1,30 @@
 /**
  * Expense edit deep-links use /admin/expenses/edit/:reference in the URL.
- * The real id is kept in sessionStorage so refreshes work without a uuid in the address bar.
+ * The real id is kept in sessionStorage (keyed by that slug) so refreshes work
+ * without a uuid in the address bar.
  */
 
-const EDIT_ID_KEY = 'admin.expenses.editId'
+const EDIT_MAP_KEY = 'admin.expenses.editMap'
+const EDIT_CURRENT_KEY = 'admin.expenses.editId'
 
-export function rememberExpenseEditId(id) {
+function readMap() {
+  if (typeof sessionStorage === 'undefined') return {}
+  try {
+    const raw = sessionStorage.getItem(EDIT_MAP_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeMap(map) {
   if (typeof sessionStorage === 'undefined') return
   try {
-    if (id) sessionStorage.setItem(EDIT_ID_KEY, String(id))
-    else sessionStorage.removeItem(EDIT_ID_KEY)
+    sessionStorage.setItem(EDIT_MAP_KEY, JSON.stringify(map))
   } catch {
     /* ignore */
   }
-}
-
-export function readExpenseEditId() {
-  if (typeof sessionStorage === 'undefined') return ''
-  try {
-    return String(sessionStorage.getItem(EDIT_ID_KEY) || '')
-  } catch {
-    return ''
-  }
-}
-
-export function clearExpenseEditId() {
-  rememberExpenseEditId('')
 }
 
 /** URL-safe path segment from the expense reference (fallback: date or "record"). */
@@ -39,6 +38,57 @@ export function expenseEditSlug(expense) {
   const day = String(expense?.expense_date || '').slice(0, 10)
   if (/^\d{4}-\d{2}-\d{2}$/.test(day)) return day
   return 'record'
+}
+
+export function rememberExpenseEditId(id, expenseOrSlug = '') {
+  if (typeof sessionStorage === 'undefined' || !id) return
+  const slug =
+    typeof expenseOrSlug === 'string' && expenseOrSlug
+      ? expenseOrSlug
+      : expenseEditSlug(expenseOrSlug || {})
+  try {
+    sessionStorage.setItem(EDIT_CURRENT_KEY, String(id))
+    if (slug) {
+      const map = readMap()
+      map[slug] = String(id)
+      writeMap(map)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Resolve id for an edit URL slug (falls back to last opened id). */
+export function readExpenseEditId(slug = '') {
+  if (typeof sessionStorage === 'undefined') return ''
+  try {
+    if (slug) {
+      const mapped = readMap()[slug]
+      if (mapped) return String(mapped)
+    }
+    return String(sessionStorage.getItem(EDIT_CURRENT_KEY) || '')
+  } catch {
+    return ''
+  }
+}
+
+export function clearExpenseEditId() {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.removeItem(EDIT_CURRENT_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearExpenseEditSession() {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.removeItem(EDIT_CURRENT_KEY)
+    sessionStorage.removeItem(EDIT_MAP_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function expenseNewPath() {

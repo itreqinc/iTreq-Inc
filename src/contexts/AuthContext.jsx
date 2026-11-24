@@ -28,7 +28,7 @@ import {
 } from '../lib/authConfig'
 import { authAction } from '../lib/authApi'
 import { clearLastExpenseDate } from '../lib/expenseFormSession'
-import { clearExpenseEditId } from '../lib/expenseEditSession'
+import { clearExpenseEditSession } from '../lib/expenseEditSession'
 
 const AuthContext = createContext(null)
 
@@ -97,7 +97,7 @@ export function AuthProvider({ children }) {
       clearSessionRole()
       clearSessionValidated()
       clearLastExpenseDate()
-      clearExpenseEditId()
+      clearExpenseEditSession()
       setOpsAccess(null)
       if (!AUTH_BYPASS) setUser(null)
       else setUser(bypassUser(readBypassRole()))
@@ -119,7 +119,7 @@ export function AuthProvider({ children }) {
     clearSessionRole()
     clearSessionValidated()
     clearLastExpenseDate()
-    clearExpenseEditId()
+    clearExpenseEditSession()
     setUser(null)
     setOpsAccess(null)
   }, [])
