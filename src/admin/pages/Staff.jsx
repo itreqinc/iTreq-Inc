@@ -628,7 +628,7 @@ export default function StaffPage() {
   async function runPayroll() {
     const ok = await confirm({
       title: 'Post pay run?',
-      message: `This will create payslips for all active staff and recover open advances. Payday: ${nextPayday || 'auto'}.`,
+      message: `This will create payslips for all active staff (and admins with salary greater than zero) and recover open advances. Payday: ${nextPayday || 'auto'}.`,
       confirmLabel: 'Post payroll',
     })
     if (!ok) return

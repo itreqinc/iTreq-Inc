@@ -845,10 +845,11 @@ async function handlePostPayRun(
       .eq('id', runId)
   }
 
+  // Staff always (if employed & not terminated). Admins only when base salary > 0.
   const { data: staffUsers, error: sErr } = await supabase
     .from('users')
-    .select('id, name, email, phone')
-    .eq('role', 'staff')
+    .select('id, name, email, phone, role')
+    .in('role', ['staff', 'admin'])
     .eq('is_active', true)
   if (sErr) throw sErr
 
@@ -865,6 +866,8 @@ async function handlePostPayRun(
       .eq('user_id', staff.id)
       .maybeSingle()
     if (!emp || emp.employment_status === 'terminated') continue
+    const base = Number(emp.base_salary) || 0
+    if (String(staff.role) === 'admin' && !(base > 0)) continue
 
     const { data: benefits } = await supabase
       .from('staff_benefit_assignments')
@@ -877,7 +880,6 @@ async function handlePostPayRun(
       amount: Number(b.amount) || 0,
     }))
     const benefitsTotal = benefitLines.reduce((s, l) => s + l.amount, 0)
-    const base = Number(emp.base_salary) || 0
     const gross = base + benefitsTotal
 
     const { data: advances } = await supabase
