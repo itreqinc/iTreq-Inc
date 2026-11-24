@@ -6,6 +6,10 @@ import {
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  expenseEditPath,
+  rememberExpenseEditId,
+} from '../../lib/expenseEditSession'
 import { ListPagination, useListPagination } from '../ListPagination'
 import { opsApi } from '../../lib/opsApi'
 import {
@@ -766,7 +770,10 @@ export default function ReportsPage() {
                     </tr>
                   ) : (
                     expensePage.rows.map((row) => {
-                      const open = () => navigate(`/admin/expenses?open=${row.id}`)
+                      const open = () => {
+                        rememberExpenseEditId(row.id)
+                        navigate(expenseEditPath(row))
+                      }
                       return (
                         <tr
                           key={row.id}

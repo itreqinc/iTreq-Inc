@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
 import { PAYMENT_METHODS, paymentMethodLabel } from '../../lib/payments'
@@ -14,6 +14,14 @@ import {
   readLastExpenseDate,
   rememberLastExpenseDate,
 } from '../../lib/expenseFormSession'
+import {
+  clearExpenseEditId,
+  expenseEditPath,
+  expenseListPath,
+  expenseNewPath,
+  readExpenseEditId,
+  rememberExpenseEditId,
+} from '../../lib/expenseEditSession'
 import {
   adminBtnDanger,
   adminBtnPrimary,
@@ -99,7 +107,13 @@ function SavedExpensePeek({ peek, highlighted, onOpen }) {
 }
 
 export default function ExpensesPage() {
-  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { reference: editReference } = useParams()
+  const [params] = useSearchParams()
+  const isNewRoute =
+    /\/expenses\/new\/?$/.test(location.pathname) || params.get('new') === '1'
+  const isEditRoute = Boolean(editReference)
   const { showError, showSuccess, confirm } = useOpsAlert()
   const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [rows, setRows] = useState([])
@@ -192,45 +206,50 @@ export default function ExpensesPage() {
     [editingId, form, baseline],
   )
 
-  const setExpenseUrl = useCallback(
-    ({ openId = null, isNew = false } = {}) => {
-      const next = new URLSearchParams(params)
-      next.delete('open')
-      next.delete('new')
-      if (openId) next.set('open', String(openId))
-      else if (isNew) next.set('new', '1')
-      setParams(next, { replace: true })
-    },
-    [params, setParams],
-  )
+  const applyExpenseToForm = useCallback((data) => {
+    const nextForm = {
+      expense_date: data.expense_date || todayIso(),
+      amount: String(data.amount ?? ''),
+      category_id: data.category_id || '',
+      vendor: data.vendor || '',
+      method: data.method || 'cash',
+      reference: data.reference || '',
+      notes: data.notes || '',
+    }
+    setEditingId(data.id)
+    setForm(nextForm)
+    setBaseline(snapshotExpenseForm(nextForm))
+    setShowForm(true)
+  }, [])
 
   const openRow = useCallback(
-    async (rowOrId) => {
+    async (rowOrId, { syncUrl = true } = {}) => {
       const id = typeof rowOrId === 'string' ? rowOrId : rowOrId.id
       const { data, error } = await opsApi.getExpense(id)
       if (error) {
         showError(error.message)
-        return
+        clearExpenseEditId()
+        if (isEditRoute) navigate(expenseListPath(), { replace: true })
+        return null
       }
-      const nextForm = {
-        expense_date: data.expense_date || todayIso(),
-        amount: String(data.amount ?? ''),
-        category_id: data.category_id || '',
-        vendor: data.vendor || '',
-        method: data.method || 'cash',
-        reference: data.reference || '',
-        notes: data.notes || '',
+      rememberExpenseEditId(data.id)
+      applyExpenseToForm(data)
+      if (syncUrl) {
+        navigate(expenseEditPath(data), { replace: true })
+      } else {
+        // Keep the visible slug aligned with reference without putting the id in the URL.
+        const nextPath = expenseEditPath(data)
+        if (location.pathname !== nextPath) {
+          navigate(nextPath, { replace: true })
+        }
       }
-      setEditingId(data.id)
-      setForm(nextForm)
-      setBaseline(snapshotExpenseForm(nextForm))
-      setShowForm(true)
-      setExpenseUrl({ openId: data.id })
+      return data
     },
-    [showError, setExpenseUrl],
+    [showError, applyExpenseToForm, navigate, isEditRoute, location.pathname],
   )
 
   const openNewForm = useCallback(() => {
+    clearExpenseEditId()
     const next = emptyExpenseForm()
     const firstActive = (categories || []).find((c) => c.active)
     if (firstActive) next.category_id = firstActive.id
@@ -240,39 +259,76 @@ export default function ExpensesPage() {
     setShowForm(true)
   }, [categories])
 
+  // Legacy ?open=<id> / ?new=1 → clean paths
   useEffect(() => {
     const openId = params.get('open')
     if (openId) {
-      if (showForm && String(editingId) === String(openId)) return
-      void openRow(openId)
+      rememberExpenseEditId(openId)
+      const next = new URLSearchParams(params)
+      next.delete('open')
+      next.delete('new')
+      const qs = next.toString()
+      navigate(`${expenseEditPath({ reference: '', expense_date: '' })}${qs ? `?${qs}` : ''}`, {
+        replace: true,
+      })
       return
     }
-    if (params.get('new') === '1') {
-      if (showForm && !editingId) {
-        // Categories may load after refresh — fill default once available.
-        setForm((f) => {
-          if (f.category_id) return f
-          const firstActive = (categories || []).find((c) => c.active)
-          return firstActive ? { ...f, category_id: firstActive.id } : f
-        })
-        return
-      }
-      openNewForm()
-      scrollToForm()
+    if (params.get('new') === '1' && !/\/expenses\/new\/?$/.test(location.pathname)) {
+      const next = new URLSearchParams(params)
+      next.delete('new')
+      const qs = next.toString()
+      navigate(`${expenseNewPath()}${qs ? `?${qs}` : ''}`, { replace: true })
     }
-  }, [params, categories, showForm, editingId, openRow, openNewForm, scrollToForm])
+  }, [params, location.pathname, navigate])
+
+  useEffect(() => {
+    if (!isEditRoute) return
+    const storedId = readExpenseEditId()
+    if (!storedId) {
+      showError('That expense edit link expired. Open it again from the list.')
+      navigate(expenseListPath(), { replace: true })
+      return
+    }
+    if (showForm && String(editingId) === String(storedId)) return
+    void openRow(storedId, { syncUrl: false })
+  }, [isEditRoute, editReference, showForm, editingId, openRow, navigate, showError])
+
+  useEffect(() => {
+    if (!isNewRoute) return
+    if (showForm && !editingId) {
+      setForm((f) => {
+        if (f.category_id) return f
+        const firstActive = (categories || []).find((c) => c.active)
+        return firstActive ? { ...f, category_id: firstActive.id } : f
+      })
+      return
+    }
+    openNewForm()
+    scrollToForm()
+  }, [isNewRoute, categories, showForm, editingId, openNewForm, scrollToForm])
+
+  useEffect(() => {
+    if (isEditRoute || isNewRoute) return
+    clearExpenseEditId()
+    if (!showForm) return
+    setShowForm(false)
+    setEditingId(null)
+    setBaseline('')
+    setForm(emptyExpenseForm())
+  }, [isEditRoute, isNewRoute, showForm])
 
   function closeForm() {
     setShowForm(false)
     setEditingId(null)
     setBaseline('')
     setForm(emptyExpenseForm())
-    setExpenseUrl()
+    clearExpenseEditId()
+    navigate(expenseListPath(), { replace: true })
   }
 
   function startNew() {
     openNewForm()
-    setExpenseUrl({ isNew: true })
+    navigate(expenseNewPath(), { replace: true })
     scrollToForm()
   }
 

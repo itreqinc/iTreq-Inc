@@ -95,6 +95,8 @@ export default function App() {
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="expenses" element={<ExpensesPage />} />
+        <Route path="expenses/new" element={<ExpensesPage />} />
+        <Route path="expenses/edit/:reference" element={<ExpensesPage />} />
         <Route path="monthly-fees" element={<MonthlyFeesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route
