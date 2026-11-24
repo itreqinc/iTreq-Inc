@@ -52,12 +52,6 @@
     background-color: #08141f;
   }
 
-  /* Native <select> / date menus follow the dark field palette. */
-  select,
-  option {
-    color-scheme: dark;
-  }
-
   #root {
     max-width: 100%;
     overflow-x: clip;

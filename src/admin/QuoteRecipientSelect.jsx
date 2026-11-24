@@ -3,6 +3,7 @@ import { buildRecipientKey } from '../lib/quoteRecipient'
 import {
   adminComboboxOptionActiveClass,
   adminComboboxOptionClass,
+  adminComboboxOptionMetaClass,
   adminComboboxPanelClass,
   adminFieldClass,
 } from './ui'
@@ -181,14 +182,12 @@ export function QuoteRecipientSelect({
                   <span className="font-medium">
                     {o.name}
                     {o.badge ? (
-                      <span className="ml-2 rounded-md bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                      <span className="ml-2 rounded-md bg-amber-500/25 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
                         {o.badge}
                       </span>
                     ) : null}
                   </span>
-                  {o.email ? (
-                    <span className="text-xs text-ink-500">{o.email}</span>
-                  ) : null}
+                  {o.email ? <span className={adminComboboxOptionMetaClass}>{o.email}</span> : null}
                 </button>
               </li>
             ))

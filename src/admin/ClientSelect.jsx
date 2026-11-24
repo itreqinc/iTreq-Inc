@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   adminComboboxOptionActiveClass,
   adminComboboxOptionClass,
+  adminComboboxOptionMetaClass,
   adminComboboxPanelClass,
   adminFieldClass,
 } from './ui'
@@ -160,9 +161,7 @@ export function ClientSelect({
                   onClick={() => pick(c)}
                 >
                   <span className="font-medium">{c.name}</span>
-                  {c.email ? (
-                    <span className="text-xs text-ink-500">{c.email}</span>
-                  ) : null}
+                  {c.email ? <span className={adminComboboxOptionMetaClass}>{c.email}</span> : null}
                 </button>
               </li>
             ))

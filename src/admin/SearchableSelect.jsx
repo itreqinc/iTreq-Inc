@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   adminComboboxOptionActiveClass,
   adminComboboxOptionClass,
+  adminComboboxOptionMetaClass,
   adminComboboxPanelClass,
   adminFieldClass,
 } from './ui'
@@ -205,13 +206,13 @@ export function SearchableSelect({
                   {o.__custom ? (
                     <span>
                       Use “{o.label}”
-                      <span className="ml-1 text-xs text-ink-500">new</span>
+                      <span className={`ml-1 ${adminComboboxOptionMetaClass}`}>new</span>
                     </span>
                   ) : (
                     <>
                       <span className="font-medium">{o.label}</span>
                       {o.sublabel ? (
-                        <span className="text-xs text-ink-500">{o.sublabel}</span>
+                        <span className={adminComboboxOptionMetaClass}>{o.sublabel}</span>
                       ) : null}
                     </>
                   )}
