@@ -16,6 +16,7 @@ import { AdminIconAction } from '../AdminIconAction'
 import { ActionsMenu } from '../ActionsMenu'
 import { ListPagination, useListPagination } from '../ListPagination'
 import {
+  adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
   adminFieldClass,
@@ -645,6 +646,44 @@ export default function StaffPage() {
     if (selectedId) await loadDetail(selectedId)
   }
 
+  async function reverseLatestPayroll() {
+    setPayBusy(true)
+    const { data: latest, error: latestErr } = await payrollApi.latestPayRun()
+    setPayBusy(false)
+    if (latestErr || latest?.success === false) {
+      showError(latestErr?.message || latest?.message || 'Could not load latest pay run')
+      return
+    }
+    const run = latest?.pay_run
+    if (!run) {
+      showError('No posted pay run to reverse.')
+      return
+    }
+    const period = `${run.period_year}-${String(run.period_month).padStart(2, '0')}`
+    const count = latest?.payslip_count || 0
+    const ok = await confirm({
+      title: 'Reverse latest pay run?',
+      message: `This removes the ${period} payroll (${count} payslip${count === 1 ? '' : 's'}) and restores any advances recovered on that run. You can post ${period} again afterward.`,
+      confirmLabel: 'Reverse payroll',
+      type: 'warning',
+    })
+    if (!ok) return
+    setPayBusy(true)
+    const { data, error } = await payrollApi.reverseLatestPayRun()
+    setPayBusy(false)
+    if (error || data?.success === false) {
+      showError(error?.message || data?.message || 'Could not reverse pay run')
+      return
+    }
+    const restored = Number(data?.advances_restored) || 0
+    showSuccess(
+      `Reversed ${period} (${data?.payslips_removed || 0} payslips removed${
+        restored > 0 ? `, ${formatPula(restored)} advances restored` : ''
+      }).`,
+    )
+    if (selectedId) await loadDetail(selectedId)
+  }
+
   const viewing = viewId ? staff.find((s) => s.id === viewId) : null
   const editingSelf = Boolean(form.user_id && form.user_id === currentUser?.id)
 
@@ -666,6 +705,14 @@ export default function StaffPage() {
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={payBusy} onClick={runPayroll} className={adminBtnSecondary}>
             {payBusy ? 'Posting…' : 'Run payroll'}
+          </button>
+          <button
+            type="button"
+            disabled={payBusy}
+            onClick={reverseLatestPayroll}
+            className={adminBtnDanger}
+          >
+            {payBusy ? 'Working…' : 'Reverse latest payroll'}
           </button>
           <button type="button" onClick={startNew} className={adminBtnPrimary}>
             Add staff

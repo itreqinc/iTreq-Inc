@@ -80,6 +80,8 @@ export const payrollApi = {
       open_only: openOnly,
     }),
   postPayRun: (payload = {}) => payrollAction('post_pay_run', payload),
+  latestPayRun: () => payrollAction('latest_pay_run'),
+  reverseLatestPayRun: () => payrollAction('reverse_latest_pay_run'),
   listPayslips: (userId) =>
     payrollAction('list_payslips', userId ? { user_id: userId } : {}),
   getPayslip: (payslipId) => payrollAction('get_payslip', { payslip_id: payslipId }),

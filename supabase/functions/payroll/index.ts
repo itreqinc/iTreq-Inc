@@ -965,6 +965,112 @@ async function handlePostPayRun(
   return json(200, { success: true, pay_run: run, payslips: slips })
 }
 
+async function handleLatestPayRun(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+
+  const { data: run, error } = await supabase
+    .from('pay_runs')
+    .select('*')
+    .eq('status', 'posted')
+    .order('period_year', { ascending: false })
+    .order('period_month', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  if (!run) return json(200, { success: true, pay_run: null, payslip_count: 0 })
+
+  const { count, error: cErr } = await supabase
+    .from('payslips')
+    .select('id', { count: 'exact', head: true })
+    .eq('pay_run_id', run.id)
+  if (cErr) throw cErr
+
+  return json(200, {
+    success: true,
+    pay_run: run,
+    payslip_count: count || 0,
+  })
+}
+
+/**
+ * Undo the most recent posted pay run: restore advance balances from slip
+ * snapshots, then delete the run (payslips cascade). Period can be re-posted.
+ */
+async function handleReverseLatestPayRun(
+  supabase: ReturnType<typeof adminClient>,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  const gate = await requireAdmin(supabase, req, body)
+  if (gate.error) return gate.error
+
+  const { data: run, error: rErr } = await supabase
+    .from('pay_runs')
+    .select('*')
+    .eq('status', 'posted')
+    .order('period_year', { ascending: false })
+    .order('period_month', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (rErr) throw rErr
+  if (!run) {
+    return json(400, { success: false, message: 'No posted pay run to reverse.' })
+  }
+
+  const { data: slips, error: sErr } = await supabase
+    .from('payslips')
+    .select('id, user_id, snapshot, advances_recovered')
+    .eq('pay_run_id', run.id)
+  if (sErr) throw sErr
+
+  let advancesRestored = 0
+  for (const slip of slips || []) {
+    const snap = (slip.snapshot || {}) as {
+      advances?: { id?: string; amount?: number }[]
+    }
+    const lines = Array.isArray(snap.advances) ? snap.advances : []
+    for (const line of lines) {
+      const advanceId = String(line?.id || '')
+      const amount = Number(line?.amount) || 0
+      if (!advanceId || !(amount > 0)) continue
+      const { data: adv, error: aErr } = await supabase
+        .from('salary_advances')
+        .select('id, remaining')
+        .eq('id', advanceId)
+        .maybeSingle()
+      if (aErr) throw aErr
+      if (!adv) continue
+      const nextRemaining = (Number(adv.remaining) || 0) + amount
+      const { error: uErr } = await supabase
+        .from('salary_advances')
+        .update({ remaining: nextRemaining, updated_at: new Date().toISOString() })
+        .eq('id', advanceId)
+      if (uErr) throw uErr
+      advancesRestored += amount
+    }
+  }
+
+  const { error: dErr } = await supabase.from('pay_runs').delete().eq('id', run.id)
+  if (dErr) throw dErr
+
+  return json(200, {
+    success: true,
+    reversed: {
+      id: run.id,
+      period_year: run.period_year,
+      period_month: run.period_month,
+      payday: run.payday,
+    },
+    payslips_removed: (slips || []).length,
+    advances_restored: advancesRestored,
+  })
+}
+
 async function handleListPayslips(
   supabase: ReturnType<typeof adminClient>,
   req: Request,
@@ -1098,6 +1204,10 @@ serve(async (req) => {
         return await handleListAdvances(supabase, req, body)
       case 'post_pay_run':
         return await handlePostPayRun(supabase, req, body)
+      case 'latest_pay_run':
+        return await handleLatestPayRun(supabase, req, body)
+      case 'reverse_latest_pay_run':
+        return await handleReverseLatestPayRun(supabase, req, body)
       case 'list_payslips':
         return await handleListPayslips(supabase, req, body)
       case 'get_payslip':
