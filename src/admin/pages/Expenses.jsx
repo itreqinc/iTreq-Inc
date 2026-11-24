@@ -7,6 +7,7 @@ import { useOpsAlert } from '../OpsAlertContext'
 import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import { ListPagination, useListPagination } from '../ListPagination'
+import { useScrollAndHighlight } from '../hooks/useScrollAndHighlight'
 import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
 import { todayIso, filterByDateRange } from '../../lib/dateRange'
 import {
@@ -28,6 +29,15 @@ import {
   formatPula,
 } from '../ui'
 import { AdminIconAction } from '../AdminIconAction'
+
+function sortExpenseRows(list, dateSort) {
+  const dir = dateSort === 'asc' ? 1 : -1
+  return [...(list || [])].sort((a, b) => {
+    const byDate = String(a.expense_date || '').localeCompare(String(b.expense_date || ''))
+    if (byDate) return byDate * dir
+    return String(a.created_at || '').localeCompare(String(b.created_at || '')) * dir
+  })
+}
 
 function emptyExpenseForm() {
   return {
@@ -59,9 +69,38 @@ function categoryName(row) {
   return c?.name || '—'
 }
 
+/** Off-page (or out-of-filter) save teaser: click jumps to the right page. */
+function SavedExpensePeek({ peek, highlighted, onOpen }) {
+  if (!peek?.row) return null
+  const row = peek.row
+  const pageHint = peek.outsideFilter
+    ? 'Outside current date filter — click to open'
+    : `On page ${peek.page} — click to go there`
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      data-row-id={peek.id}
+      className={`flex w-full flex-wrap items-center gap-x-4 gap-y-1 border-b border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-left text-sm transition hover:bg-amber-400/15 sm:px-4 ${
+        highlighted ? 'ring-2 ring-inset ring-amber-400/60' : ''
+      }`}
+    >
+      <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-amber-200/90">
+        Just saved
+      </span>
+      <span className="text-ink-300">{row.expense_date || '—'}</span>
+      <span className="min-w-0 flex-1 truncate text-ink-100">{categoryName(row)}</span>
+      <span className={`text-ink-400 ${adminColSecondary}`}>{row.vendor || '—'}</span>
+      <span className="font-medium tabular-nums text-ink-100">{formatPula(row.amount)}</span>
+      <span className="w-full text-xs text-amber-200/80 sm:ml-auto sm:w-auto">{pageHint}</span>
+    </button>
+  )
+}
+
 export default function ExpensesPage() {
   const [params, setParams] = useSearchParams()
   const { showError, showSuccess, confirm } = useOpsAlert()
+  const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
   const [rows, setRows] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -72,6 +111,13 @@ export default function ExpensesPage() {
   const [form, setForm] = useState(emptyExpenseForm)
   /** True when the vendor dropdown is on “New supplier…” (free-text entry). */
   const [vendorNewMode, setVendorNewMode] = useState(false)
+  /** List date order: newest first by default. */
+  const [dateSort, setDateSort] = useState('desc')
+  /**
+   * Saved row that landed off the current page: show above/below until clicked.
+   * { id, page, placement: 'above'|'below', row, outsideFilter?: boolean }
+   */
+  const [savedPeek, setSavedPeek] = useState(null)
   const [dateFrom, setDateFrom, dateTo, setDateTo] = usePersistedDateRange('admin.expenses')
 
   const load = useCallback(async () => {
@@ -115,14 +161,18 @@ export default function ExpensesPage() {
     )
   }, [rows, form.category_id])
 
-  const visibleRows = useMemo(
-    () => filterByDateRange(rows, dateFrom, dateTo, (row) => row.expense_date),
-    [rows, dateFrom, dateTo],
-  )
+  const visibleRows = useMemo(() => {
+    const filtered = filterByDateRange(rows, dateFrom, dateTo, (row) => row.expense_date)
+    return sortExpenseRows(filtered, dateSort)
+  }, [rows, dateFrom, dateTo, dateSort])
 
   const expensePage = useListPagination(visibleRows, {
-    resetKey: `${dateFrom}|${dateTo}`,
+    resetKey: `${dateFrom}|${dateTo}|${dateSort}`,
   })
+
+  useEffect(() => {
+    setSavedPeek(null)
+  }, [dateFrom, dateTo, dateSort])
 
   const isDirty = useMemo(
     () => Boolean(editingId) && snapshotExpenseForm(form) !== baseline,
@@ -181,6 +231,60 @@ export default function ExpensesPage() {
     setVendorNewMode(false)
     setForm(next)
     setShowForm(true)
+    scrollToForm()
+  }
+
+  function goToSavedPeek() {
+    if (!savedPeek?.id) return
+    const page = savedPeek.page
+    setSavedPeek(null)
+    if (page) expensePage.setPage(page)
+    highlightRow(savedPeek.id)
+  }
+
+  function placeSavedRow(saved) {
+    if (!saved?.id) return
+    const nextRows = upsertById(rows, saved)
+    setRows(nextRows)
+
+    const filtered = filterByDateRange(
+      nextRows,
+      dateFrom,
+      dateTo,
+      (row) => row.expense_date,
+    )
+    const sorted = sortExpenseRows(filtered, dateSort)
+    const index = sorted.findIndex((row) => row.id === saved.id)
+    const pageSize = expensePage.pageSize || 20
+    const currentPage = expensePage.page || 1
+
+    if (index < 0) {
+      setSavedPeek({
+        id: saved.id,
+        page: null,
+        placement: 'above',
+        row: saved,
+        outsideFilter: true,
+      })
+      highlightRow(saved.id, { scroll: false })
+      return
+    }
+
+    const targetPage = Math.floor(index / pageSize) + 1
+    if (targetPage === currentPage) {
+      setSavedPeek(null)
+      highlightRow(saved.id)
+      return
+    }
+
+    setSavedPeek({
+      id: saved.id,
+      page: targetPage,
+      placement: targetPage < currentPage ? 'above' : 'below',
+      row: saved,
+      outsideFilter: false,
+    })
+    highlightRow(saved.id, { scroll: false })
   }
 
   async function handleSubmit(e) {
@@ -207,7 +311,7 @@ export default function ExpensesPage() {
     showSuccess(editingId ? 'Expense updated.' : 'Expense recorded.')
     rememberLastExpenseDate(form.expense_date || saved?.expense_date)
     closeForm()
-    if (saved?.id) setRows((prev) => upsertById(prev, saved))
+    placeSavedRow(saved)
   }
 
   async function handleDelete(row) {
@@ -247,6 +351,7 @@ export default function ExpensesPage() {
 
       {showForm ? (
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
           className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
         >
@@ -449,10 +554,45 @@ export default function ExpensesPage() {
         shown={visibleRows.length}
         total={rows.length}
       >
+        {savedPeek?.placement === 'above' ? (
+          <SavedExpensePeek
+            peek={savedPeek}
+            highlighted={highlightId === savedPeek.id}
+            onOpen={goToSavedPeek}
+          />
+        ) : null}
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">
             <tr>
-              <th className={adminCellPad}>Date</th>
+              <th className={adminCellPad}>
+                <button
+                  type="button"
+                  onClick={() => setDateSort((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                  className="inline-flex items-center gap-1 rounded-md text-left uppercase tracking-wider text-ink-400 transition hover:text-ink-200"
+                  aria-label={
+                    dateSort === 'asc'
+                      ? 'Date sorted oldest first. Click for newest first.'
+                      : 'Date sorted newest first. Click for oldest first.'
+                  }
+                  title={dateSort === 'asc' ? 'Oldest first' : 'Newest first'}
+                >
+                  Date
+                  <svg
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className={`h-3.5 w-3.5 shrink-0 transition ${
+                      dateSort === 'desc' ? 'rotate-180' : ''
+                    }`}
+                    aria-hidden
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              </th>
               <th className={adminCellPad}>Category</th>
               <th className={`${adminCellPad} ${adminColSecondary}`}>Vendor</th>
               <th className={`${adminCellPad} ${adminColSecondary}`}>Method</th>
@@ -482,9 +622,12 @@ export default function ExpensesPage() {
                 return (
                   <tr
                     key={row.id}
+                    data-row-id={row.id}
                     role="link"
                     tabIndex={0}
-                    className={`group bg-ink-900/20 ${clickableRowClass}`}
+                    className={`group bg-ink-900/20 ${clickableRowClass}${
+                      highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''
+                    }`}
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >
@@ -531,6 +674,13 @@ export default function ExpensesPage() {
             )}
           </tbody>
         </table>
+        {savedPeek?.placement === 'below' ? (
+          <SavedExpensePeek
+            peek={savedPeek}
+            highlighted={highlightId === savedPeek.id}
+            onOpen={goToSavedPeek}
+          />
+        ) : null}
         <ListPagination list={expensePage} />
       </DateRangeFilter>
     </div>
