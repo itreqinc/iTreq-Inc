@@ -8,7 +8,11 @@ import { YearMonthDaySelect } from '../../components/YearMonthDaySelect'
 import { DateRangeFilter } from '../../components/DateRangeFilter'
 import { ListPagination, useListPagination } from '../ListPagination'
 import { usePersistedDateRange } from '../../hooks/usePersistedDateRange'
-import { filterByDateRange } from '../../lib/dateRange'
+import { todayIso, filterByDateRange } from '../../lib/dateRange'
+import {
+  readLastExpenseDate,
+  rememberLastExpenseDate,
+} from '../../lib/expenseFormSession'
 import {
   adminBtnDanger,
   adminBtnPrimary,
@@ -25,13 +29,9 @@ import {
 } from '../ui'
 import { AdminIconAction } from '../AdminIconAction'
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function emptyExpenseForm() {
   return {
-    expense_date: todayIso(),
+    expense_date: readLastExpenseDate(),
     amount: '',
     category_id: '',
     vendor: '',
@@ -184,6 +184,7 @@ export default function ExpensesPage() {
       return
     }
     showSuccess(editingId ? 'Expense updated.' : 'Expense recorded.')
+    rememberLastExpenseDate(form.expense_date || saved?.expense_date)
     closeForm()
     if (saved?.id) setRows((prev) => upsertById(prev, saved))
   }

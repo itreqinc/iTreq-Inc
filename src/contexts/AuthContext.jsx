@@ -27,6 +27,7 @@ import {
   writeViewMode,
 } from '../lib/authConfig'
 import { authAction } from '../lib/authApi'
+import { clearLastExpenseDate } from '../lib/expenseFormSession'
 
 const AuthContext = createContext(null)
 
@@ -94,6 +95,7 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('session')
       clearSessionRole()
       clearSessionValidated()
+      clearLastExpenseDate()
       setOpsAccess(null)
       if (!AUTH_BYPASS) setUser(null)
       else setUser(bypassUser(readBypassRole()))
@@ -114,6 +116,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('session')
     clearSessionRole()
     clearSessionValidated()
+    clearLastExpenseDate()
     setUser(null)
     setOpsAccess(null)
   }, [])
