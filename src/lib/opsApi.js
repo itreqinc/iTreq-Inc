@@ -3524,8 +3524,16 @@ const directOpsApi = {
         },
       }
     }
-    const needsStaff =
-      cat.system_key === 'staff_rem_benefits' || cat.system_key === 'salary_advance'
+    if (cat.system_key === 'salary_advance') {
+      return {
+        data: null,
+        error: {
+          message:
+            'Salary advances must be recorded via Staff → Advances or Expenses with the Salary advance flow (so both rows stay in sync).',
+        },
+      }
+    }
+    const needsStaff = cat.system_key === 'staff_rem_benefits'
     const staffId = staff_user_id ? String(staff_user_id).trim() : ''
     if (needsStaff && !staffId) {
       return { data: null, error: { message: 'Select the linked staff member.' } }

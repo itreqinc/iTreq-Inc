@@ -967,27 +967,36 @@ async function handleUpdateAdvance(
   const staffName = String(staff?.name || 'Staff').trim() || 'Staff'
   const nextDate = advanceDate || String(existing.advance_date).slice(0, 10)
   const nextNotes = notes !== undefined ? notes : existing.notes
-  let expense = null
-  try {
-    expense = await upsertAdvanceExpense(supabase, {
-      expenseId: existing.expense_id || null,
-      userId: String(existing.user_id),
-      staffName,
-      amount,
-      advanceDate: nextDate,
-      notes: nextNotes,
-      method: method || 'eft',
-      reference: reference === undefined ? null : reference,
-    })
-    if (!existing.expense_id && expense?.id) {
-      await supabase
-        .from('salary_advances')
-        .update({ expense_id: expense.id, updated_at: new Date().toISOString() })
-        .eq('id', advanceId)
-      data.expense_id = expense.id
-    }
-  } catch (err) {
-    console.error('advance expense sync failed on update:', err)
+
+  let priorMethod = 'eft'
+  let priorReference: string | null = null
+  if (existing.expense_id) {
+    const { data: priorExp, error: pErr } = await supabase
+      .from('expenses')
+      .select('method, reference')
+      .eq('id', existing.expense_id)
+      .maybeSingle()
+    if (pErr) throw pErr
+    if (priorExp?.method) priorMethod = String(priorExp.method)
+    if (priorExp?.reference != null) priorReference = String(priorExp.reference)
+  }
+
+  const expense = await upsertAdvanceExpense(supabase, {
+    expenseId: existing.expense_id || null,
+    userId: String(existing.user_id),
+    staffName,
+    amount,
+    advanceDate: nextDate,
+    notes: nextNotes,
+    method: method !== undefined ? method : priorMethod,
+    reference: reference !== undefined ? reference : priorReference,
+  })
+  if (!existing.expense_id && expense?.id) {
+    await supabase
+      .from('salary_advances')
+      .update({ expense_id: expense.id, updated_at: new Date().toISOString() })
+      .eq('id', advanceId)
+    data.expense_id = expense.id
   }
 
   return json(200, { success: true, advance: data, expense })
@@ -1113,11 +1122,17 @@ async function handlePostPayRun(
   }
   const { from: periodFrom, to: periodTo } = periodBounds(periodYear, periodMonth)
 
-  // Clear prior salary expense lines if re-posting a draft / after reverse recreate
-  await supabase.from('expenses').delete().eq('pay_run_id', runId)
+  // Clear prior payday Salary lines; un-consume rem/benefit if a draft attempt left marks
+  await supabase
+    .from('expenses')
+    .delete()
+    .eq('pay_run_id', runId)
+    .eq('category_id', salaryCat.id)
+  await supabase.from('expenses').update({ pay_run_id: null }).eq('pay_run_id', runId)
 
   const slips = []
   let totalNet = 0
+  const consumedRemExpenseIds: string[] = []
   for (const staff of staffUsers || []) {
     const { data: emp } = await supabase
       .from('staff_employment')
@@ -1168,6 +1183,7 @@ async function handlePostPayRun(
           amount: amt,
           date: String(row.expense_date).slice(0, 10),
         })
+        consumedRemExpenseIds.push(row.id)
       }
     }
 
@@ -1261,6 +1277,15 @@ async function handlePostPayRun(
       })
       if (salErr) throw salErr
     }
+  }
+
+  // Mark rem/benefit expenses as consumed by this run (prevents double-count on re-post)
+  if (consumedRemExpenseIds.length) {
+    const { error: consumeErr } = await supabase
+      .from('expenses')
+      .update({ pay_run_id: runId, updated_at: new Date().toISOString() })
+      .in('id', consumedRemExpenseIds)
+    if (consumeErr) throw consumeErr
   }
 
   const { data: run, error: postErr } = await supabase
@@ -1374,17 +1399,31 @@ async function handleReverseLatestPayRun(
     }
   }
 
-  // Remove payday Salary - Name expense lines; keep mid-month rem/benefit + Advance expenses.
-  const { data: salaryExpenses, error: seErr } = await supabase
-    .from('expenses')
-    .select('id')
-    .eq('pay_run_id', run.id)
-  if (seErr) throw seErr
-  const salaryExpenseCount = (salaryExpenses || []).length
-  if (salaryExpenseCount > 0) {
-    const { error: delExpErr } = await supabase.from('expenses').delete().eq('pay_run_id', run.id)
-    if (delExpErr) throw delExpErr
+  // Remove payday Salary - Name lines; un-consume rem/benefit (keep those expense rows).
+  const salaryCat = await loadExpenseCategoryByKey(supabase, 'salary')
+  let salaryExpenseCount = 0
+  if (salaryCat) {
+    const { data: salaryExpenses, error: seErr } = await supabase
+      .from('expenses')
+      .select('id')
+      .eq('pay_run_id', run.id)
+      .eq('category_id', salaryCat.id)
+    if (seErr) throw seErr
+    salaryExpenseCount = (salaryExpenses || []).length
+    if (salaryExpenseCount > 0) {
+      const { error: delExpErr } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('pay_run_id', run.id)
+        .eq('category_id', salaryCat.id)
+      if (delExpErr) throw delExpErr
+    }
   }
+  const { error: clearRemErr } = await supabase
+    .from('expenses')
+    .update({ pay_run_id: null, updated_at: new Date().toISOString() })
+    .eq('pay_run_id', run.id)
+  if (clearRemErr) throw clearRemErr
 
   const { error: dErr } = await supabase.from('pay_runs').delete().eq('id', run.id)
   if (dErr) throw dErr
@@ -1558,16 +1597,20 @@ async function handlePaydayMorningReminder(
     if (result.sent) sent += 1
   }
 
-  await supabase
-    .from('company_settings')
-    .update({ payroll_reminder_sent_for: today })
-    .eq('id', 1)
+  // Only mark sent when at least one delivery succeeded so a Resend outage can retry same day.
+  if (sent > 0) {
+    await supabase
+      .from('company_settings')
+      .update({ payroll_reminder_sent_for: today })
+      .eq('id', 1)
+  }
 
   return json(200, {
     success: true,
     payday,
     emails_sent: sent,
     recipients: admins.length,
+    reminder_marked: sent > 0,
   })
 }
 

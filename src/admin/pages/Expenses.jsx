@@ -634,6 +634,12 @@ export default function ExpensesPage() {
       return
     }
     const isAdvance = selectedSystemKey === 'salary_advance'
+    if (!isAdvance && linkedAdvanceId) {
+      showError(
+        'This expense is linked to a salary advance. Keep category as Salary advance, or delete the advance first.',
+      )
+      return
+    }
     const ok = await confirm({
       title: editingId ? 'Save expense changes?' : 'Record this expense?',
       message: editingId
@@ -667,8 +673,7 @@ export default function ExpensesPage() {
           error = again.error
         }
       } else if (editingId && !linkedAdvanceId) {
-        // Legacy advance expense without link — save expense then create advance pair is awkward;
-        // create advance which writes a new expense, then delete old row.
+        // Legacy advance expense without link: create the synced pair, then remove the orphan.
         const res = await payrollApi.createAdvance({
           user_id: form.staff_user_id,
           amount: Number(form.amount),
@@ -679,8 +684,18 @@ export default function ExpensesPage() {
         })
         error = res.error || (res.data?.success === false ? { message: res.data.message } : null)
         if (!error) {
-          await opsApi.deleteExpense(editingId)
-          saved = res.data?.expense || null
+          const del = await opsApi.deleteExpense(editingId)
+          if (del.error) {
+            const newAdvanceId = res.data?.advance?.id
+            if (newAdvanceId) await payrollApi.deleteAdvance(newAdvanceId)
+            error = {
+              message:
+                del.error.message ||
+                'Could not replace the old expense. The new advance was rolled back.',
+            }
+          } else {
+            saved = res.data?.expense || null
+          }
         }
       } else {
         const res = await payrollApi.createAdvance({

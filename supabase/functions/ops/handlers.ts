@@ -3881,8 +3881,12 @@ handlers.save_expense = async ({ sb }, args) => {
       'Salary expenses are created automatically when payroll is posted. Choose another category.',
     )
   }
-  const needsStaff =
-    cat.system_key === 'staff_rem_benefits' || cat.system_key === 'salary_advance'
+  if (cat.system_key === 'salary_advance') {
+    throw new OpsError(
+      'Salary advances must be recorded via Staff → Advances or the Expenses advance flow (so both rows stay in sync).',
+    )
+  }
+  const needsStaff = cat.system_key === 'staff_rem_benefits'
   const staffId = staff_user_id ? String(staff_user_id).trim() : ''
   if (needsStaff && !staffId) throw new OpsError('Select the linked staff member.')
 
@@ -3945,10 +3949,13 @@ handlers.delete_expense = async ({ sb }, args) => {
   }
   const { data: adv } = await sb
     .from('salary_advances')
-    .select('id')
+    .select('id, remaining')
     .eq('expense_id', id)
     .maybeSingle()
   if (adv?.id) {
+    if (!(Number(adv.remaining) > 0)) {
+      throw new OpsError('Fully recovered advances cannot be deleted from Expenses.')
+    }
     const { error: aErr } = await sb.from('salary_advances').delete().eq('id', adv.id)
     if (aErr) throw mapDbError(aErr)
   }

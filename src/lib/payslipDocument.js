@@ -72,6 +72,10 @@ export function buildPayslipHtml(payslip, settings = null) {
   const benefits = Array.isArray(snap.benefits) ? snap.benefits : []
   const advances = Array.isArray(snap.advances) ? snap.advances : []
   const advancesRecovered = num(snap.advances_recovered ?? payslip.advances_recovered)
+  const deductionsTotal =
+    snap.deductions_total != null
+      ? num(snap.deductions_total)
+      : advancesRecovered + num(snap.linked_expenses_total)
   const gross = num(snap.gross ?? payslip.gross)
   const net = num(snap.net ?? payslip.net)
 
@@ -328,7 +332,7 @@ export function buildPayslipHtml(payslip, settings = null) {
           </tr>
           <tr>
             <td class="label">Total deductions</td>
-            <td class="amt">${esc(currency)} ${money(advancesRecovered)}</td>
+            <td class="amt">${esc(currency)} ${money(deductionsTotal)}</td>
           </tr>
           <tr class="net-row">
             <td>Net pay</td>
