@@ -192,6 +192,18 @@ export default function ExpensesPage() {
     [editingId, form, baseline],
   )
 
+  const setExpenseUrl = useCallback(
+    ({ openId = null, isNew = false } = {}) => {
+      const next = new URLSearchParams(params)
+      next.delete('open')
+      next.delete('new')
+      if (openId) next.set('open', String(openId))
+      else if (isNew) next.set('new', '1')
+      setParams(next, { replace: true })
+    },
+    [params, setParams],
+  )
+
   const openRow = useCallback(
     async (rowOrId) => {
       const id = typeof rowOrId === 'string' ? rowOrId : rowOrId.id
@@ -213,27 +225,12 @@ export default function ExpensesPage() {
       setForm(nextForm)
       setBaseline(snapshotExpenseForm(nextForm))
       setShowForm(true)
+      setExpenseUrl({ openId: data.id })
     },
-    [showError],
+    [showError, setExpenseUrl],
   )
 
-  useEffect(() => {
-    const openId = params.get('open')
-    if (!openId) return
-    openRow(openId).then(() => {
-      params.delete('open')
-      setParams(params, { replace: true })
-    })
-  }, [params, setParams, openRow])
-
-  function closeForm() {
-    setShowForm(false)
-    setEditingId(null)
-    setBaseline('')
-    setForm(emptyExpenseForm())
-  }
-
-  function startNew() {
+  const openNewForm = useCallback(() => {
     const next = emptyExpenseForm()
     const firstActive = (categories || []).find((c) => c.active)
     if (firstActive) next.category_id = firstActive.id
@@ -241,6 +238,41 @@ export default function ExpensesPage() {
     setBaseline('')
     setForm(next)
     setShowForm(true)
+  }, [categories])
+
+  useEffect(() => {
+    const openId = params.get('open')
+    if (openId) {
+      if (showForm && String(editingId) === String(openId)) return
+      void openRow(openId)
+      return
+    }
+    if (params.get('new') === '1') {
+      if (showForm && !editingId) {
+        // Categories may load after refresh — fill default once available.
+        setForm((f) => {
+          if (f.category_id) return f
+          const firstActive = (categories || []).find((c) => c.active)
+          return firstActive ? { ...f, category_id: firstActive.id } : f
+        })
+        return
+      }
+      openNewForm()
+      scrollToForm()
+    }
+  }, [params, categories, showForm, editingId, openRow, openNewForm, scrollToForm])
+
+  function closeForm() {
+    setShowForm(false)
+    setEditingId(null)
+    setBaseline('')
+    setForm(emptyExpenseForm())
+    setExpenseUrl()
+  }
+
+  function startNew() {
+    openNewForm()
+    setExpenseUrl({ isNew: true })
     scrollToForm()
   }
 
