@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { opsApi } from '../../lib/opsApi'
 import { upsertById, removeById } from '../../lib/listState'
@@ -198,6 +198,7 @@ export default function ExpensesPage() {
 
   const expensePage = useListPagination(visibleRows, {
     resetKey: `${dateFrom}|${dateTo}|${dateSort}`,
+    focusId: showForm && editingId ? editingId : null,
   })
 
   useEffect(() => {
@@ -362,6 +363,164 @@ export default function ExpensesPage() {
     }))
   }
 
+  function renderExpenseForm({ variant = 'panel' } = {}) {
+    const inline = variant === 'inline'
+    return (
+      <form
+        ref={formRef}
+        onSubmit={handleSubmit}
+        className={
+          inline
+            ? 'space-y-4'
+            : 'space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5'
+        }
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            {editingId ? (
+              <>
+                <h2 className="font-display text-lg font-bold text-white">
+                  {formatPula(form.amount || 0)}
+                </h2>
+                <p className="mt-0.5 text-sm text-ink-400">
+                  {form.expense_date || '—'}
+                  {isDirty ? ' · unsaved changes' : ''}
+                </p>
+              </>
+            ) : (
+              <h2 className="text-sm font-semibold text-white">New expense</h2>
+            )}
+          </div>
+          <button type="button" onClick={closeForm} className={adminBtnSecondary}>
+            Close
+          </button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <YearMonthDaySelect
+            label="Date"
+            required
+            value={form.expense_date}
+            onChange={(expense_date) => setForm((f) => ({ ...f, expense_date }))}
+          />
+          <label className="block">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              Amount (P) *
+            </span>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              required
+              className={adminFieldClass}
+              value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              Category *
+            </span>
+            <SearchableSelect
+              required
+              options={categoryOptions}
+              value={form.category_id}
+              onChange={onCategoryChange}
+              placeholder="Type to find a category…"
+              emptyMessage="No matching categories"
+              clearAriaLabel="Clear category"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              Method
+            </span>
+            <select
+              className={adminFieldClass}
+              value={form.method}
+              onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
+            >
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              Who was paid (optional)
+            </span>
+            <SearchableSelect
+              allowCustom
+              disabled={!form.category_id}
+              options={vendorOptions}
+              value={form.vendor}
+              onChange={(vendor) => setForm((f) => ({ ...f, vendor }))}
+              placeholder={
+                form.category_id
+                  ? vendorsForCategory.length
+                    ? 'Type to find or add a supplier…'
+                    : 'Type a supplier name…'
+                  : 'Select a category first'
+              }
+              emptyMessage="No matching suppliers — keep typing to add new"
+              clearAriaLabel="Clear supplier"
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
+              Reference (optional)
+            </span>
+            <input
+              className={adminFieldClass}
+              value={form.reference}
+              onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
+              placeholder="Receipt #, EFT reference…"
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Notes</span>
+            <textarea
+              rows={2}
+              className={`${adminFieldClass} resize-y`}
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={saving} className={adminBtnPrimary}>
+            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Record expense'}
+          </button>
+          {editingId ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() =>
+                handleDelete({
+                  id: editingId,
+                  amount: form.amount,
+                  expense_categories: { name: 'expense' },
+                })
+              }
+              className={adminBtnDanger}
+            >
+              Delete
+            </button>
+          ) : null}
+        </div>
+      </form>
+    )
+  }
+
+  /** Scroll the inline edit into view once it is mounted under the row. */
+  useEffect(() => {
+    if (!showForm || !editingId) return
+    scrollToForm()
+  }, [showForm, editingId, scrollToForm])
+
   function goToSavedPeek() {
     if (!savedPeek?.id) return
     const page = savedPeek.page
@@ -477,148 +636,7 @@ export default function ExpensesPage() {
         ) : null}
       </div>
 
-      {showForm ? (
-        <form
-          ref={formRef}
-          onSubmit={handleSubmit}
-          className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/90 p-4 sm:p-5"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              {editingId ? (
-                <>
-                  <h2 className="font-display text-lg font-bold text-white">
-                    {formatPula(form.amount || 0)}
-                  </h2>
-                  <p className="mt-0.5 text-sm text-ink-400">
-                    {form.expense_date || '—'}
-                    {isDirty ? ' · unsaved changes' : ''}
-                  </p>
-                </>
-              ) : (
-                <h2 className="text-sm font-semibold text-white">New expense</h2>
-              )}
-            </div>
-            <button type="button" onClick={closeForm} className={adminBtnSecondary}>
-              Close
-            </button>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <YearMonthDaySelect
-              label="Date"
-              required
-              value={form.expense_date}
-              onChange={(expense_date) => setForm((f) => ({ ...f, expense_date }))}
-            />
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Amount (P) *
-              </span>
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-                className={adminFieldClass}
-                value={form.amount}
-                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Category *
-              </span>
-              <SearchableSelect
-                required
-                options={categoryOptions}
-                value={form.category_id}
-                onChange={onCategoryChange}
-                placeholder="Type to find a category…"
-                emptyMessage="No matching categories"
-                clearAriaLabel="Clear category"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Method
-              </span>
-              <select
-                className={adminFieldClass}
-                value={form.method}
-                onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
-              >
-                {PAYMENT_METHODS.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Who was paid (optional)
-              </span>
-              <SearchableSelect
-                allowCustom
-                disabled={!form.category_id}
-                options={vendorOptions}
-                value={form.vendor}
-                onChange={(vendor) => setForm((f) => ({ ...f, vendor }))}
-                placeholder={
-                  form.category_id
-                    ? vendorsForCategory.length
-                      ? 'Type to find or add a supplier…'
-                      : 'Type a supplier name…'
-                    : 'Select a category first'
-                }
-                emptyMessage="No matching suppliers — keep typing to add new"
-                clearAriaLabel="Clear supplier"
-              />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Reference (optional)
-              </span>
-              <input
-                className={adminFieldClass}
-                value={form.reference}
-                onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
-                placeholder="Receipt #, EFT reference…"
-              />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">Notes</span>
-              <textarea
-                rows={2}
-                className={`${adminFieldClass} resize-y`}
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              />
-            </label>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={saving} className={adminBtnPrimary}>
-              {saving
-                ? 'Saving…'
-                : editingId
-                  ? 'Save changes'
-                  : 'Record expense'}
-            </button>
-            {editingId ? (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => handleDelete({ id: editingId, amount: form.amount, expense_categories: { name: 'expense' } })}
-                className={adminBtnDanger}
-              >
-                Delete
-              </button>
-            ) : null}
-          </div>
-        </form>
-      ) : null}
+      {showForm && !editingId ? renderExpenseForm({ variant: 'panel' }) : null}
 
       <DateRangeFilter
         from={dateFrom}
@@ -694,56 +712,69 @@ export default function ExpensesPage() {
             ) : (
               expensePage.rows.map((row) => {
                 const open = () => openRow(row)
+                const expanded = showForm && editingId === row.id
                 return (
-                  <tr
-                    key={row.id}
-                    data-row-id={row.id}
-                    role="link"
-                    tabIndex={0}
-                    className={`group bg-ink-900/20 ${clickableRowClass}${
-                      highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''
-                    }`}
-                    onClick={open}
-                    onKeyDown={(e) => activateRowKey(e, open)}
-                  >
-                    <td className={`${adminCellPad} text-ink-300`}>{row.expense_date}</td>
-                    <td className={`${adminCellPad} min-w-0`}>
-                      <span className={`${clickableDocClass} break-words`}>{categoryName(row)}</span>
-                    </td>
-                    <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
-                      {row.vendor || '—'}
-                    </td>
-                    <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
-                      {paymentMethodLabel(row.method)}
-                    </td>
-                    <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
-                      {row.reference || '—'}
-                    </td>
-                    <td className={`${adminCellPad} text-right font-medium text-ink-100`}>
-                      {formatPula(row.amount)}
-                    </td>
-                    <td
-                      className={`${adminCellPad} text-right ${adminColAction}`}
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
+                  <Fragment key={row.id}>
+                    <tr
+                      data-row-id={row.id}
+                      role="link"
+                      tabIndex={0}
+                      className={`group ${
+                        expanded
+                          ? 'accounts-surface text-white'
+                          : `bg-ink-900/20 ${clickableRowClass}`
+                      }${highlightId === row.id && !expanded ? ' ring-2 ring-amber-400/60' : ''}`}
+                      onClick={open}
+                      onKeyDown={(e) => activateRowKey(e, open)}
                     >
-                      <div className="inline-flex items-center justify-end gap-0.5">
-                        <AdminIconAction
-                          label="Edit"
-                          icon="pencil"
-                          disabled={saving}
-                          onClick={open}
-                        />
-                        <AdminIconAction
-                          label="Delete"
-                          icon="trash"
-                          tone="danger"
-                          disabled={saving}
-                          onClick={() => handleDelete(row)}
-                        />
-                      </div>
-                    </td>
-                  </tr>
+                      <td className={`${adminCellPad} text-ink-300`}>{row.expense_date}</td>
+                      <td className={`${adminCellPad} min-w-0`}>
+                        <span className={`${clickableDocClass} break-words`}>
+                          {categoryName(row)}
+                        </span>
+                      </td>
+                      <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                        {row.vendor || '—'}
+                      </td>
+                      <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                        {paymentMethodLabel(row.method)}
+                      </td>
+                      <td className={`${adminCellPad} ${adminColSecondary} text-ink-300`}>
+                        {row.reference || '—'}
+                      </td>
+                      <td className={`${adminCellPad} text-right font-medium text-ink-100`}>
+                        {formatPula(row.amount)}
+                      </td>
+                      <td
+                        className={`${adminCellPad} text-right ${adminColAction}`}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        <div className="inline-flex items-center justify-end gap-0.5">
+                          <AdminIconAction
+                            label="Edit"
+                            icon="pencil"
+                            disabled={saving}
+                            onClick={open}
+                          />
+                          <AdminIconAction
+                            label="Delete"
+                            icon="trash"
+                            tone="danger"
+                            disabled={saving}
+                            onClick={() => handleDelete(row)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                    {expanded ? (
+                      <tr className="accounts-surface">
+                        <td colSpan={7} className="border-b border-white/10 p-4 sm:p-5">
+                          {renderExpenseForm({ variant: 'inline' })}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 )
               })
             )}
