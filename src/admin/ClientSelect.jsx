@@ -1,5 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { adminFieldClass } from './ui'
+import {
+  adminComboboxOptionActiveClass,
+  adminComboboxOptionClass,
+  adminComboboxPanelClass,
+  adminFieldClass,
+} from './ui'
 
 /**
  * Searchable client picker — type to filter, click or Enter to select.
@@ -140,11 +145,7 @@ export function ClientSelect({
       </div>
 
       {open && !disabled ? (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-white/10 bg-ink-950 py-1 shadow-lg"
-        >
+        <ul id={listId} role="listbox" className={adminComboboxPanelClass}>
           {filtered.length === 0 ? (
             <li className="px-3 py-2 text-sm text-ink-500">No matching clients</li>
           ) : (
@@ -152,10 +153,8 @@ export function ClientSelect({
               <li key={c.id} role="option" aria-selected={c.id === value}>
                 <button
                   type="button"
-                  className={`flex w-full flex-col items-start px-3 py-2 text-left text-sm ${
-                    i === highlight || c.id === value
-                      ? 'bg-brand-500/15 text-white'
-                      : 'text-ink-200 hover:bg-white/5'
+                  className={`${adminComboboxOptionClass} ${
+                    i === highlight || c.id === value ? adminComboboxOptionActiveClass : ''
                   }`}
                   onMouseEnter={() => setHighlight(i)}
                   onClick={() => pick(c)}

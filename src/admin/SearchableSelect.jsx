@@ -1,5 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { adminFieldClass } from './ui'
+import {
+  adminComboboxOptionActiveClass,
+  adminComboboxOptionClass,
+  adminComboboxPanelClass,
+  adminFieldClass,
+} from './ui'
 
 /**
  * Type-to-filter combobox. Options: `{ value, label, sublabel? }`.
@@ -181,11 +186,7 @@ export function SearchableSelect({
       </div>
 
       {open && !disabled ? (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-white/10 bg-ink-950 py-1 shadow-lg"
-        >
+        <ul id={listId} role="listbox" className={adminComboboxPanelClass}>
           {listItems.length === 0 ? (
             <li className="px-3 py-2 text-sm text-ink-500">{emptyMessage}</li>
           ) : (
@@ -193,10 +194,10 @@ export function SearchableSelect({
               <li key={o.__custom ? `__custom:${o.value}` : String(o.value)} role="option" aria-selected={String(o.value) === String(value)}>
                 <button
                   type="button"
-                  className={`flex w-full flex-col items-start px-3 py-2 text-left text-sm ${
+                  className={`${adminComboboxOptionClass} ${
                     i === highlight || String(o.value) === String(value)
-                      ? 'bg-brand-500/15 text-white'
-                      : 'text-ink-200 hover:bg-white/5'
+                      ? adminComboboxOptionActiveClass
+                      : ''
                   }`}
                   onMouseEnter={() => setHighlight(i)}
                   onClick={() => pick(o)}

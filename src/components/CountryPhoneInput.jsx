@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { countries } from '../lib/phoneCountry'
-import { adminFieldClass } from '../admin/ui'
+import {
+  adminComboboxOptionActiveClass,
+  adminComboboxSurfaceClass,
+  adminFieldClass,
+} from '../admin/ui'
 
 const RECENT_KEY = 'itreq_recent_countries'
 
@@ -153,7 +157,7 @@ export function CountryPhoneInput({
         </button>
 
         {open ? (
-          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-white/15 bg-ink-900 shadow-xl">
+          <div className={`absolute z-50 mt-1 w-full overflow-hidden ${adminComboboxSurfaceClass}`}>
             <div className="border-b border-white/10 p-2">
               <input
                 autoFocus
@@ -166,7 +170,7 @@ export function CountryPhoneInput({
                 className={adminFieldClass}
               />
             </div>
-            <div ref={listRef} className="max-h-60 overflow-y-auto">
+            <div ref={listRef} className="max-h-60 overflow-y-auto py-1">
               {filteredCountries.length === 0 ? (
                 <div className="px-3 py-3 text-sm text-ink-400">No countries found</div>
               ) : (
@@ -175,8 +179,8 @@ export function CountryPhoneInput({
                     key={c.code}
                     type="button"
                     onClick={() => selectCountry(c)}
-                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm ${
-                      i === highlightIndex ? 'bg-brand-500/15' : 'hover:bg-white/5'
+                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-ink-200 hover:bg-white/5 ${
+                      i === highlightIndex ? adminComboboxOptionActiveClass : ''
                     }`}
                   >
                     <img src={c.flag} alt="" className="h-4 w-6 rounded-sm object-cover" />

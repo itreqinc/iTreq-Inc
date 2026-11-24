@@ -5,6 +5,18 @@ export const adminFieldClass =
 export const adminFieldReadonlyClass =
   'w-full cursor-default rounded-xl border border-transparent bg-white/[0.03] px-3 py-2 text-sm text-ink-300 outline-none'
 
+/** Floating menu surface — same ink / border as adminFieldClass. */
+export const adminComboboxSurfaceClass =
+  'rounded-xl border border-white/10 bg-ink-950/80 shadow-lg backdrop-blur-md'
+
+/** Absolute list panel for type-to-search selects. */
+export const adminComboboxPanelClass = `absolute z-30 mt-1 max-h-56 w-full overflow-auto py-1 ${adminComboboxSurfaceClass}`
+
+export const adminComboboxOptionClass =
+  'flex w-full flex-col items-start px-3 py-2 text-left text-sm text-ink-200 hover:bg-white/5'
+
+export const adminComboboxOptionActiveClass = 'bg-white/10 text-white'
+
 export const adminBtnPrimary =
   'inline-flex items-center justify-center rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-brand-400 disabled:opacity-50'
 

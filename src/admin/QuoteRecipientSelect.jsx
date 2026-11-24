@@ -1,6 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { buildRecipientKey } from '../lib/quoteRecipient'
-import { adminFieldClass } from './ui'
+import {
+  adminComboboxOptionActiveClass,
+  adminComboboxOptionClass,
+  adminComboboxPanelClass,
+  adminFieldClass,
+} from './ui'
 
 /**
  * Searchable picker for clients and open leads (quotation recipients).
@@ -159,11 +164,7 @@ export function QuoteRecipientSelect({
       </div>
 
       {open && !disabled ? (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-white/10 bg-ink-950 py-1 shadow-lg"
-        >
+        <ul id={listId} role="listbox" className={adminComboboxPanelClass}>
           {filtered.length === 0 ? (
             <li className="px-3 py-2 text-sm text-ink-500">No matching clients or leads</li>
           ) : (
@@ -171,10 +172,8 @@ export function QuoteRecipientSelect({
               <li key={o.key} role="option" aria-selected={o.key === value}>
                 <button
                   type="button"
-                  className={`flex w-full flex-col items-start px-3 py-2 text-left text-sm ${
-                    i === highlight || o.key === value
-                      ? 'bg-brand-500/15 text-white'
-                      : 'text-ink-200 hover:bg-white/5'
+                  className={`${adminComboboxOptionClass} ${
+                    i === highlight || o.key === value ? adminComboboxOptionActiveClass : ''
                   }`}
                   onMouseEnter={() => setHighlight(i)}
                   onClick={() => pick(o)}
