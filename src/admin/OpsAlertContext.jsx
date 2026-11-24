@@ -1,5 +1,9 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { AlertModal } from './AlertModal'
+import {
+  pauseHighlightForAlert,
+  resumeHighlightAfterAlert,
+} from './hooks/highlightAlertBridge'
 
 const OpsAlertContext = createContext(null)
 
@@ -41,18 +45,24 @@ export function OpsAlertProvider({ children }) {
       if (typeof prev._resolveCancel === 'function') prev._resolveCancel()
       return { ...closedAlert }
     })
+    resumeHighlightAfterAlert()
   }, [])
 
   const showAlert = useCallback((options = {}) => {
-    setProgress({ ...closedProgress })
-    setAlert({
-      ...closedAlert,
-      open: true,
-      type: options.type || 'info',
-      title: options.title || '',
-      message: options.message || '',
-      confirmLabel: options.confirmLabel || 'OK',
-      cancelLabel: options.cancelLabel || 'Cancel',
+    return new Promise((resolve) => {
+      setProgress({ ...closedProgress })
+      pauseHighlightForAlert()
+      setAlert({
+        ...closedAlert,
+        open: true,
+        type: options.type || 'info',
+        title: options.title || '',
+        message: options.message || '',
+        confirmLabel: options.confirmLabel || 'OK',
+        cancelLabel: options.cancelLabel || 'Cancel',
+        // Success/error/info OK uses onClose → _resolveCancel
+        _resolveCancel: () => resolve(),
+      })
     })
   }, [])
 
@@ -75,6 +85,7 @@ export function OpsAlertProvider({ children }) {
   const confirm = useCallback((options = {}) => {
     return new Promise((resolve) => {
       setProgress({ ...closedProgress })
+      pauseHighlightForAlert()
       setAlert({
         ...closedAlert,
         open: true,
@@ -88,6 +99,7 @@ export function OpsAlertProvider({ children }) {
         choices: Array.isArray(options.choices) ? options.choices : null,
         onConfirm: (result) => {
           setAlert({ ...closedAlert })
+          resumeHighlightAfterAlert()
           resolve(result ?? true)
         },
         _resolveCancel: () => resolve(false),

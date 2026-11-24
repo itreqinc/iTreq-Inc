@@ -118,7 +118,8 @@ export default function ExpensesPage() {
     /\/expenses\/new\/?$/.test(location.pathname) || params.get('new') === '1'
   const isEditRoute = Boolean(editReference)
   const { showError, showSuccess, confirm } = useOpsAlert()
-  const { formRef, highlightId, scrollToForm, highlightRow } = useScrollAndHighlight()
+  const { formRef, highlightId, scrollToForm, highlightRow, releaseHighlight } =
+    useScrollAndHighlight()
   const [rows, setRows] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -529,7 +530,7 @@ export default function ExpensesPage() {
     highlightRow(savedPeek.id)
   }
 
-  function placeSavedRow(saved) {
+  function placeSavedRow(saved, { hold = false } = {}) {
     if (!saved?.id) return
     const nextRows = upsertById(rows, saved)
     setRows(nextRows)
@@ -553,14 +554,14 @@ export default function ExpensesPage() {
         row: saved,
         outsideFilter: true,
       })
-      highlightRow(saved.id, { scroll: false })
+      highlightRow(saved.id, { scroll: false, hold })
       return
     }
 
     const targetPage = Math.floor(index / pageSize) + 1
     if (targetPage === currentPage) {
       setSavedPeek(null)
-      highlightRow(saved.id)
+      highlightRow(saved.id, { hold })
       return
     }
 
@@ -571,7 +572,7 @@ export default function ExpensesPage() {
       row: saved,
       outsideFilter: false,
     })
-    highlightRow(saved.id, { scroll: false })
+    highlightRow(saved.id, { scroll: false, hold })
   }
 
   async function handleSubmit(e) {
@@ -595,10 +596,12 @@ export default function ExpensesPage() {
       showError(error.message)
       return
     }
-    showSuccess(editingId ? 'Expense updated.' : 'Expense recorded.')
     rememberLastExpenseDate(form.expense_date || saved?.expense_date)
     closeForm()
-    placeSavedRow(saved)
+    // Solid highlight while the success modal is open; fade starts after OK.
+    placeSavedRow(saved, { hold: true })
+    await showSuccess(editingId ? 'Expense updated.' : 'Expense recorded.')
+    releaseHighlight()
   }
 
   async function handleDelete(row) {
