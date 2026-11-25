@@ -1212,7 +1212,7 @@ export default function ClientsPage() {
   function renderAccountsDetailPanel({ className = '' } = {}) {
     return (
       <div
-        className={`min-h-[16rem] min-w-0 p-4 sm:p-5 lg:min-h-full ${selectedId ? 'accounts-surface' : ''} ${className}`}
+        className={`min-h-[16rem] min-w-0 p-4 sm:p-5 lg:min-h-full ${selectedId ? 'accounts-surface' : ''} ${className}`.trim()}
       >
         {!selectedId ? (
           <p className="text-sm text-ink-400">Select a client to view transactions.</p>
@@ -1941,7 +1941,7 @@ export default function ClientsPage() {
           {txRangeBackwards ? (
             <p className="text-sm text-amber-200">The “From” date is after the “To” date.</p>
           ) : null}
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:h-[70vh] lg:grid-cols-[minmax(0,17rem)_1fr] lg:items-stretch">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 lg:grid lg:min-h-[70vh] lg:grid-cols-[minmax(0,17rem)_1fr] lg:items-stretch">
           {/* Mobile: detail panel inline below the selected client */}
           <div className="lg:hidden" data-accounts-client-list>
             <div
@@ -1967,10 +1967,10 @@ export default function ClientsPage() {
             )}
           </div>
 
-          {/* Desktop: client list + detail pane */}
+          {/* Desktop: client list + detail pane (grows with ledger; no fixed 70vh clip) */}
           <aside
             data-accounts-client-list
-            className="admin-scroll accounts-client-scroll hidden min-h-0 overflow-y-auto border-b border-white/10 lg:block lg:h-full lg:border-b-0"
+            className="admin-scroll accounts-client-scroll hidden min-h-0 overflow-y-auto border-b border-white/10 lg:block lg:min-h-full lg:border-b-0"
           >
             <div
               data-accounts-client-list-header
@@ -1990,8 +1990,8 @@ export default function ClientsPage() {
             )}
           </aside>
 
-          <section className="admin-scroll hidden min-h-0 min-w-0 overflow-y-auto lg:flex lg:h-full lg:flex-col">
-            {renderAccountsDetailPanel({ className: 'flex-1' })}
+          <section className="hidden min-w-0 lg:flex lg:min-h-full lg:flex-col">
+            {renderAccountsDetailPanel({ className: 'h-auto min-h-full flex-1' })}
           </section>
         </div>
         </div>
