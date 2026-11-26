@@ -783,12 +783,17 @@ export default function ExpensesPage() {
             Day-to-day operating costs (fuel, rent, airtime, etc.). Stock purchases stay on Stock.
           </p>
         </div>
-        {!showForm ? (
-          <button type="button" onClick={startNew} className={adminBtnPrimary}>
-            Record expense
-          </button>
-        ) : null}
       </div>
+
+      {!showForm ? (
+        <button
+          type="button"
+          onClick={startNew}
+          className={`${adminBtnPrimary} fixed bottom-5 right-5 z-40 shadow-lg shadow-black/40 sm:bottom-6 sm:right-6`}
+        >
+          Record expense
+        </button>
+      ) : null}
 
       {showForm && !editingId ? renderExpenseForm({ variant: 'panel' }) : null}
 
