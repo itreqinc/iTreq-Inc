@@ -800,7 +800,7 @@ export default function QuotationsPage() {
                   data-row-id={row.id}
                   role="link"
                   tabIndex={0}
-                  className={`group bg-ink-900/20 ${clickableRowClass}${highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''}`}
+                  className={`group scroll-mt-28 bg-ink-900/20 ${clickableRowClass}${highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''}`}
                   onClick={open}
                   onKeyDown={(e) => activateRowKey(e, open)}
                 >

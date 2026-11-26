@@ -1781,7 +1781,7 @@ export default function InvoicesPage() {
                     data-invoice-row={row.id}
                     role="link"
                     tabIndex={0}
-                    className={`group ${invoiceRowClass(displayStatus)} ${clickableRowClass}${highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''}`}
+                    className={`group scroll-mt-28 ${invoiceRowClass(displayStatus)} ${clickableRowClass}${highlightId === row.id ? ' ring-2 ring-amber-400/60' : ''}`}
                     onClick={open}
                     onKeyDown={(e) => activateRowKey(e, open)}
                   >

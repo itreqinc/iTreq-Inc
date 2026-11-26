@@ -100,7 +100,7 @@ function SavedExpensePeek({ peek, highlighted, onOpen }) {
       type="button"
       onClick={onOpen}
       data-row-id={peek.id}
-      className={`flex w-full flex-wrap items-center gap-x-4 gap-y-1 border-b border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-left text-sm transition hover:bg-amber-400/15 sm:px-4 ${
+      className={`scroll-mt-28 flex w-full flex-wrap items-center gap-x-4 gap-y-1 border-b border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-left text-sm transition hover:bg-amber-400/15 sm:px-4 ${
         highlighted ? 'ring-2 ring-inset ring-amber-400/60' : ''
       }`}
     >
@@ -581,7 +581,7 @@ export default function ExpensesPage() {
     const page = savedPeek.page
     setSavedPeek(null)
     if (page) expensePage.setPage(page)
-    highlightRow(savedPeek.id)
+    highlightRow(savedPeek.id, { block: 'center' })
   }
 
   function placeSavedRow(saved, { hold = false } = {}) {
@@ -608,14 +608,16 @@ export default function ExpensesPage() {
         row: saved,
         outsideFilter: true,
       })
-      highlightRow(saved.id, { scroll: false, hold })
+      // Peek banner carries data-row-id — center it on screen.
+      highlightRow(saved.id, { hold, block: 'center' })
       return
     }
 
     const targetPage = Math.floor(index / pageSize) + 1
     if (targetPage === currentPage) {
       setSavedPeek(null)
-      highlightRow(saved.id, { hold })
+      // Center so the row clears the sticky header + floating Record expense CTA.
+      highlightRow(saved.id, { hold, block: 'center' })
       return
     }
 
@@ -626,7 +628,7 @@ export default function ExpensesPage() {
       row: saved,
       outsideFilter: false,
     })
-    highlightRow(saved.id, { scroll: false, hold })
+    highlightRow(saved.id, { hold, block: 'center' })
   }
 
   async function handleSubmit(e) {
@@ -882,7 +884,7 @@ export default function ExpensesPage() {
                       data-row-id={row.id}
                       role="link"
                       tabIndex={0}
-                      className={`group ${
+                      className={`group scroll-mt-28 ${
                         expanded
                           ? 'accounts-surface text-white'
                           : `bg-ink-900/20 ${clickableRowClass}`

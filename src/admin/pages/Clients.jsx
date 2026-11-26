@@ -355,7 +355,8 @@ export default function ClientsPage() {
     const isPendingReturn = pendingAccountFocusRef.current === selectedId
     if (isPendingReturn) {
       pendingAccountFocusRef.current = null
-      highlightRow(selectedId)
+      // Third-row scroll owns position — don't fight it with center scroll.
+      highlightRow(selectedId, { scroll: false })
     }
 
     let cancelled = false
@@ -1856,7 +1857,7 @@ export default function ClientsPage() {
                       data-row-id={c.id}
                       role="link"
                       tabIndex={0}
-                      className={`group bg-ink-900/20 ${clickableRowClass} ${
+                      className={`group scroll-mt-28 bg-ink-900/20 ${clickableRowClass} ${
                         c.is_active === false ? 'opacity-60' : ''
                       }${highlightId === c.id ? ' ring-2 ring-amber-400/60' : ''}`}
                       onClick={open}

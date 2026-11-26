@@ -483,7 +483,7 @@ export default function LeadsPage() {
                     data-row-id={lead.id}
                     role="link"
                     tabIndex={0}
-                    className={`group bg-ink-900/20 ${clickableRowClass}${
+                    className={`group scroll-mt-28 bg-ink-900/20 ${clickableRowClass}${
                       selectedId === lead.id || highlightId === lead.id
                         ? ' ring-2 ring-amber-400/60'
                         : ''
