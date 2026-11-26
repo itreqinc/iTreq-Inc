@@ -1262,15 +1262,16 @@ async function handlePostPayRun(
     if (slipErr) throw slipErr
     slips.push(slip)
 
-    // Payday net → Expenses as Salary - {Name}
+    // Payday net → Expenses: vendor = staff bank, reference = Salary - {Name}
     if (net > 0) {
+      const bankVendor = String(emp.bank_name || '').trim() || null
       const { error: salErr } = await supabase.from('expenses').insert({
         expense_date: payday,
         amount: net,
         category_id: salaryCat.id,
-        vendor: `Salary - ${staffName}`,
+        vendor: bankVendor,
         method: 'eft',
-        reference: null,
+        reference: `Salary - ${staffName}`,
         notes: `Pay run ${periodYear}-${String(periodMonth).padStart(2, '0')}`,
         staff_user_id: staff.id,
         pay_run_id: runId,
