@@ -10,9 +10,9 @@ name: Payroll cron
 
 on:
   schedule:
-    # 07:00 Gaborone → morning reminder
+    # 07:00 Gaborone → morning reminder only
     - cron: '0 5 * * *'
-    # 23:59 Gaborone → auto-post payroll
+    # 23:59 Gaborone → auto-post payroll only
     - cron: '59 21 * * *'
   workflow_dispatch:
     inputs:
@@ -26,32 +26,59 @@ on:
           - auto_post_pay_run_if_due
 
 jobs:
-  call-payroll:
+  morning-reminder:
+    name: Morning reminder (07:00)
     runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'schedule' && github.event.schedule == '0 5 * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'payday_morning_reminder')
     steps:
-      - name: Resolve action
-        id: pick
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 5 * * *" ]; then
-            echo "action=payday_morning_reminder" >> "$GITHUB_OUTPUT"
-          else
-            echo "action=auto_post_pay_run_if_due" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: POST payroll function
+      - name: POST payday_morning_reminder
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           PAYROLL_CRON_SECRET: ${{ secrets.PAYROLL_CRON_SECRET }}
-          ACTION: ${{ steps.pick.outputs.action }}
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ] || [ -z "${PAYROLL_CRON_SECRET:-}" ]; then
             echo "Missing GitHub secrets: SUPABASE_URL, SUPABASE_ANON_KEY, and/or PAYROLL_CRON_SECRET"
             exit 1
           fi
+          ACTION="payday_morning_reminder"
+          BODY=$(jq -nc --arg a "$ACTION" --arg s "$PAYROLL_CRON_SECRET" '{action:$a, cron_secret:$s}')
+          echo "Calling action=$ACTION"
+          RESP=$(curl -sS -w "\n%{http_code}" -X POST "${SUPABASE_URL}/functions/v1/payroll" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+          CODE=$(echo "$RESP" | tail -n1)
+          JSON=$(echo "$RESP" | sed '$d')
+          echo "$JSON" | jq . || echo "$JSON"
+          if [ "$CODE" -lt 200 ] || [ "$CODE" -ge 300 ]; then
+            echo "HTTP $CODE"
+            exit 1
+          fi
+
+  evening-auto-post:
+    name: Auto-post (23:59)
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'schedule' && github.event.schedule == '59 21 * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'auto_post_pay_run_if_due')
+    steps:
+      - name: POST auto_post_pay_run_if_due
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PAYROLL_CRON_SECRET: ${{ secrets.PAYROLL_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ] || [ -z "${PAYROLL_CRON_SECRET:-}" ]; then
+            echo "Missing GitHub secrets: SUPABASE_URL, SUPABASE_ANON_KEY, and/or PAYROLL_CRON_SECRET"
+            exit 1
+          fi
+          ACTION="auto_post_pay_run_if_due"
           BODY=$(jq -nc --arg a "$ACTION" --arg s "$PAYROLL_CRON_SECRET" '{action:$a, cron_secret:$s}')
           echo "Calling action=$ACTION"
           RESP=$(curl -sS -w "\n%{http_code}" -X POST "${SUPABASE_URL}/functions/v1/payroll" \

@@ -9,7 +9,8 @@ Set secret `PAYROLL_CRON_SECRET` on the payroll Edge Function (same value in Git
 | 07:00 | 05:00 | `payday_morning_reminder` |
 | 23:59 | 21:59 | `auto_post_pay_run_if_due` |
 
-Scheduled by [`.github/workflows/payroll-cron.yml`](../../../.github/workflows/payroll-cron.yml).
+Scheduled by [`.github/workflows/payroll-cron.yml`](../../../.github/workflows/payroll-cron.yml)
+(separate jobs so morning can never auto-post).
 
 ## GitHub secrets (repo → Settings → Secrets and variables → Actions)
 
