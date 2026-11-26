@@ -274,6 +274,14 @@ function formatMonthYear(year: number, month: number) {
   }).format(dt)
 }
 
+function formatMonthName(year: number, month: number) {
+  const dt = new Date(Date.UTC(year, month - 1, 1))
+  return new Intl.DateTimeFormat('en-GB', {
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(dt)
+}
+
 function formatMoney(amount: number, currency = 'BWP') {
   const n = Number(amount) || 0
   try {
@@ -1262,17 +1270,18 @@ async function handlePostPayRun(
     if (slipErr) throw slipErr
     slips.push(slip)
 
-    // Payday net → Expenses: vendor = staff bank, reference = Salary - {Name}
+    // Payday net → Expenses (same shape as the Expenses form):
+    // vendor = who was paid (staff name), reference = Salary - {Month}, notes = Pay run YYYY-MM
     if (net > 0) {
-      const bankVendor = String(emp.bank_name || '').trim() || null
+      const periodLabel = `${periodYear}-${String(periodMonth).padStart(2, '0')}`
       const { error: salErr } = await supabase.from('expenses').insert({
         expense_date: payday,
         amount: net,
         category_id: salaryCat.id,
-        vendor: bankVendor,
+        vendor: staffName,
         method: 'eft',
-        reference: `Salary - ${staffName}`,
-        notes: `Pay run ${periodYear}-${String(periodMonth).padStart(2, '0')}`,
+        reference: `Salary - ${formatMonthName(periodYear, periodMonth)}`,
+        notes: `Pay run ${periodLabel}`,
         staff_user_id: staff.id,
         pay_run_id: runId,
       })

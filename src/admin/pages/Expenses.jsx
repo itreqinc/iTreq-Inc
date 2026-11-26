@@ -389,14 +389,30 @@ export default function ExpensesPage() {
     scrollToForm()
   }
 
+  function staffLabel(staffUserId) {
+    const opt = staffOptions.find((o) => String(o.value) === String(staffUserId))
+    return opt?.label || ''
+  }
+
   function onCategoryChange(categoryId) {
     const key = categorySystemKey(categories, categoryId)
+    const keepStaff = key === 'salary_advance' || key === 'staff_rem_benefits'
+    setForm((f) => {
+      const staff_user_id = keepStaff ? f.staff_user_id : ''
+      return {
+        ...f,
+        category_id: categoryId,
+        staff_user_id,
+        vendor: keepStaff && staff_user_id ? staffLabel(staff_user_id) : keepStaff ? f.vendor : '',
+      }
+    })
+  }
+
+  function onStaffChange(staff_user_id) {
     setForm((f) => ({
       ...f,
-      category_id: categoryId,
-      vendor: key === 'salary_advance' || key === 'staff_rem_benefits' ? f.vendor : '',
-      staff_user_id:
-        key === 'salary_advance' || key === 'staff_rem_benefits' ? f.staff_user_id : '',
+      staff_user_id,
+      vendor: staff_user_id ? staffLabel(staff_user_id) : '',
     }))
   }
 
@@ -457,13 +473,13 @@ export default function ExpensesPage() {
           {needsStaffLink ? (
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
-                Linked staff *
+                Who was paid *
               </span>
               <SearchableSelect
                 required
                 options={staffOptions}
                 value={form.staff_user_id}
-                onChange={(staff_user_id) => setForm((f) => ({ ...f, staff_user_id }))}
+                onChange={onStaffChange}
                 placeholder="Type to find a staff member…"
                 emptyMessage="No matching staff"
                 clearAriaLabel="Clear staff"
@@ -500,7 +516,7 @@ export default function ExpensesPage() {
               ))}
             </select>
           </label>
-          {selectedSystemKey === 'salary_advance' ? null : (
+          {needsStaffLink ? null : (
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs uppercase tracking-wider text-ink-400">
                 Who was paid (optional)
