@@ -82,6 +82,8 @@ import { adminBtnDanger,
   adminTableClass,
   adminColSecondary,
   adminColAction,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
 } from '../ui'
 
 const INVOICE_STATUS_OPTIONS = [
@@ -1421,6 +1423,18 @@ export default function InvoicesPage() {
         </div>
       </div>
 
+      {!showForm && listView !== 'opening' ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={startNew}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
+            New invoice
+          </button>
+        </div>
+      ) : null}
+
       {listView === 'opening' ? (
         <OpeningBalancesPanel ownClientId={ownClientId} />
       ) : null}
@@ -1692,15 +1706,6 @@ export default function InvoicesPage() {
           >
             {bulkAction === 'remind' ? 'Sending…' : `Remind (${selectedRemindIds.length})`}
           </button>
-          {!showForm ? (
-            <button
-              type="button"
-              onClick={startNew}
-              className={`${adminBtnPrimary} w-full sm:w-auto`}
-            >
-              New invoice
-            </button>
-          ) : null}
         </div>
         <table className={adminTableClass}>
           <thead className="bg-ink-900/80 text-xs uppercase tracking-wider text-ink-400">

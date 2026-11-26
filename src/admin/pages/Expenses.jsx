@@ -27,6 +27,8 @@ import {
   adminBtnDanger,
   adminBtnPrimary,
   adminBtnSecondary,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
   adminFieldClass,
   adminTableClass,
   adminColSecondary,
@@ -786,13 +788,15 @@ export default function ExpensesPage() {
       </div>
 
       {!showForm ? (
-        <button
-          type="button"
-          onClick={startNew}
-          className={`${adminBtnPrimary} fixed top-20 right-5 z-30 shadow-lg shadow-black/40 sm:right-6`}
-        >
-          Record expense
-        </button>
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={startNew}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
+            Record expense
+          </button>
+        </div>
       ) : null}
 
       {showForm && !editingId ? renderExpenseForm({ variant: 'panel' }) : null}

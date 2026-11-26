@@ -84,6 +84,8 @@ import { adminBtnPrimary,
   adminColSecondary,
   adminColAction,
   adminCellPad,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
 } from '../ui'
 
 const dash = (value) => {
@@ -1497,13 +1499,20 @@ export default function ClientsPage() {
               Accounts
             </button>
           </div>
-          {!showForm && !viewing ? (
-            <button type="button" onClick={startNew} className={adminBtnPrimary}>
-              New client
-            </button>
-          ) : null}
         </div>
       </div>
+
+      {!showForm && !viewing ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={startNew}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
+            New client
+          </button>
+        </div>
+      ) : null}
 
       {viewing && !showForm && view === 'directory' ? (
         <section

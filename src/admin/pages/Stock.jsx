@@ -30,6 +30,8 @@ import {
   adminTableShellSmClass,
   adminTableClass,
   adminColSecondary,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
   adminCellPad,
 } from '../ui'
 
@@ -454,6 +456,18 @@ export default function StockPage() {
       </div>
 
       {view === 'list' ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={startNewPo}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
+            New purchase order
+          </button>
+        </div>
+      ) : null}
+
+      {view === 'list' ? (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             {levelPage.rows.map((row) => (
@@ -480,11 +494,6 @@ export default function StockPage() {
                   Save when money leaves the account. Receive deliveries to update shelf counts.
                   {openOrders.length ? ` ${openOrders.length} open.` : ''}
                 </>
-              }
-              headerEnd={
-                <button type="button" onClick={startNewPo} className={adminBtnPrimary}>
-                  New purchase order
-                </button>
               }
             >
               <div className={adminTableShellClass}>

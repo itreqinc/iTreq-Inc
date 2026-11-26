@@ -51,6 +51,8 @@ import {
   clickableDocClass,
   clickableRowClass,
   formatPula,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
 } from '../ui'
 
 const PAYMENT_METHOD_OPTIONS = [
@@ -790,12 +792,19 @@ export default function PaymentsPage() {
                 : 'Enter the amount received, then tick the invoices to pay. Funds are allocated automatically; anything left stays on the client’s account.'}
           </p>
         </div>
-        {!showForm && listView !== 'adjustments' ? (
-          <button type="button" onClick={startNew} className={adminBtnPrimary}>
+      </div>
+
+      {!showForm && listView !== 'adjustments' ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={startNew}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
             Record payment
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {showForm ? (
         <form

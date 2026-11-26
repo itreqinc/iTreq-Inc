@@ -25,6 +25,8 @@ import { adminBtnPrimary,
   adminTableShellClass,
   adminTableClass,
   adminColSecondary,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
 } from '../ui'
 
 const emptyNewProduct = {
@@ -337,12 +339,19 @@ export default function ProductsPage() {
               : 'View-only. These SKUs and prices are used when building quotes and invoices.'}
           </p>
         </div>
-        {canManage && !showNew ? (
-          <button type="button" onClick={() => startNew()} className={adminBtnPrimary}>
+      </div>
+
+      {canManage && !showNew ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={() => startNew()}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
             New SKU
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <CatalogExplainer>
         <p>

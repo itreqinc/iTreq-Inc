@@ -25,6 +25,8 @@ import {
   clickableDocClass,
   clickableRowClass,
   formatPula,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
 } from '../ui'
 
 function toDatetimeLocalValue(iso) {
@@ -711,23 +713,35 @@ export default function StaffPage() {
             ) : null}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={payBusy} onClick={runPayroll} className={adminBtnSecondary}>
+      </div>
+
+      {!showForm ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            disabled={payBusy}
+            onClick={runPayroll}
+            className={`${adminBtnSecondary} ${adminPageActionFloatBtn}`}
+          >
             {payBusy ? 'Posting…' : 'Run payroll'}
           </button>
           <button
             type="button"
             disabled={payBusy}
             onClick={reverseLatestPayroll}
-            className={adminBtnDanger}
+            className={`${adminBtnDanger} ${adminPageActionFloatBtn}`}
           >
             {payBusy ? 'Working…' : 'Reverse latest payroll'}
           </button>
-          <button type="button" onClick={startNew} className={adminBtnPrimary}>
+          <button
+            type="button"
+            onClick={startNew}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
             Add staff
           </button>
         </div>
-      </div>
+      ) : null}
 
       {showForm ? (
         <form

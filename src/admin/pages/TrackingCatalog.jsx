@@ -23,6 +23,8 @@ import {
   adminBtnSecondary,
   adminFieldClass,
   formatPula,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
 } from '../ui'
 
 function emptyItem() {
@@ -289,12 +291,19 @@ export default function TrackingCatalogPage() {
               : 'View-only. See what clients can request on the portal and which SKUs each category maps to.'}
           </p>
         </div>
-        {canManage ? (
-          <button type="button" onClick={startNew} className={adminBtnPrimary}>
+      </div>
+
+      {canManage ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={startNew}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
             New item
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border border-white/10 bg-ink-900/90 p-4">

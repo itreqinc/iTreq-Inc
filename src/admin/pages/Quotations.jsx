@@ -49,6 +49,8 @@ import { adminBtnDanger,
   adminColSecondary,
   adminColAction,
   adminCellPad,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
 } from '../ui'
 
 function snapshotQuotationForm(form) {
@@ -524,12 +526,19 @@ export default function QuotationsPage() {
             invoice is issued).
           </p>
         </div>
-        {!showForm ? (
-          <button type="button" onClick={startNew} className={adminBtnPrimary}>
+      </div>
+
+      {!showForm ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={startNew}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
             New quotation
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {showForm ? (
         <form

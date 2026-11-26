@@ -24,6 +24,8 @@ import {
   adminColSecondary,
   adminColAction,
   adminCellPad,
+  adminPageActionFloat,
+  adminPageActionFloatBtn,
 } from '../ui'
 
 const STATUS_LABELS = {
@@ -258,12 +260,19 @@ export default function LeadsPage() {
             Website enquiries — quote them, convert to a client, or dismiss.
           </p>
         </div>
-        {!showForm ? (
-          <button type="button" onClick={startNew} className={adminBtnPrimary}>
+      </div>
+
+      {!showForm ? (
+        <div className={adminPageActionFloat}>
+          <button
+            type="button"
+            onClick={startNew}
+            className={`${adminBtnPrimary} ${adminPageActionFloatBtn}`}
+          >
             Add lead
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {showForm ? (
         <form
