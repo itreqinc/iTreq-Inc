@@ -789,7 +789,7 @@ export default function ExpensesPage() {
         <button
           type="button"
           onClick={startNew}
-          className={`${adminBtnPrimary} fixed bottom-5 right-5 z-40 shadow-lg shadow-black/40 sm:bottom-6 sm:right-6`}
+          className={`${adminBtnPrimary} fixed top-5 right-5 z-40 shadow-lg shadow-black/40 sm:top-6 sm:right-6`}
         >
           Record expense
         </button>
