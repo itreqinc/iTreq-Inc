@@ -1426,85 +1426,83 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-2xl font-bold text-white">Clients</h1>
-            <button
-              type="button"
-              onClick={() => setShowAllClients((v) => !v)}
-              aria-pressed={showAllClients}
-              aria-label={showAllClients ? 'Showing all clients' : 'Showing active clients only'}
-              className="relative inline-flex h-6 w-[4.5rem] shrink-0 items-center rounded-md border border-white/15 bg-ink-900/80 p-0.5 transition hover:bg-white/10"
-            >
-              <span
-                aria-hidden="true"
-                className={`absolute inset-y-0.5 left-0.5 w-[calc(50%-0.125rem)] rounded border border-brand-500/35 bg-brand-500/20 transition-transform duration-200 ${
-                  showAllClients ? 'translate-x-[calc(100%+0.125rem)]' : 'translate-x-0'
-                }`}
-              />
-              <span
-                className={`relative z-10 flex-1 text-center text-[10px] font-semibold leading-none transition ${
-                  !showAllClients ? 'text-brand-200' : 'text-ink-500'
-                }`}
-              >
-                Active
-              </span>
-              <span
-                className={`relative z-10 flex-1 text-center text-[10px] font-semibold leading-none transition ${
-                  showAllClients ? 'text-brand-200' : 'text-ink-500'
-                }`}
-              >
-                All
-              </span>
-            </button>
-          </div>
-          <p className="mt-1 text-sm text-ink-300">
-            {view === 'directory'
-              ? 'Capture core client details. Manage client information and contact details for easy tracking and communication.'
-              : 'Select a client to see their balance, quotations, and invoice / payment history.'}
-          </p>
-        </div>
+      <div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-white/10 bg-ink-900 p-0.5 shadow-inner shadow-black/40">
-            <button
-              type="button"
-              onClick={() => {
-                setView('directory')
-                setShowForm(false)
-                setSelectedId(null)
-                setStatement(null)
-                clearAccountsSelected()
-              }}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                view === 'directory'
-                  ? 'bg-brand-500 text-ink-950'
-                  : 'text-ink-300 hover:text-white'
+          <h1 className="font-display text-2xl font-bold text-white">Clients</h1>
+          <button
+            type="button"
+            onClick={() => setShowAllClients((v) => !v)}
+            aria-pressed={showAllClients}
+            aria-label={showAllClients ? 'Showing all clients' : 'Showing active clients only'}
+            className="relative inline-flex h-6 w-[4.5rem] shrink-0 items-center rounded-md border border-white/15 bg-ink-900/80 p-0.5 transition hover:bg-white/10"
+          >
+            <span
+              aria-hidden="true"
+              className={`absolute inset-y-0.5 left-0.5 w-[calc(50%-0.125rem)] rounded border border-brand-500/35 bg-brand-500/20 transition-transform duration-200 ${
+                showAllClients ? 'translate-x-[calc(100%+0.125rem)]' : 'translate-x-0'
+              }`}
+            />
+            <span
+              className={`relative z-10 flex-1 text-center text-[10px] font-semibold leading-none transition ${
+                !showAllClients ? 'text-brand-200' : 'text-ink-500'
               }`}
             >
-              Directory
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setView('accounts')
-                setShowForm(false)
-                setViewId(null)
-              }}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                view === 'accounts'
-                  ? 'bg-brand-500 text-ink-950'
-                  : 'text-ink-300 hover:text-white'
+              Active
+            </span>
+            <span
+              className={`relative z-10 flex-1 text-center text-[10px] font-semibold leading-none transition ${
+                showAllClients ? 'text-brand-200' : 'text-ink-500'
               }`}
             >
-              Accounts
-            </button>
-          </div>
+              All
+            </span>
+          </button>
         </div>
+        <p className="mt-1 text-sm text-ink-300">
+          {view === 'directory'
+            ? 'Capture core client details. Manage client information and contact details for easy tracking and communication.'
+            : 'Select a client to see their balance, quotations, and invoice / payment history.'}
+        </p>
       </div>
 
-      {!showForm && !viewing ? (
-        <div className={adminPageActionFloat}>
+      <div className={adminPageActionFloat}>
+        <div
+          className={`inline-flex rounded-xl border border-white/10 bg-ink-900 p-0.5 shadow-inner shadow-black/40 ${adminPageActionFloatBtn}`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setView('directory')
+              setShowForm(false)
+              setSelectedId(null)
+              setStatement(null)
+              clearAccountsSelected()
+            }}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              view === 'directory'
+                ? 'bg-brand-500 text-ink-950'
+                : 'text-ink-300 hover:text-white'
+            }`}
+          >
+            Directory
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setView('accounts')
+              setShowForm(false)
+              setViewId(null)
+            }}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              view === 'accounts'
+                ? 'bg-brand-500 text-ink-950'
+                : 'text-ink-300 hover:text-white'
+            }`}
+          >
+            Accounts
+          </button>
+        </div>
+        {!showForm && !viewing ? (
           <button
             type="button"
             onClick={startNew}
@@ -1512,8 +1510,8 @@ export default function ClientsPage() {
           >
             New client
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       {viewing && !showForm && view === 'directory' ? (
         <section

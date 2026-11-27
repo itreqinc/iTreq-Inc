@@ -1383,48 +1383,46 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-white">Invoices</h1>
-          <p className="mt-1 text-sm text-ink-300">
-            {listView === 'opening'
-              ? 'Brought-forward balances from the previous system — record payments or apply credit to invoices.'
-              : 'Issued to confirm a sale — that deducts stock levels. Void restores stock levels where applicable.'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-white/10 bg-ink-900/90 p-0.5">
-            <button
-              type="button"
-              onClick={() => setListView('invoices')}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                listView === 'invoices'
-                  ? 'bg-white/10 text-white'
-                  : 'text-ink-400 hover:text-ink-200'
-              }`}
-            >
-              Invoices
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setListView('opening')
-                setShowForm(false)
-              }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                listView === 'opening'
-                  ? 'bg-white/10 text-white'
-                  : 'text-ink-400 hover:text-ink-200'
-              }`}
-            >
-              Brought forward
-            </button>
-          </div>
-        </div>
+      <div>
+        <h1 className="font-display text-2xl font-bold text-white">Invoices</h1>
+        <p className="mt-1 text-sm text-ink-300">
+          {listView === 'opening'
+            ? 'Brought-forward balances from the previous system — record payments or apply credit to invoices.'
+            : 'Issued to confirm a sale — that deducts stock levels. Void restores stock levels where applicable.'}
+        </p>
       </div>
 
-      {!showForm && listView !== 'opening' ? (
-        <div className={adminPageActionFloat}>
+      <div className={adminPageActionFloat}>
+        <div
+          className={`inline-flex rounded-xl border border-white/10 bg-ink-900/90 p-0.5 ${adminPageActionFloatBtn}`}
+        >
+          <button
+            type="button"
+            onClick={() => setListView('invoices')}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              listView === 'invoices'
+                ? 'bg-white/10 text-white'
+                : 'text-ink-400 hover:text-ink-200'
+            }`}
+          >
+            Invoices
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setListView('opening')
+              setShowForm(false)
+            }}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              listView === 'opening'
+                ? 'bg-white/10 text-white'
+                : 'text-ink-400 hover:text-ink-200'
+            }`}
+          >
+            Brought forward
+          </button>
+        </div>
+        {!showForm && listView !== 'opening' ? (
           <button
             type="button"
             onClick={startNew}
@@ -1432,8 +1430,8 @@ export default function InvoicesPage() {
           >
             New invoice
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       {listView === 'opening' ? (
         <OpeningBalancesPanel ownClientId={ownClientId} />
