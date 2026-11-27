@@ -118,9 +118,14 @@ export default function MonthlyFeesPage() {
         return
       }
       setResult(data)
+      const allocated = Number(data.auto_allocated_count) || 0
       showSuccess(
         data.created_count
-          ? `Created ${data.created_count} draft monthly fee invoice(s).`
+          ? `Created ${data.created_count} draft monthly fee invoice(s).${
+              allocated
+                ? ` Auto-allocated on-account payment(s) on ${allocated}.`
+                : ''
+            }`
           : 'No new invoices were created.',
       )
       await runPreview()
@@ -302,7 +307,10 @@ export default function MonthlyFeesPage() {
                   <p className="font-medium text-white">
                     {row.number || 'Draft'} · {row.client_name}
                   </p>
-                  <p className="text-xs text-ink-400">{formatPula(row.total)}</p>
+                  <p className="text-xs text-ink-400">
+                    {formatPula(row.total)}
+                    {row.auto_allocated ? ' · payment allocated' : ''}
+                  </p>
                 </div>
                 <Link
                   to={`/admin/invoices?open=${row.invoice_id}`}

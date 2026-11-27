@@ -2087,7 +2087,12 @@ const directOpsApi = {
 
     const status = String(existing.data.status)
     if (status === 'draft') {
-      // ok
+      // Monthly-fee auto-alloc may have reserved a payment on the draft — release it.
+      const { error: allocErr } = await supabase
+        .from('payment_allocations')
+        .delete()
+        .eq('invoice_id', id)
+      if (allocErr) return mapError(allocErr)
     } else if (status === 'void') {
       const { count, error: cErr } = await supabase
         .from('payment_allocations')

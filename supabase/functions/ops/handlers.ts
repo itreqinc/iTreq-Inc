@@ -2715,7 +2715,12 @@ handlers.delete_invoice = async ({ user, sb }, args) => {
 
   const status = String(existing.status)
   if (status === 'draft') {
-    // Drafts have no stock movement or payments.
+    // Monthly-fee auto-alloc may have reserved a payment on the draft — release it.
+    const { error: allocErr } = await sb
+      .from('payment_allocations')
+      .delete()
+      .eq('invoice_id', id)
+    if (allocErr) throw mapDbError(allocErr)
   } else if (status === 'void') {
     const { count, error: cErr } = await sb
       .from('payment_allocations')
